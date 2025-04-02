@@ -1,400 +1,625 @@
 document.addEventListener("DOMContentLoaded", () => {
-  // DOM 요소 가져오기
-  // 네비게이션 요소
-  const navHome = document.getElementById("nav-home");
-  const navRegister = document.getElementById("nav-register");
-  const navLogin = document.getElementById("nav-login");
-  const navProfile = document.getElementById("nav-profile");
-  const navLogout = document.getElementById("nav-logout");
+  // 상태 관리
+  const state = {
+    currentSection: "home-section",
+    isLoggedIn: false,
+    token: localStorage.getItem("token"),
+    user: JSON.parse(localStorage.getItem("user") || "null"),
+    theme: localStorage.getItem("theme") || "dark",
+    usersData: {
+      users: [],
+      pagination: {
+        total: 0,
+        page: 1,
+        limit: 10,
+        totalPages: 0,
+      },
+    },
+  };
 
-  // 섹션 요소
-  const homeSection = document.getElementById("home-section");
-  const registerSection = document.getElementById("register-section");
-  const loginSection = document.getElementById("login-section");
-  const profileSection = document.getElementById("profile-section");
-  const editProfileSection = document.getElementById("edit-profile-section");
-  const changePasswordSection = document.getElementById(
-    "change-password-section"
-  );
+  // UI 요소
+  const ui = {
+    sections: {
+      home: document.getElementById("home-section"),
+      register: document.getElementById("register-section"),
+      login: document.getElementById("login-section"),
+      profile: document.getElementById("profile-section"),
+      password: document.getElementById("password-section"),
+      users: document.getElementById("users-section"),
+    },
+    nav: {
+      home: document.getElementById("nav-home"),
+      register: document.getElementById("nav-register"),
+      login: document.getElementById("nav-login"),
+      profile: document.getElementById("nav-profile"),
+      logout: document.getElementById("nav-logout"),
+      users: document.getElementById("nav-users"),
+    },
+    forms: {
+      register: document.getElementById("register-form"),
+      login: document.getElementById("login-form"),
+      profile: document.getElementById("profile-form"),
+      password: document.getElementById("password-form"),
+      avatar: document.getElementById("avatar-form"),
+    },
+    themeToggle: document.getElementById("theme-toggle"),
+    passwordStrength: document.getElementById("password-strength"),
+    usersList: document.getElementById("users-list"),
+    userSearch: document.getElementById("user-search"),
+    paginationControls: document.getElementById("pagination-controls"),
+    messageContainer: document.getElementById("message-container"),
+    avatarPreview: document.getElementById("avatar-preview"),
+  };
 
-  // 폼 요소
-  const registerForm = document.getElementById("register-form");
-  const loginForm = document.getElementById("login-form");
-  const editProfileForm = document.getElementById("edit-profile-form");
-  const changePasswordForm = document.getElementById("change-password-form");
+  // 테마 초기화
+  function initTheme() {
+    document.documentElement.setAttribute("data-theme", state.theme);
+    if (ui.themeToggle) {
+      ui.themeToggle.textContent = state.theme === "dark" ? "☀️" : "🌙";
+    }
+  }
 
-  // 버튼 요소
-  const homeRegisterBtn = document.getElementById("home-register-btn");
-  const homeLoginBtn = document.getElementById("home-login-btn");
-  const registerToLogin = document.getElementById("register-to-login");
-  const loginToRegister = document.getElementById("login-to-register");
-  const editProfileBtn = document.getElementById("edit-profile-btn");
-  const changePasswordBtn = document.getElementById("change-password-btn");
-  const cancelEditBtn = document.getElementById("cancel-edit-btn");
-  const cancelPasswordBtn = document.getElementById("cancel-password-btn");
+  // 테마 토글
+  function toggleTheme() {
+    state.theme = state.theme === "dark" ? "light" : "dark";
+    localStorage.setItem("theme", state.theme);
+    initTheme();
+  }
 
-  // 프로필 요소
-  const profileUsername = document.getElementById("profile-username");
-  const profileEmail = document.getElementById("profile-email");
-  const profileFullname = document.getElementById("profile-fullname");
-  const profileCreated = document.getElementById("profile-created");
+  // 섹션 표시 함수
+  function showSection(sectionId) {
+    // 모든 섹션 숨기기
+    Object.values(ui.sections).forEach((section) => {
+      if (section) section.style.display = "none";
+    });
 
-  // 메시지 요소
-  const messageContainer = document.getElementById("message-container");
-  const messageContent = document.getElementById("message-content");
+    // 선택한 섹션 표시
+    if (ui.sections[sectionId]) {
+      ui.sections[sectionId].style.display = "block";
+      state.currentSection = `${sectionId}-section`;
+    }
 
-  // 기본 API URL
-  const API_URL = "/api";
+    // 현재 섹션에 따라 추가 작업
+    if (sectionId === "profile" && state.user) {
+      fillProfileForm();
+    } else if (sectionId === "users") {
+      loadUsers();
+    }
+  }
 
-  // 인증 상태 확인 및 UI 업데이트
-  function checkAuthState() {
+  // 네비게이션 상태 업데이트
+  function updateNavigation() {
+    // 로그인 상태에 따라 메뉴 표시/숨김
+    if (state.isLoggedIn) {
+      if (ui.nav.register) ui.nav.register.style.display = "none";
+      if (ui.nav.login) ui.nav.login.style.display = "none";
+      if (ui.nav.profile) ui.nav.profile.style.display = "block";
+      if (ui.nav.logout) ui.nav.logout.style.display = "block";
+      if (ui.nav.users) ui.nav.users.style.display = "block";
+    } else {
+      if (ui.nav.register) ui.nav.register.style.display = "block";
+      if (ui.nav.login) ui.nav.login.style.display = "block";
+      if (ui.nav.profile) ui.nav.profile.style.display = "none";
+      if (ui.nav.logout) ui.nav.logout.style.display = "none";
+      if (ui.nav.users) ui.nav.users.style.display = "none";
+
+      // 로그인 되지 않은 상태에서 로그인이 필요한 섹션이면 홈으로 리다이렉트
+      if (
+        state.currentSection === "profile-section" ||
+        state.currentSection === "password-section" ||
+        state.currentSection === "users-section"
+      ) {
+        showSection("home");
+      }
+    }
+  }
+
+  // 메시지 표시 함수 (추가된 타입별 스타일)
+  function showMessage(message, type = "info") {
+    const messageContainer = ui.messageContainer;
+
+    if (!messageContainer) return;
+
+    messageContainer.textContent = message;
+    messageContainer.className = "message-container";
+    messageContainer.classList.add(`message-${type}`);
+    messageContainer.style.display = "block";
+
+    // 5초 후 메시지 자동 제거
+    setTimeout(() => {
+      messageContainer.style.display = "none";
+    }, 5000);
+  }
+
+  // 로그인 상태 확인
+  function checkLoginStatus() {
     const token = localStorage.getItem("token");
     const user = JSON.parse(localStorage.getItem("user") || "null");
 
     if (token && user) {
-      // 로그인 상태
-      navHome.classList.remove("active");
-      navRegister.classList.add("hidden");
-      navLogin.classList.add("hidden");
-      navProfile.classList.remove("hidden");
-      navLogout.classList.remove("hidden");
-
-      // 프로필 데이터 채우기
-      updateProfileData(user);
+      state.isLoggedIn = true;
+      state.token = token;
+      state.user = user;
     } else {
-      // 로그아웃 상태
-      navRegister.classList.remove("hidden");
-      navLogin.classList.remove("hidden");
-      navProfile.classList.add("hidden");
-      navLogout.classList.add("hidden");
+      state.isLoggedIn = false;
+      state.token = null;
+      state.user = null;
+    }
 
-      // 홈으로 이동
-      showSection(homeSection);
-      navHome.classList.add("active");
+    updateNavigation();
+  }
+
+  // 프로필 양식 채우기
+  function fillProfileForm() {
+    if (!state.user || !ui.forms.profile) return;
+
+    document.getElementById("profile-username").textContent =
+      state.user.username || "";
+    document.getElementById("profile-email").value = state.user.email || "";
+    document.getElementById("profile-fullname").value =
+      state.user.full_name || "";
+
+    // 아바타 미리보기 갱신
+    if (ui.avatarPreview) {
+      if (state.user.avatar_url) {
+        ui.avatarPreview.src = state.user.avatar_url;
+      } else {
+        ui.avatarPreview.src =
+          "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y";
+      }
     }
   }
 
-  // 프로필 데이터 업데이트
-  function updateProfileData(user) {
-    // 프로필 데이터 설정
-    profileUsername.textContent = user.username;
-    profileEmail.textContent = user.email;
-    profileFullname.textContent = user.full_name || "-";
+  // 비밀번호 강도 측정
+  function updatePasswordStrength(password) {
+    if (!ui.passwordStrength) return;
 
-    // 날짜 형식 변환
-    if (user.created_at) {
-      const date = new Date(user.created_at);
-      profileCreated.textContent = date.toLocaleDateString();
-    } else {
-      profileCreated.textContent = "-";
+    let strength = 0;
+    let feedback = "";
+
+    // 길이 검사
+    if (password.length >= 8) {
+      strength += 1;
     }
 
-    // 프로필 수정 폼 초기값 설정
-    document.getElementById("edit-email").value = user.email;
-    document.getElementById("edit-fullname").value = user.full_name || "";
+    // 대문자 검사
+    if (/[A-Z]/.test(password)) {
+      strength += 1;
+    }
+
+    // 특수문자 검사
+    if (/[!@#$%^&*]/.test(password)) {
+      strength += 1;
+    }
+
+    // 숫자 검사
+    if (/[0-9]/.test(password)) {
+      strength += 1;
+    }
+
+    // 강도에 따른 피드백
+    if (password.length === 0) {
+      ui.passwordStrength.className = "password-strength";
+      ui.passwordStrength.textContent = "";
+    } else if (strength === 0 || strength === 1) {
+      ui.passwordStrength.className = "password-strength weak";
+      ui.passwordStrength.textContent = "Weak";
+    } else if (strength === 2) {
+      ui.passwordStrength.className = "password-strength medium";
+      ui.passwordStrength.textContent = "Medium";
+    } else if (strength === 3) {
+      ui.passwordStrength.className = "password-strength strong";
+      ui.passwordStrength.textContent = "Strong";
+    } else {
+      ui.passwordStrength.className = "password-strength very-strong";
+      ui.passwordStrength.textContent = "Very Strong";
+    }
   }
 
-  // 특정 섹션 표시
-  function showSection(section) {
-    // 모든 섹션 숨기기
-    homeSection.classList.add("hidden");
-    registerSection.classList.add("hidden");
-    loginSection.classList.add("hidden");
-    profileSection.classList.add("hidden");
-    editProfileSection.classList.add("hidden");
-    changePasswordSection.classList.add("hidden");
+  // API 호출 함수
+  async function api(
+    endpoint,
+    method = "GET",
+    data = null,
+    isFormData = false
+  ) {
+    const url = `/api/${endpoint}`;
 
-    // 선택한 섹션 표시
-    section.classList.remove("hidden");
-  }
+    const headers = {};
 
-  // 네비게이션 활성화
-  function setActiveNav(nav) {
-    // 모든 네비게이션 비활성화
-    navHome.classList.remove("active");
-    navRegister.classList.remove("active");
-    navLogin.classList.remove("active");
-    navProfile.classList.remove("active");
+    if (state.token) {
+      headers["Authorization"] = `Bearer ${state.token}`;
+    }
 
-    // 선택한 네비게이션 활성화
-    nav.classList.add("active");
-  }
+    if (!isFormData && method !== "GET" && data) {
+      headers["Content-Type"] = "application/json";
+    }
 
-  // 메시지 표시
-  function showMessage(message, isError = false) {
-    messageContent.textContent = message;
-    messageContent.className = isError ? "error-message" : "success-message";
-    messageContainer.classList.remove("hidden");
-
-    // 3초 후 메시지 숨기기
-    setTimeout(() => {
-      messageContainer.classList.add("hidden");
-    }, 3000);
-  }
-
-  // 인증 토큰 가져오기
-  function getAuthHeader() {
-    const token = localStorage.getItem("token");
-    return {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
+    const options = {
+      method,
+      headers,
     };
+
+    if (data) {
+      if (method !== "GET") {
+        options.body = isFormData ? data : JSON.stringify(data);
+      }
+    }
+
+    try {
+      const response = await fetch(url, options);
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Something went wrong");
+      }
+
+      return { success: true, data: result };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
   }
 
-  // 로그아웃 함수
-  function logout() {
+  // 사용자 등록
+  async function registerUser(userData) {
+    const result = await api("users/register", "POST", userData);
+
+    if (result.success) {
+      showMessage("Registered successfully. You can now login.", "success");
+      ui.forms.register.reset();
+      showSection("login");
+    } else {
+      showMessage(result.error, "error");
+    }
+  }
+
+  // 로그인
+  async function loginUser(credentials) {
+    const result = await api("users/login", "POST", credentials);
+
+    if (result.success) {
+      state.isLoggedIn = true;
+      state.token = result.data.token;
+      state.user = result.data.user;
+
+      localStorage.setItem("token", result.data.token);
+      localStorage.setItem("user", JSON.stringify(result.data.user));
+
+      updateNavigation();
+      showMessage("Logged in successfully.", "success");
+      showSection("profile");
+    } else {
+      showMessage(result.error, "error");
+    }
+  }
+
+  // 로그아웃
+  function logoutUser() {
+    state.isLoggedIn = false;
+    state.token = null;
+    state.user = null;
+
     localStorage.removeItem("token");
     localStorage.removeItem("user");
-    checkAuthState();
-    showMessage("Logged out successfully.");
+
+    updateNavigation();
+    showMessage("Logged out successfully.", "info");
+    showSection("home");
+  }
+
+  // 프로필 업데이트
+  async function updateProfile(profileData) {
+    const result = await api("users/profile", "PUT", profileData);
+
+    if (result.success) {
+      state.user = result.data.user;
+      localStorage.setItem("user", JSON.stringify(result.data.user));
+
+      showMessage("Profile updated successfully.", "success");
+      fillProfileForm();
+    } else {
+      showMessage(result.error, "error");
+    }
+  }
+
+  // 비밀번호 변경
+  async function changePassword(passwordData) {
+    const result = await api("users/password", "PUT", passwordData);
+
+    if (result.success) {
+      showMessage("Password changed successfully.", "success");
+      ui.forms.password.reset();
+    } else {
+      showMessage(result.error, "error");
+    }
+  }
+
+  // 아바타 업로드
+  async function uploadAvatar(formData) {
+    const result = await api("users/avatar", "POST", formData, true);
+
+    if (result.success) {
+      state.user = result.data.user;
+      localStorage.setItem("user", JSON.stringify(result.data.user));
+
+      showMessage("Avatar uploaded successfully.", "success");
+      fillProfileForm();
+    } else {
+      showMessage(result.error, "error");
+    }
+  }
+
+  // 사용자 목록 로드
+  async function loadUsers(page = 1, search = "") {
+    if (!state.isLoggedIn) return;
+
+    const endpoint = `users?page=${page}&limit=10${
+      search ? `&search=${encodeURIComponent(search)}` : ""
+    }`;
+    const result = await api(endpoint);
+
+    if (result.success) {
+      state.usersData = result.data;
+      renderUsers();
+    } else {
+      showMessage(result.error, "error");
+    }
+  }
+
+  // 사용자 목록 렌더링
+  function renderUsers() {
+    if (!ui.usersList) return;
+
+    // 목록 초기화
+    ui.usersList.innerHTML = "";
+
+    if (state.usersData.users.length === 0) {
+      ui.usersList.innerHTML = '<div class="empty-state">No users found</div>';
+      return;
+    }
+
+    // 사용자 카드 생성
+    state.usersData.users.forEach((user) => {
+      const userCard = document.createElement("div");
+      userCard.className = "user-card";
+
+      const avatar =
+        user.avatar_url ||
+        "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y";
+
+      userCard.innerHTML = `
+        <div class="user-avatar">
+          <img src="${avatar}" alt="${user.username}">
+        </div>
+        <div class="user-info">
+          <h3>${user.username}</h3>
+          <p>${user.full_name || ""}</p>
+          <p>${user.email}</p>
+          <p class="user-joined">Joined: ${new Date(
+            user.created_at
+          ).toLocaleDateString()}</p>
+        </div>
+      `;
+
+      ui.usersList.appendChild(userCard);
+    });
+
+    // 페이지네이션 업데이트
+    renderPagination();
+  }
+
+  // 페이지네이션 렌더링
+  function renderPagination() {
+    if (!ui.paginationControls) return;
+
+    const { page, totalPages } = state.usersData.pagination;
+
+    // 컨트롤 초기화
+    ui.paginationControls.innerHTML = "";
+
+    if (totalPages <= 1) return;
+
+    // 이전 버튼
+    const prevButton = document.createElement("button");
+    prevButton.innerHTML = "&laquo; Prev";
+    prevButton.disabled = page <= 1;
+    prevButton.addEventListener("click", () => {
+      if (page > 1) loadUsers(page - 1, ui.userSearch.value);
+    });
+
+    // 다음 버튼
+    const nextButton = document.createElement("button");
+    nextButton.innerHTML = "Next &raquo;";
+    nextButton.disabled = page >= totalPages;
+    nextButton.addEventListener("click", () => {
+      if (page < totalPages) loadUsers(page + 1, ui.userSearch.value);
+    });
+
+    // 페이지 정보
+    const pageInfo = document.createElement("span");
+    pageInfo.className = "page-info";
+    pageInfo.textContent = `Page ${page} of ${totalPages}`;
+
+    // 페이지네이션에 추가
+    ui.paginationControls.appendChild(prevButton);
+    ui.paginationControls.appendChild(pageInfo);
+    ui.paginationControls.appendChild(nextButton);
   }
 
   // 이벤트 리스너 설정
-
-  // 네비게이션 이벤트
-  navHome.addEventListener("click", (e) => {
-    e.preventDefault();
-    showSection(homeSection);
-    setActiveNav(navHome);
-  });
-
-  navRegister.addEventListener("click", (e) => {
-    e.preventDefault();
-    showSection(registerSection);
-    setActiveNav(navRegister);
-  });
-
-  navLogin.addEventListener("click", (e) => {
-    e.preventDefault();
-    showSection(loginSection);
-    setActiveNav(navLogin);
-  });
-
-  navProfile.addEventListener("click", (e) => {
-    e.preventDefault();
-    fetchUserProfile();
-    showSection(profileSection);
-    setActiveNav(navProfile);
-  });
-
-  navLogout.addEventListener("click", (e) => {
-    e.preventDefault();
-    logout();
-  });
-
-  // 홈 버튼 이벤트
-  homeRegisterBtn.addEventListener("click", () => {
-    showSection(registerSection);
-    setActiveNav(navRegister);
-  });
-
-  homeLoginBtn.addEventListener("click", () => {
-    showSection(loginSection);
-    setActiveNav(navLogin);
-  });
-
-  // 폼 간 이동 이벤트
-  registerToLogin.addEventListener("click", (e) => {
-    e.preventDefault();
-    showSection(loginSection);
-    setActiveNav(navLogin);
-  });
-
-  loginToRegister.addEventListener("click", (e) => {
-    e.preventDefault();
-    showSection(registerSection);
-    setActiveNav(navRegister);
-  });
-
-  // 프로필 관련 버튼 이벤트
-  editProfileBtn.addEventListener("click", () => {
-    showSection(editProfileSection);
-  });
-
-  changePasswordBtn.addEventListener("click", () => {
-    showSection(changePasswordSection);
-  });
-
-  cancelEditBtn.addEventListener("click", () => {
-    showSection(profileSection);
-  });
-
-  cancelPasswordBtn.addEventListener("click", () => {
-    showSection(profileSection);
-  });
-
-  // 회원가입 폼 제출 이벤트
-  registerForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-
-    const username = document.getElementById("register-username").value;
-    const email = document.getElementById("register-email").value;
-    const password = document.getElementById("register-password").value;
-    const fullName = document.getElementById("register-fullname").value;
-
-    try {
-      const response = await fetch(`${API_URL}/users/register`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          username,
-          email,
-          password,
-          full_name: fullName,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "An error occurred during registration.");
-      }
-
-      showMessage("Registration successful. Please login.");
-      registerForm.reset();
-      showSection(loginSection);
-      setActiveNav(navLogin);
-    } catch (error) {
-      showMessage(error.message, true);
+  function setupEventListeners() {
+    // 테마 토글 버튼
+    if (ui.themeToggle) {
+      ui.themeToggle.addEventListener("click", toggleTheme);
     }
-  });
 
-  // 로그인 폼 제출 이벤트
-  loginForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-
-    const username = document.getElementById("login-username").value;
-    const password = document.getElementById("login-password").value;
-
-    try {
-      const response = await fetch(`${API_URL}/users/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          username,
-          password,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "An error occurred during login.");
-      }
-
-      // 토큰 및 사용자 정보 저장
-      localStorage.setItem("token", data.token);
-      localStorage.setItem("user", JSON.stringify(data.user));
-
-      showMessage("Login successful!");
-      loginForm.reset();
-      checkAuthState();
-      fetchUserProfile();
-      showSection(profileSection);
-      setActiveNav(navProfile);
-    } catch (error) {
-      showMessage(error.message, true);
+    // 네비게이션 리스너
+    if (ui.nav.home) {
+      ui.nav.home.addEventListener("click", () => showSection("home"));
     }
-  });
 
-  // 사용자 프로필 조회
-  async function fetchUserProfile() {
-    try {
-      const response = await fetch(`${API_URL}/users/profile`, {
-        method: "GET",
-        headers: getAuthHeader(),
+    if (ui.nav.register) {
+      ui.nav.register.addEventListener("click", () => showSection("register"));
+    }
+
+    if (ui.nav.login) {
+      ui.nav.login.addEventListener("click", () => showSection("login"));
+    }
+
+    if (ui.nav.profile) {
+      ui.nav.profile.addEventListener("click", () => showSection("profile"));
+    }
+
+    if (ui.nav.logout) {
+      ui.nav.logout.addEventListener("click", logoutUser);
+    }
+
+    if (ui.nav.users) {
+      ui.nav.users.addEventListener("click", () => showSection("users"));
+    }
+
+    // 등록 폼 제출
+    if (ui.forms.register) {
+      ui.forms.register.addEventListener("submit", (e) => {
+        e.preventDefault();
+
+        const username = document.getElementById("register-username").value;
+        const email = document.getElementById("register-email").value;
+        const password = document.getElementById("register-password").value;
+        const fullName = document.getElementById("register-fullname").value;
+
+        registerUser({ username, email, password, full_name: fullName });
       });
 
-      if (!response.ok) {
-        if (response.status === 401 || response.status === 403) {
-          // 인증 실패 - 로그아웃
-          logout();
-          throw new Error("Authentication failed. Please login again.");
-        }
-        const data = await response.json();
-        throw new Error(
-          data.error || "An error occurred while fetching profile."
+      // 비밀번호 강도 체크
+      const passwordInput = document.getElementById("register-password");
+      if (passwordInput) {
+        passwordInput.addEventListener("input", (e) => {
+          updatePasswordStrength(e.target.value);
+        });
+      }
+    }
+
+    // 로그인 폼 제출
+    if (ui.forms.login) {
+      ui.forms.login.addEventListener("submit", (e) => {
+        e.preventDefault();
+
+        const username = document.getElementById("login-username").value;
+        const password = document.getElementById("login-password").value;
+        const rememberMe = document.getElementById("login-remember").checked;
+
+        loginUser({ username, password, remember_me: rememberMe });
+      });
+    }
+
+    // 프로필 폼 제출
+    if (ui.forms.profile) {
+      ui.forms.profile.addEventListener("submit", (e) => {
+        e.preventDefault();
+
+        const email = document.getElementById("profile-email").value;
+        const fullName = document.getElementById("profile-fullname").value;
+
+        updateProfile({ email, full_name: fullName });
+      });
+
+      // 비밀번호 변경 링크
+      const changePasswordLink = document.getElementById(
+        "change-password-link"
+      );
+      if (changePasswordLink) {
+        changePasswordLink.addEventListener("click", () =>
+          showSection("password")
         );
       }
+    }
 
-      const userData = await response.json();
-      localStorage.setItem("user", JSON.stringify(userData));
-      updateProfileData(userData);
-    } catch (error) {
-      showMessage(error.message, true);
+    // 비밀번호 변경 폼 제출
+    if (ui.forms.password) {
+      ui.forms.password.addEventListener("submit", (e) => {
+        e.preventDefault();
+
+        const currentPassword =
+          document.getElementById("current-password").value;
+        const newPassword = document.getElementById("new-password").value;
+        const confirmPassword =
+          document.getElementById("confirm-password").value;
+
+        if (newPassword !== confirmPassword) {
+          showMessage("New passwords do not match", "error");
+          return;
+        }
+
+        changePassword({
+          current_password: currentPassword,
+          new_password: newPassword,
+        });
+      });
+
+      // 비밀번호 강도 체크
+      const newPasswordInput = document.getElementById("new-password");
+      if (newPasswordInput) {
+        newPasswordInput.addEventListener("input", (e) => {
+          updatePasswordStrength(e.target.value);
+        });
+      }
+    }
+
+    // 아바타 폼 제출
+    if (ui.forms.avatar) {
+      ui.forms.avatar.addEventListener("submit", (e) => {
+        e.preventDefault();
+
+        const avatarInput = document.getElementById("avatar-file");
+        if (!avatarInput.files || avatarInput.files.length === 0) {
+          showMessage("Please select an image file", "error");
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append("avatar", avatarInput.files[0]);
+
+        uploadAvatar(formData);
+      });
+
+      // 아바타 미리보기
+      const avatarInput = document.getElementById("avatar-file");
+      if (avatarInput) {
+        avatarInput.addEventListener("change", (e) => {
+          if (e.target.files && e.target.files[0] && ui.avatarPreview) {
+            const reader = new FileReader();
+            reader.onload = function (event) {
+              ui.avatarPreview.src = event.target.result;
+            };
+            reader.readAsDataURL(e.target.files[0]);
+          }
+        });
+      }
+    }
+
+    // 사용자 검색
+    if (ui.userSearch) {
+      // 디바운스 적용을 위한 타이머
+      let searchTimer;
+
+      ui.userSearch.addEventListener("input", (e) => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => {
+          loadUsers(1, e.target.value);
+        }, 500);
+      });
     }
   }
 
-  // 프로필 수정 폼 제출 이벤트
-  editProfileForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
+  // 앱 초기화
+  function init() {
+    initTheme();
+    checkLoginStatus();
+    setupEventListeners();
+    showSection("home");
+  }
 
-    const email = document.getElementById("edit-email").value;
-    const fullName = document.getElementById("edit-fullname").value;
-
-    try {
-      const response = await fetch(`${API_URL}/users/profile`, {
-        method: "PUT",
-        headers: getAuthHeader(),
-        body: JSON.stringify({
-          email,
-          full_name: fullName,
-        }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(
-          data.error || "An error occurred while updating profile."
-        );
-      }
-
-      const userData = await response.json();
-      localStorage.setItem("user", JSON.stringify(userData.user));
-      updateProfileData(userData.user);
-      showMessage("Profile updated successfully.");
-      showSection(profileSection);
-    } catch (error) {
-      showMessage(error.message, true);
-    }
-  });
-
-  // 비밀번호 변경 폼 제출 이벤트
-  changePasswordForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-
-    const currentPassword = document.getElementById("current-password").value;
-    const newPassword = document.getElementById("new-password").value;
-
-    try {
-      const response = await fetch(`${API_URL}/users/password`, {
-        method: "PUT",
-        headers: getAuthHeader(),
-        body: JSON.stringify({
-          current_password: currentPassword,
-          new_password: newPassword,
-        }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(
-          data.error || "An error occurred while changing password."
-        );
-      }
-
-      changePasswordForm.reset();
-      showMessage("Password changed successfully.");
-      showSection(profileSection);
-    } catch (error) {
-      showMessage(error.message, true);
-    }
-  });
-
-  // 페이지 로드 시 인증 상태 확인
-  checkAuthState();
+  // 앱 시작
+  init();
 });

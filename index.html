@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -18,13 +18,25 @@
   <body>
     <div class="container">
       <header>
-        <h1><i class="fas fa-users"></i> User Registration System</h1>
+        <div class="header-top">
+          <h1><i class="fas fa-users"></i> User Registration System</h1>
+          <div class="header-controls">
+            <button
+              id="theme-toggle"
+              class="icon-btn"
+              aria-label="Toggle theme"
+            >
+              <i class="fas fa-moon"></i>
+            </button>
+          </div>
+        </div>
         <nav id="main-nav">
           <ul>
             <li><a href="#" id="nav-home" class="active">Home</a></li>
             <li><a href="#" id="nav-register">Register</a></li>
             <li><a href="#" id="nav-login">Login</a></li>
             <li><a href="#" id="nav-profile" class="hidden">Profile</a></li>
+            <li><a href="#" id="nav-users" class="hidden">Users</a></li>
             <li><a href="#" id="nav-logout" class="hidden">Logout</a></li>
           </ul>
         </nav>
@@ -72,12 +84,21 @@
             </div>
             <div class="form-group">
               <label for="register-password">Password:</label>
-              <input
-                type="password"
-                id="register-password"
-                placeholder="Enter password"
-                required
-              />
+              <div class="password-container">
+                <input
+                  type="password"
+                  id="register-password"
+                  placeholder="Enter password"
+                  required
+                />
+                <button type="button" class="toggle-password">
+                  <i class="fas fa-eye"></i>
+                </button>
+              </div>
+              <div class="password-strength-meter">
+                <div class="strength-bar"></div>
+              </div>
+              <span class="password-feedback"></span>
             </div>
             <div class="form-group">
               <label for="register-fullname">Full Name:</label>
@@ -112,12 +133,21 @@
             </div>
             <div class="form-group">
               <label for="login-password">Password:</label>
-              <input
-                type="password"
-                id="login-password"
-                placeholder="Enter password"
-                required
-              />
+              <div class="password-container">
+                <input
+                  type="password"
+                  id="login-password"
+                  placeholder="Enter password"
+                  required
+                />
+                <button type="button" class="toggle-password">
+                  <i class="fas fa-eye"></i>
+                </button>
+              </div>
+            </div>
+            <div class="form-group remember-me">
+              <input type="checkbox" id="remember-me" />
+              <label for="remember-me">Remember me</label>
             </div>
             <button type="submit" class="btn primary-btn">
               <i class="fas fa-sign-in-alt"></i> Login
@@ -132,22 +162,35 @@
         <!-- Profile Section -->
         <section id="profile-section" class="section hidden">
           <h2><i class="fas fa-user-circle"></i> User Profile</h2>
-          <div class="profile-info">
-            <div class="profile-item">
-              <span class="profile-label">Username:</span>
-              <span id="profile-username" class="profile-value"></span>
+          <div class="profile-container">
+            <div class="profile-avatar-container">
+              <div class="profile-avatar" id="profile-avatar">
+                <i class="fas fa-user"></i>
+              </div>
+              <div class="avatar-upload">
+                <label for="avatar-upload" class="btn small-btn">
+                  <i class="fas fa-camera"></i> Change
+                </label>
+                <input type="file" id="avatar-upload" accept="image/*" />
+              </div>
             </div>
-            <div class="profile-item">
-              <span class="profile-label">Email:</span>
-              <span id="profile-email" class="profile-value"></span>
-            </div>
-            <div class="profile-item">
-              <span class="profile-label">Full Name:</span>
-              <span id="profile-fullname" class="profile-value"></span>
-            </div>
-            <div class="profile-item">
-              <span class="profile-label">Join Date:</span>
-              <span id="profile-created" class="profile-value"></span>
+            <div class="profile-info">
+              <div class="profile-item">
+                <span class="profile-label">Username:</span>
+                <span id="profile-username" class="profile-value"></span>
+              </div>
+              <div class="profile-item">
+                <span class="profile-label">Email:</span>
+                <span id="profile-email" class="profile-value"></span>
+              </div>
+              <div class="profile-item">
+                <span class="profile-label">Full Name:</span>
+                <span id="profile-fullname" class="profile-value"></span>
+              </div>
+              <div class="profile-item">
+                <span class="profile-label">Join Date:</span>
+                <span id="profile-created" class="profile-value"></span>
+              </div>
             </div>
           </div>
 
@@ -203,21 +246,49 @@
           <form id="change-password-form">
             <div class="form-group">
               <label for="current-password">Current Password:</label>
-              <input
-                type="password"
-                id="current-password"
-                placeholder="Enter current password"
-                required
-              />
+              <div class="password-container">
+                <input
+                  type="password"
+                  id="current-password"
+                  placeholder="Enter current password"
+                  required
+                />
+                <button type="button" class="toggle-password">
+                  <i class="fas fa-eye"></i>
+                </button>
+              </div>
             </div>
             <div class="form-group">
               <label for="new-password">New Password:</label>
-              <input
-                type="password"
-                id="new-password"
-                placeholder="Enter new password"
-                required
-              />
+              <div class="password-container">
+                <input
+                  type="password"
+                  id="new-password"
+                  placeholder="Enter new password"
+                  required
+                />
+                <button type="button" class="toggle-password">
+                  <i class="fas fa-eye"></i>
+                </button>
+              </div>
+              <div class="password-strength-meter">
+                <div class="strength-bar"></div>
+              </div>
+              <span class="password-feedback"></span>
+            </div>
+            <div class="form-group">
+              <label for="confirm-password">Confirm Password:</label>
+              <div class="password-container">
+                <input
+                  type="password"
+                  id="confirm-password"
+                  placeholder="Confirm new password"
+                  required
+                />
+                <button type="button" class="toggle-password">
+                  <i class="fas fa-eye"></i>
+                </button>
+              </div>
             </div>
             <div class="btn-group">
               <button type="submit" class="btn primary-btn">
@@ -232,6 +303,35 @@
               </button>
             </div>
           </form>
+        </section>
+
+        <!-- Users Section -->
+        <section id="users-section" class="section hidden">
+          <h2><i class="fas fa-users"></i> User Directory</h2>
+          <div class="search-container">
+            <div class="search-box">
+              <input
+                type="text"
+                id="user-search"
+                placeholder="Search users..."
+              />
+              <button id="search-btn" class="btn small-btn">
+                <i class="fas fa-search"></i>
+              </button>
+            </div>
+          </div>
+          <div class="users-list" id="users-list">
+            <!-- Users will be displayed here -->
+          </div>
+          <div class="pagination">
+            <button id="prev-page" class="btn small-btn" disabled>
+              <i class="fas fa-chevron-left"></i> Prev
+            </button>
+            <span id="page-info">Page 1</span>
+            <button id="next-page" class="btn small-btn">
+              Next <i class="fas fa-chevron-right"></i>
+            </button>
+          </div>
         </section>
       </main>
 

@@ -5,14 +5,55 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
+const multer = require("multer");
+const fs = require("fs").promises;
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3100;
 const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret_key";
 
 // 미들웨어 설정
 app.use(express.json());
 app.use(express.static(path.join(__dirname)));
+
+// 아바타 저장 디렉터리 설정
+const avatarDir = path.join(__dirname, "avatars");
+// 아바타 디렉터리 생성 (없는 경우)
+(async () => {
+  try {
+    await fs.mkdir(avatarDir, { recursive: true });
+    console.log("Avatar directory created or already exists");
+  } catch (err) {
+    console.error("Failed to create avatar directory:", err);
+  }
+})();
+
+// multer 설정 (파일 업로드 처리)
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, avatarDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname);
+    cb(null, `user-${req.user.id}-${uniqueSuffix}${ext}`);
+  },
+});
+
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB 제한
+  },
+  fileFilter: (req, file, cb) => {
+    // 이미지 파일만 허용
+    if (file.mimetype.startsWith("image/")) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only image files are allowed"));
+    }
+  },
+});
 
 // 보안 미들웨어 설정
 app.use(helmet());
@@ -25,15 +66,17 @@ const limiter = rateLimit({
 });
 app.use("/api/", limiter);
 
+// 아바타 정적 서빙
+app.use("/avatars", express.static(avatarDir));
+
 // RDS 데이터베이스 설정
 const dbConfig = {
   host:
     process.env.RDS_HOSTNAME ||
-    "hancom.cv88qo4gg15o.ap-northeast-2.rds.amazonaws.com",
+    "hancom2.cv88qo4gg15o.ap-northeast-2.rds.amazonaws.com",
   user: process.env.RDS_USERNAME || "admin",
   password: process.env.RDS_PASSWORD || "lds*13041226",
   database: process.env.RDS_DB_NAME || "userdb",
-  port: process.env.RDS_PORT || 3000,
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
@@ -60,7 +103,9 @@ async function initializeDatabase() {
         email VARCHAR(100) NOT NULL UNIQUE,
         password VARCHAR(100) NOT NULL,
         full_name VARCHAR(100),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        avatar_url VARCHAR(255),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       )
     `);
 
@@ -91,6 +136,25 @@ function authenticateToken(req, res, next) {
   });
 }
 
+// 관리자 권한 확인 미들웨어
+async function isAdmin(req, res, next) {
+  try {
+    const [users] = await pool.query(
+      "SELECT is_admin FROM users WHERE id = ?",
+      [req.user.id]
+    );
+
+    if (users.length === 0 || !users[0].is_admin) {
+      return res.status(403).json({ error: "Admin access required." });
+    }
+
+    next();
+  } catch (err) {
+    console.error("Admin check error:", err);
+    res.status(500).json({ error: "Failed to verify admin status." });
+  }
+}
+
 // 라우트 설정
 async function setupRoutes(pool) {
   // 사용자 등록
@@ -108,6 +172,13 @@ async function setupRoutes(pool) {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       return res.status(400).json({ error: "Invalid email format." });
+    }
+
+    // 비밀번호 강도 검사
+    if (password.length < 8) {
+      return res.status(400).json({
+        error: "Password must be at least 8 characters long.",
+      });
     }
 
     try {
@@ -133,7 +204,7 @@ async function setupRoutes(pool) {
       );
 
       const [newUser] = await pool.query(
-        "SELECT id, username, email, full_name, created_at FROM users WHERE id = ?",
+        "SELECT id, username, email, full_name, avatar_url, created_at FROM users WHERE id = ?",
         [result.insertId]
       );
 
@@ -151,7 +222,7 @@ async function setupRoutes(pool) {
 
   // 로그인
   app.post("/api/users/login", async (req, res) => {
-    const { username, password } = req.body;
+    const { username, password, remember_me } = req.body;
 
     if (!username || !password) {
       return res
@@ -179,11 +250,13 @@ async function setupRoutes(pool) {
         return res.status(401).json({ error: "Authentication failed." });
       }
 
-      // JWT 토큰 생성
+      // JWT 토큰 생성 (기억하기 옵션에 따라 만료 시간 설정)
+      const expiresIn = remember_me ? "7d" : "1h";
+
       const token = jwt.sign(
         { id: user.id, username: user.username },
         JWT_SECRET,
-        { expiresIn: "1h" }
+        { expiresIn }
       );
 
       res.json({
@@ -194,6 +267,7 @@ async function setupRoutes(pool) {
           username: user.username,
           email: user.email,
           full_name: user.full_name,
+          avatar_url: user.avatar_url,
         },
       });
     } catch (err) {
@@ -206,7 +280,7 @@ async function setupRoutes(pool) {
   app.get("/api/users/profile", authenticateToken, async (req, res) => {
     try {
       const [users] = await pool.query(
-        "SELECT id, username, email, full_name, created_at FROM users WHERE id = ?",
+        "SELECT id, username, email, full_name, avatar_url, created_at FROM users WHERE id = ?",
         [req.user.id]
       );
 
@@ -255,7 +329,7 @@ async function setupRoutes(pool) {
       );
 
       const [updatedUser] = await pool.query(
-        "SELECT id, username, email, full_name, created_at FROM users WHERE id = ?",
+        "SELECT id, username, email, full_name, avatar_url, created_at FROM users WHERE id = ?",
         [req.user.id]
       );
 
@@ -271,6 +345,69 @@ async function setupRoutes(pool) {
     }
   });
 
+  // 아바타 업로드
+  app.post(
+    "/api/users/avatar",
+    authenticateToken,
+    upload.single("avatar"),
+    async (req, res) => {
+      if (!req.file) {
+        return res.status(400).json({ error: "No avatar file uploaded." });
+      }
+
+      try {
+        // 이전 아바타 파일 정보 가져오기
+        const [userData] = await pool.query(
+          "SELECT avatar_url FROM users WHERE id = ?",
+          [req.user.id]
+        );
+
+        const oldAvatarUrl = userData[0]?.avatar_url;
+
+        // 새 아바타 URL 생성
+        const avatarUrl = `/avatars/${req.file.filename}`;
+
+        // 아바타 URL 업데이트
+        await pool.query("UPDATE users SET avatar_url = ? WHERE id = ?", [
+          avatarUrl,
+          req.user.id,
+        ]);
+
+        // 이전 아바타 파일 삭제 (기본 아바타가 아닌 경우)
+        if (
+          oldAvatarUrl &&
+          !oldAvatarUrl.includes("default") &&
+          oldAvatarUrl.startsWith("/avatars/")
+        ) {
+          const oldAvatarPath = path.join(__dirname, oldAvatarUrl);
+          try {
+            await fs.unlink(oldAvatarPath);
+            console.log("Previous avatar deleted:", oldAvatarPath);
+          } catch (unlinkErr) {
+            console.error("Failed to delete previous avatar:", unlinkErr);
+            // 파일 삭제 실패해도 진행
+          }
+        }
+
+        // 업데이트된 사용자 정보 반환
+        const [updatedUser] = await pool.query(
+          "SELECT id, username, email, full_name, avatar_url, created_at FROM users WHERE id = ?",
+          [req.user.id]
+        );
+
+        res.json({
+          message: "Avatar uploaded successfully.",
+          user: updatedUser[0],
+        });
+      } catch (err) {
+        console.error("Avatar upload error:", err);
+        res
+          .status(500)
+          .json({ error: "An error occurred while uploading the avatar." });
+      }
+    }
+  );
+
   // 비밀번호 변경
   app.put("/api/users/password", authenticateToken, async (req, res) => {
     const { current_password, new_password } = req.body;
@@ -279,6 +416,13 @@ async function setupRoutes(pool) {
       return res
         .status(400)
         .json({ error: "Current and new passwords are required." });
+    }
+
+    // 비밀번호 강도 검사
+    if (new_password.length < 8) {
+      return res.status(400).json({
+        error: "Password must be at least 8 characters long.",
+      });
     }
 
     try {
@@ -320,6 +464,59 @@ async function setupRoutes(pool) {
       res
         .status(500)
         .json({ error: "An error occurred while changing the password." });
+    }
+  });
+
+  // 모든 사용자 조회 (페이지네이션 및 검색 기능 포함)
+  app.get("/api/users", authenticateToken, async (req, res) => {
+    try {
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
+      const offset = (page - 1) * limit;
+      const search = req.query.search || "";
+
+      let query = `
+        SELECT id, username, email, full_name, avatar_url, created_at 
+        FROM users 
+        WHERE username LIKE ? OR email LIKE ? OR full_name LIKE ?
+        ORDER BY created_at DESC
+        LIMIT ? OFFSET ?
+      `;
+
+      const searchParam = `%${search}%`;
+
+      const [users] = await pool.query(query, [
+        searchParam,
+        searchParam,
+        searchParam,
+        limit,
+        offset,
+      ]);
+
+      // 전체 사용자 수 조회 (검색 조건 포함)
+      const [countResult] = await pool.query(
+        `SELECT COUNT(*) as total FROM users 
+         WHERE username LIKE ? OR email LIKE ? OR full_name LIKE ?`,
+        [searchParam, searchParam, searchParam]
+      );
+
+      const totalUsers = countResult[0].total;
+      const totalPages = Math.ceil(totalUsers / limit);
+
+      res.json({
+        users,
+        pagination: {
+          total: totalUsers,
+          page,
+          limit,
+          totalPages,
+        },
+      });
+    } catch (err) {
+      console.error("Users list error:", err);
+      res
+        .status(500)
+        .json({ error: "An error occurred while fetching users." });
     }
   });
 
