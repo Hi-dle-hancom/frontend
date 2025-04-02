@@ -1,349 +1,69 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="ko">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta
-      name="description"
-      content="Web application providing user registration and account management functions."
-    />
-    <meta name="keywords" content="user, registration, login, profile" />
-    <title>User Registration System</title>
+    <title>LEE DO SEON</title>
     <link rel="stylesheet" href="style.css" />
     <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap"
       rel="stylesheet"
-      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     />
   </head>
   <body>
-    <div class="container">
-      <header>
-        <div class="header-top">
-          <h1><i class="fas fa-users"></i> User Registration System</h1>
-          <div class="header-controls">
-            <button
-              id="theme-toggle"
-              class="icon-btn"
-              aria-label="Toggle theme"
-            >
-              <i class="fas fa-moon"></i>
-            </button>
-          </div>
+    <header>
+      <nav>
+        <div class="logo">LEE DO SEON</div>
+        <ul class="nav-links">
+          <li><a href="#profile">PROFILE</a></li>
+          <li><a href="#portfolio">PORTFOLIO</a></li>
+          <li><a href="#etc">ETC</a></li>
+        </ul>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <h1>LEE<br />DO<br />SEON</h1>
+        <div class="social-links">
+          <a href="https://github.com/DoSeon-Lee" target="_blank">GitHub</a>
+          <a href="https://doseon1226.tistory.com/" target="_blank">Tistory</a>
+          <a href="https://instagram.com/b1ue.hxur" target="_blank"
+            >instagram</a
+          >
         </div>
-        <nav id="main-nav">
-          <ul>
-            <li><a href="#" id="nav-home" class="active">Home</a></li>
-            <li><a href="#" id="nav-register">Register</a></li>
-            <li><a href="#" id="nav-login">Login</a></li>
-            <li><a href="#" id="nav-profile" class="hidden">Profile</a></li>
-            <li><a href="#" id="nav-users" class="hidden">Users</a></li>
-            <li><a href="#" id="nav-logout" class="hidden">Logout</a></li>
-          </ul>
-        </nav>
-      </header>
+      </section>
 
-      <main>
-        <!-- Home Section -->
-        <section id="home-section" class="section">
-          <div class="welcome-box">
-            <h2>Welcome!</h2>
-            <p>Welcome to the User Registration System.</p>
-            <p>Don't have an account? Register now.</p>
-            <div class="btn-group">
-              <button id="home-register-btn" class="btn primary-btn">
-                <i class="fas fa-user-plus"></i> Register
-              </button>
-              <button id="home-login-btn" class="btn secondary-btn">
-                <i class="fas fa-sign-in-alt"></i> Login
-              </button>
-            </div>
+      <section class="intro">
+        <h2>WEB<br />React<br />ReactNative</h2>
+        <p>뭘 좋아할지<br />몰라서<br />다 준비해봤어</p>
+        <a href="#portfolio" class="view-more">VIEW MORE</a>
+      </section>
+
+      <section class="portfolio" id="portfolio">
+        <div class="portfolio-filters">
+          <button class="filter-btn active" data-filter="all">ALL</button>
+          <button class="filter-btn" data-filter="uiux">UI/UX</button>
+          <button class="filter-btn" data-filter="web">WEB</button>
+          <button class="filter-btn" data-filter="visual">VISUAL</button>
+          <button class="filter-btn" data-filter="video">VIDEO</button>
+          <button class="filter-btn" data-filter="etc">ETC</button>
+        </div>
+        <div class="portfolio-grid">
+          <div class="portfolio-item" data-category="web">
+            <img src="project1.jpg" alt="프로젝트 1" />
+            <h3>프로젝트 제목 1</h3>
+            <p>프로젝트 설명</p>
           </div>
-        </section>
+          <!-- 더 많은 포트폴리오 아이템 추가 -->
+        </div>
+      </section>
+    </main>
 
-        <!-- Register Section -->
-        <section id="register-section" class="section hidden">
-          <h2><i class="fas fa-user-plus"></i> Register</h2>
-          <form id="register-form">
-            <div class="form-group">
-              <label for="register-username">Username:</label>
-              <input
-                type="text"
-                id="register-username"
-                placeholder="Enter username"
-                required
-              />
-            </div>
-            <div class="form-group">
-              <label for="register-email">Email:</label>
-              <input
-                type="email"
-                id="register-email"
-                placeholder="Enter email"
-                required
-              />
-            </div>
-            <div class="form-group">
-              <label for="register-password">Password:</label>
-              <div class="password-container">
-                <input
-                  type="password"
-                  id="register-password"
-                  placeholder="Enter password"
-                  required
-                />
-                <button type="button" class="toggle-password">
-                  <i class="fas fa-eye"></i>
-                </button>
-              </div>
-              <div class="password-strength-meter">
-                <div class="strength-bar"></div>
-              </div>
-              <span class="password-feedback"></span>
-            </div>
-            <div class="form-group">
-              <label for="register-fullname">Full Name:</label>
-              <input
-                type="text"
-                id="register-fullname"
-                placeholder="Enter full name (optional)"
-              />
-            </div>
-            <button type="submit" class="btn primary-btn">
-              <i class="fas fa-user-plus"></i> Register
-            </button>
-            <p class="form-link">
-              Already have an account?
-              <a href="#" id="register-to-login">Login here</a>
-            </p>
-          </form>
-        </section>
+    <footer>
+      <p>© 2025 LEE DO SEON. All Rights Reserved.</p>
+    </footer>
 
-        <!-- Login Section -->
-        <section id="login-section" class="section hidden">
-          <h2><i class="fas fa-sign-in-alt"></i> Login</h2>
-          <form id="login-form">
-            <div class="form-group">
-              <label for="login-username">Username:</label>
-              <input
-                type="text"
-                id="login-username"
-                placeholder="Enter username"
-                required
-              />
-            </div>
-            <div class="form-group">
-              <label for="login-password">Password:</label>
-              <div class="password-container">
-                <input
-                  type="password"
-                  id="login-password"
-                  placeholder="Enter password"
-                  required
-                />
-                <button type="button" class="toggle-password">
-                  <i class="fas fa-eye"></i>
-                </button>
-              </div>
-            </div>
-            <div class="form-group remember-me">
-              <input type="checkbox" id="remember-me" />
-              <label for="remember-me">Remember me</label>
-            </div>
-            <button type="submit" class="btn primary-btn">
-              <i class="fas fa-sign-in-alt"></i> Login
-            </button>
-            <p class="form-link">
-              Don't have an account?
-              <a href="#" id="login-to-register">Register here</a>
-            </p>
-          </form>
-        </section>
-
-        <!-- Profile Section -->
-        <section id="profile-section" class="section hidden">
-          <h2><i class="fas fa-user-circle"></i> User Profile</h2>
-          <div class="profile-container">
-            <div class="profile-avatar-container">
-              <div class="profile-avatar" id="profile-avatar">
-                <i class="fas fa-user"></i>
-              </div>
-              <div class="avatar-upload">
-                <label for="avatar-upload" class="btn small-btn">
-                  <i class="fas fa-camera"></i> Change
-                </label>
-                <input type="file" id="avatar-upload" accept="image/*" />
-              </div>
-            </div>
-            <div class="profile-info">
-              <div class="profile-item">
-                <span class="profile-label">Username:</span>
-                <span id="profile-username" class="profile-value"></span>
-              </div>
-              <div class="profile-item">
-                <span class="profile-label">Email:</span>
-                <span id="profile-email" class="profile-value"></span>
-              </div>
-              <div class="profile-item">
-                <span class="profile-label">Full Name:</span>
-                <span id="profile-fullname" class="profile-value"></span>
-              </div>
-              <div class="profile-item">
-                <span class="profile-label">Join Date:</span>
-                <span id="profile-created" class="profile-value"></span>
-              </div>
-            </div>
-          </div>
-
-          <div class="profile-actions">
-            <button id="edit-profile-btn" class="btn secondary-btn">
-              <i class="fas fa-edit"></i> Edit Profile
-            </button>
-            <button id="change-password-btn" class="btn secondary-btn">
-              <i class="fas fa-key"></i> Change Password
-            </button>
-          </div>
-        </section>
-
-        <!-- Edit Profile Section -->
-        <section id="edit-profile-section" class="section hidden">
-          <h2><i class="fas fa-edit"></i> Edit Profile</h2>
-          <form id="edit-profile-form">
-            <div class="form-group">
-              <label for="edit-email">Email:</label>
-              <input
-                type="email"
-                id="edit-email"
-                placeholder="Enter email"
-                required
-              />
-            </div>
-            <div class="form-group">
-              <label for="edit-fullname">Full Name:</label>
-              <input
-                type="text"
-                id="edit-fullname"
-                placeholder="Enter full name (optional)"
-              />
-            </div>
-            <div class="btn-group">
-              <button type="submit" class="btn primary-btn">
-                <i class="fas fa-save"></i> Save
-              </button>
-              <button
-                type="button"
-                id="cancel-edit-btn"
-                class="btn secondary-btn"
-              >
-                <i class="fas fa-times"></i> Cancel
-              </button>
-            </div>
-          </form>
-        </section>
-
-        <!-- Change Password Section -->
-        <section id="change-password-section" class="section hidden">
-          <h2><i class="fas fa-key"></i> Change Password</h2>
-          <form id="change-password-form">
-            <div class="form-group">
-              <label for="current-password">Current Password:</label>
-              <div class="password-container">
-                <input
-                  type="password"
-                  id="current-password"
-                  placeholder="Enter current password"
-                  required
-                />
-                <button type="button" class="toggle-password">
-                  <i class="fas fa-eye"></i>
-                </button>
-              </div>
-            </div>
-            <div class="form-group">
-              <label for="new-password">New Password:</label>
-              <div class="password-container">
-                <input
-                  type="password"
-                  id="new-password"
-                  placeholder="Enter new password"
-                  required
-                />
-                <button type="button" class="toggle-password">
-                  <i class="fas fa-eye"></i>
-                </button>
-              </div>
-              <div class="password-strength-meter">
-                <div class="strength-bar"></div>
-              </div>
-              <span class="password-feedback"></span>
-            </div>
-            <div class="form-group">
-              <label for="confirm-password">Confirm Password:</label>
-              <div class="password-container">
-                <input
-                  type="password"
-                  id="confirm-password"
-                  placeholder="Confirm new password"
-                  required
-                />
-                <button type="button" class="toggle-password">
-                  <i class="fas fa-eye"></i>
-                </button>
-              </div>
-            </div>
-            <div class="btn-group">
-              <button type="submit" class="btn primary-btn">
-                <i class="fas fa-save"></i> Change
-              </button>
-              <button
-                type="button"
-                id="cancel-password-btn"
-                class="btn secondary-btn"
-              >
-                <i class="fas fa-times"></i> Cancel
-              </button>
-            </div>
-          </form>
-        </section>
-
-        <!-- Users Section -->
-        <section id="users-section" class="section hidden">
-          <h2><i class="fas fa-users"></i> User Directory</h2>
-          <div class="search-container">
-            <div class="search-box">
-              <input
-                type="text"
-                id="user-search"
-                placeholder="Search users..."
-              />
-              <button id="search-btn" class="btn small-btn">
-                <i class="fas fa-search"></i>
-              </button>
-            </div>
-          </div>
-          <div class="users-list" id="users-list">
-            <!-- Users will be displayed here -->
-          </div>
-          <div class="pagination">
-            <button id="prev-page" class="btn small-btn" disabled>
-              <i class="fas fa-chevron-left"></i> Prev
-            </button>
-            <span id="page-info">Page 1</span>
-            <button id="next-page" class="btn small-btn">
-              Next <i class="fas fa-chevron-right"></i>
-            </button>
-          </div>
-        </section>
-      </main>
-
-      <div id="message-container" class="hidden">
-        <div id="message-content"></div>
-      </div>
-
-      <footer>
-        <p>&copy; 2025 User Registration System</p>
-      </footer>
-    </div>
-
-    <script src="app.js"></script>
+    <script src="main.js"></script>
   </body>
 </html>
