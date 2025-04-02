@@ -1,84 +1,246 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="간단한 메모 작성, 수정, 삭제 기능을 제공하는 웹 애플리케이션입니다."
+      content="Web application providing user registration and account management functions."
     />
-    <meta name="keywords" content="메모, 노트, 메모장, 웹 메모장" />
-    <title>메모 애플리케이션</title>
+    <meta name="keywords" content="user, registration, login, profile" />
+    <title>User Registration System</title>
     <link rel="stylesheet" href="style.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
   </head>
   <body>
     <div class="container">
       <header>
-        <h1>메모 애플리케이션</h1>
+        <h1><i class="fas fa-users"></i> User Registration System</h1>
+        <nav id="main-nav">
+          <ul>
+            <li><a href="#" id="nav-home" class="active">Home</a></li>
+            <li><a href="#" id="nav-register">Register</a></li>
+            <li><a href="#" id="nav-login">Login</a></li>
+            <li><a href="#" id="nav-profile" class="hidden">Profile</a></li>
+            <li><a href="#" id="nav-logout" class="hidden">Logout</a></li>
+          </ul>
+        </nav>
       </header>
 
       <main>
-        <div id="memo-form" class="section">
-          <h2>새 메모 작성</h2>
-          <div class="form-group">
-            <label for="memo-title">제목:</label>
-            <input
-              type="text"
-              id="memo-title"
-              placeholder="메모 제목을 입력하세요"
-              aria-label="메모 제목"
-            />
+        <!-- Home Section -->
+        <section id="home-section" class="section">
+          <div class="welcome-box">
+            <h2>Welcome!</h2>
+            <p>Welcome to the User Registration System.</p>
+            <p>Don't have an account? Register now.</p>
+            <div class="btn-group">
+              <button id="home-register-btn" class="btn primary-btn">
+                <i class="fas fa-user-plus"></i> Register
+              </button>
+              <button id="home-login-btn" class="btn secondary-btn">
+                <i class="fas fa-sign-in-alt"></i> Login
+              </button>
+            </div>
           </div>
-          <div class="form-group">
-            <label for="memo-content">내용:</label>
-            <textarea
-              id="memo-content"
-              rows="5"
-              placeholder="메모 내용을 입력하세요"
-              aria-label="메모 내용"
-            ></textarea>
-          </div>
-          <button
-            id="save-memo-btn"
-            class="btn primary-btn"
-            aria-label="메모 저장"
-          >
-            저장
-          </button>
-        </div>
+        </section>
 
-        <div id="memo-edit" class="section hidden">
-          <h2>메모 수정</h2>
-          <div class="form-group">
-            <label for="edit-title">제목:</label>
-            <input
-              type="text"
-              id="edit-title"
-              placeholder="메모 제목을 입력하세요"
-            />
-          </div>
-          <div class="form-group">
-            <label for="edit-content">내용:</label>
-            <textarea
-              id="edit-content"
-              rows="5"
-              placeholder="메모 내용을 입력하세요"
-            ></textarea>
-          </div>
-          <div class="btn-group">
-            <button id="update-memo-btn" class="btn primary-btn">수정</button>
-            <button id="cancel-edit-btn" class="btn secondary-btn">취소</button>
-          </div>
-        </div>
+        <!-- Register Section -->
+        <section id="register-section" class="section hidden">
+          <h2><i class="fas fa-user-plus"></i> Register</h2>
+          <form id="register-form">
+            <div class="form-group">
+              <label for="register-username">Username:</label>
+              <input
+                type="text"
+                id="register-username"
+                placeholder="Enter username"
+                required
+              />
+            </div>
+            <div class="form-group">
+              <label for="register-email">Email:</label>
+              <input
+                type="email"
+                id="register-email"
+                placeholder="Enter email"
+                required
+              />
+            </div>
+            <div class="form-group">
+              <label for="register-password">Password:</label>
+              <input
+                type="password"
+                id="register-password"
+                placeholder="Enter password"
+                required
+              />
+            </div>
+            <div class="form-group">
+              <label for="register-fullname">Full Name:</label>
+              <input
+                type="text"
+                id="register-fullname"
+                placeholder="Enter full name (optional)"
+              />
+            </div>
+            <button type="submit" class="btn primary-btn">
+              <i class="fas fa-user-plus"></i> Register
+            </button>
+            <p class="form-link">
+              Already have an account?
+              <a href="#" id="register-to-login">Login here</a>
+            </p>
+          </form>
+        </section>
 
-        <div class="section">
-          <h2>메모 목록</h2>
-          <ul id="memo-list"></ul>
-        </div>
+        <!-- Login Section -->
+        <section id="login-section" class="section hidden">
+          <h2><i class="fas fa-sign-in-alt"></i> Login</h2>
+          <form id="login-form">
+            <div class="form-group">
+              <label for="login-username">Username:</label>
+              <input
+                type="text"
+                id="login-username"
+                placeholder="Enter username"
+                required
+              />
+            </div>
+            <div class="form-group">
+              <label for="login-password">Password:</label>
+              <input
+                type="password"
+                id="login-password"
+                placeholder="Enter password"
+                required
+              />
+            </div>
+            <button type="submit" class="btn primary-btn">
+              <i class="fas fa-sign-in-alt"></i> Login
+            </button>
+            <p class="form-link">
+              Don't have an account?
+              <a href="#" id="login-to-register">Register here</a>
+            </p>
+          </form>
+        </section>
+
+        <!-- Profile Section -->
+        <section id="profile-section" class="section hidden">
+          <h2><i class="fas fa-user-circle"></i> User Profile</h2>
+          <div class="profile-info">
+            <div class="profile-item">
+              <span class="profile-label">Username:</span>
+              <span id="profile-username" class="profile-value"></span>
+            </div>
+            <div class="profile-item">
+              <span class="profile-label">Email:</span>
+              <span id="profile-email" class="profile-value"></span>
+            </div>
+            <div class="profile-item">
+              <span class="profile-label">Full Name:</span>
+              <span id="profile-fullname" class="profile-value"></span>
+            </div>
+            <div class="profile-item">
+              <span class="profile-label">Join Date:</span>
+              <span id="profile-created" class="profile-value"></span>
+            </div>
+          </div>
+
+          <div class="profile-actions">
+            <button id="edit-profile-btn" class="btn secondary-btn">
+              <i class="fas fa-edit"></i> Edit Profile
+            </button>
+            <button id="change-password-btn" class="btn secondary-btn">
+              <i class="fas fa-key"></i> Change Password
+            </button>
+          </div>
+        </section>
+
+        <!-- Edit Profile Section -->
+        <section id="edit-profile-section" class="section hidden">
+          <h2><i class="fas fa-edit"></i> Edit Profile</h2>
+          <form id="edit-profile-form">
+            <div class="form-group">
+              <label for="edit-email">Email:</label>
+              <input
+                type="email"
+                id="edit-email"
+                placeholder="Enter email"
+                required
+              />
+            </div>
+            <div class="form-group">
+              <label for="edit-fullname">Full Name:</label>
+              <input
+                type="text"
+                id="edit-fullname"
+                placeholder="Enter full name (optional)"
+              />
+            </div>
+            <div class="btn-group">
+              <button type="submit" class="btn primary-btn">
+                <i class="fas fa-save"></i> Save
+              </button>
+              <button
+                type="button"
+                id="cancel-edit-btn"
+                class="btn secondary-btn"
+              >
+                <i class="fas fa-times"></i> Cancel
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <!-- Change Password Section -->
+        <section id="change-password-section" class="section hidden">
+          <h2><i class="fas fa-key"></i> Change Password</h2>
+          <form id="change-password-form">
+            <div class="form-group">
+              <label for="current-password">Current Password:</label>
+              <input
+                type="password"
+                id="current-password"
+                placeholder="Enter current password"
+                required
+              />
+            </div>
+            <div class="form-group">
+              <label for="new-password">New Password:</label>
+              <input
+                type="password"
+                id="new-password"
+                placeholder="Enter new password"
+                required
+              />
+            </div>
+            <div class="btn-group">
+              <button type="submit" class="btn primary-btn">
+                <i class="fas fa-save"></i> Change
+              </button>
+              <button
+                type="button"
+                id="cancel-password-btn"
+                class="btn secondary-btn"
+              >
+                <i class="fas fa-times"></i> Cancel
+              </button>
+            </div>
+          </form>
+        </section>
       </main>
 
+      <div id="message-container" class="hidden">
+        <div id="message-content"></div>
+      </div>
+
       <footer>
-        <p>&copy; 2024 메모 애플리케이션</p>
+        <p>&copy; 2025 User Registration System</p>
       </footer>
     </div>
 
