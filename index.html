@@ -3,6 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="간단한 메모 작성, 수정, 삭제 기능을 제공하는 웹 애플리케이션입니다."
+    />
+    <meta name="keywords" content="메모, 노트, 메모장, 웹 메모장" />
     <title>메모 애플리케이션</title>
     <link rel="stylesheet" href="style.css" />
   </head>
@@ -21,6 +26,7 @@
               type="text"
               id="memo-title"
               placeholder="메모 제목을 입력하세요"
+              aria-label="메모 제목"
             />
           </div>
           <div class="form-group">
@@ -29,9 +35,16 @@
               id="memo-content"
               rows="5"
               placeholder="메모 내용을 입력하세요"
+              aria-label="메모 내용"
             ></textarea>
           </div>
-          <button id="save-memo-btn" class="btn primary-btn">저장</button>
+          <button
+            id="save-memo-btn"
+            class="btn primary-btn"
+            aria-label="메모 저장"
+          >
+            저장
+          </button>
         </div>
 
         <div id="memo-edit" class="section hidden">

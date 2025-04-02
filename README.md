@@ -13,7 +13,7 @@
 
 - Frontend: HTML, CSS, JavaScript
 - Backend: Node.js, Express
-- Database: SQLite
+- Database: Amazon RDS (MySQL)
 
 ## 설치 및 실행 방법
 
@@ -30,13 +30,25 @@ cd memo-app
 npm install
 ```
 
-3. 애플리케이션 실행
+3. 환경 변수 설정 (RDS 연결)
+
+다음 환경 변수를 설정하거나 server.js에서 직접 값을 변경하세요:
+
+```
+RDS_HOSTNAME=your-rds-endpoint.rds.amazonaws.com
+RDS_USERNAME=your-username
+RDS_PASSWORD=your-password
+RDS_DB_NAME=memodb
+RDS_PORT=3306
+```
+
+4. 애플리케이션 실행
 
 ```
 npm start
 ```
 
-4. 브라우저에서 확인
+5. 브라우저에서 확인
 
 ```
 http://localhost:3000
@@ -47,6 +59,15 @@ http://localhost:3000
 ```
 npm run dev
 ```
+
+## AWS RDS 설정 방법
+
+1. AWS 콘솔에서 RDS 서비스로 이동
+2. 'Create database' 선택
+3. MySQL 엔진 선택
+4. 필요한 설정 구성 (규모, 스토리지, 보안 그룹 등)
+5. 데이터베이스 생성 완료 후 엔드포인트 정보 확인
+6. 환경 변수 또는 server.js에 연결 정보 업데이트
 
 ## 라이선스
 

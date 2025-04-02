@@ -1,8 +1,7 @@
 const express = require("express");
 const path = require("path");
 const fs = require("fs").promises;
-const sqlite3 = require("sqlite3").verbose();
-const { open } = require("sqlite");
+const mysql = require("mysql2/promise");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -11,30 +10,47 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static(path.join(__dirname)));
 
-// SQLite 데이터베이스 파일 경로
-const dbPath = path.join(__dirname, "memos.db");
+// ... existing code ...
+const dbConfig = {
+  host:
+    process.env.RDS_HOSTNAME ||
+    "hancom.cv88qo4gg15o.ap-northeast-2.rds.amazonaws.com",
+  user: process.env.RDS_USERNAME || "admin",
+  password: process.env.RDS_PASSWORD || "lds*13041226",
+  database: process.env.RDS_DB_NAME || "memodb",
+  port: process.env.RDS_PORT || 3306,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+};
+// ... existing code ...
+
+// 데이터베이스 연결 풀 생성
+let pool;
 
 // 데이터베이스 연결 및 초기화
 async function initializeDatabase() {
   try {
-    // 데이터베이스 연결
-    const db = await open({
-      filename: dbPath,
-      driver: sqlite3.Database,
-    });
+    // 데이터베이스 연결 풀 생성
+    pool = mysql.createPool(dbConfig);
+
+    // 연결 테스트
+    const connection = await pool.getConnection();
+    console.log("RDS 데이터베이스에 성공적으로 연결되었습니다.");
 
     // 테이블 생성
-    await db.exec(`
+    await connection.query(`
       CREATE TABLE IF NOT EXISTS memos (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL,
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
         content TEXT NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
+    connection.release();
     console.log("데이터베이스 초기화 완료");
-    return db;
+    return pool;
   } catch (err) {
     console.error("데이터베이스 초기화 실패:", err);
     throw err;
@@ -42,14 +58,14 @@ async function initializeDatabase() {
 }
 
 // 라우트 설정
-async function setupRoutes(db) {
+async function setupRoutes(pool) {
   // 모든 메모 조회
   app.get("/api/memos", async (req, res) => {
     try {
-      const memos = await db.all(
+      const [rows] = await pool.query(
         "SELECT * FROM memos ORDER BY created_at DESC"
       );
-      res.json(memos);
+      res.json(rows);
     } catch (err) {
       console.error("메모 조회 오류:", err);
       res.status(500).json({ error: "메모 조회 중 오류가 발생했습니다." });
@@ -59,11 +75,12 @@ async function setupRoutes(db) {
   // 특정 메모 조회
   app.get("/api/memos/:id", async (req, res) => {
     try {
-      const memo = await db.get("SELECT * FROM memos WHERE id = ?", [
+      const [rows] = await pool.query("SELECT * FROM memos WHERE id = ?", [
         req.params.id,
       ]);
-      if (memo) {
-        res.json(memo);
+
+      if (rows.length > 0) {
+        res.json(rows[0]);
       } else {
         res.status(404).json({ error: "메모를 찾을 수 없습니다." });
       }
@@ -84,15 +101,16 @@ async function setupRoutes(db) {
     }
 
     try {
-      const result = await db.run(
+      const [result] = await pool.query(
         "INSERT INTO memos (title, content) VALUES (?, ?)",
         [title, content]
       );
 
-      const newMemo = await db.get("SELECT * FROM memos WHERE id = ?", [
-        result.lastID,
+      const [newMemo] = await pool.query("SELECT * FROM memos WHERE id = ?", [
+        result.insertId,
       ]);
-      res.status(201).json(newMemo);
+
+      res.status(201).json(newMemo[0]);
     } catch (err) {
       console.error("메모 생성 오류:", err);
       res.status(500).json({ error: "메모 생성 중 오류가 발생했습니다." });
@@ -110,17 +128,17 @@ async function setupRoutes(db) {
     }
 
     try {
-      await db.run("UPDATE memos SET title = ?, content = ? WHERE id = ?", [
-        title,
-        content,
-        req.params.id,
-      ]);
+      const [result] = await pool.query(
+        "UPDATE memos SET title = ?, content = ? WHERE id = ?",
+        [title, content, req.params.id]
+      );
 
-      const updatedMemo = await db.get("SELECT * FROM memos WHERE id = ?", [
-        req.params.id,
-      ]);
-      if (updatedMemo) {
-        res.json(updatedMemo);
+      if (result.affectedRows > 0) {
+        const [updatedMemo] = await pool.query(
+          "SELECT * FROM memos WHERE id = ?",
+          [req.params.id]
+        );
+        res.json(updatedMemo[0]);
       } else {
         res.status(404).json({ error: "메모를 찾을 수 없습니다." });
       }
@@ -133,11 +151,11 @@ async function setupRoutes(db) {
   // 메모 삭제
   app.delete("/api/memos/:id", async (req, res) => {
     try {
-      const result = await db.run("DELETE FROM memos WHERE id = ?", [
+      const [result] = await pool.query("DELETE FROM memos WHERE id = ?", [
         req.params.id,
       ]);
 
-      if (result.changes > 0) {
+      if (result.affectedRows > 0) {
         res.json({ success: true, message: "메모가 삭제되었습니다." });
       } else {
         res.status(404).json({ error: "메모를 찾을 수 없습니다." });
@@ -159,11 +177,20 @@ async function setupRoutes(db) {
   });
 }
 
+// 애플리케이션 종료 시 데이터베이스 연결 종료
+process.on("SIGINT", () => {
+  if (pool) {
+    console.log("데이터베이스 연결 종료 중...");
+    pool.end();
+  }
+  process.exit(0);
+});
+
 // 서버 시작
 async function startServer() {
   try {
-    const db = await initializeDatabase();
-    await setupRoutes(db);
+    const pool = await initializeDatabase();
+    await setupRoutes(pool);
 
     app.listen(PORT, () => {
       console.log(`메모 서버가 http://localhost:${PORT} 에서 실행 중입니다.`);

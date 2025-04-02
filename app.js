@@ -27,6 +27,16 @@ function init() {
   loadMemos();
 }
 
+// HTML 이스케이프 함수
+function escapeHtml(unsafe) {
+  return unsafe
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 // 메모 목록 로드
 async function loadMemos() {
   try {
@@ -62,8 +72,8 @@ function renderMemoList(memos) {
 
     li.innerHTML = `
       <div class="memo-content">
-        <div class="memo-title">${memo.title}</div>
-        <div class="memo-text">${previewText}</div>
+        <div class="memo-title">${escapeHtml(memo.title)}</div>
+        <div class="memo-text">${escapeHtml(previewText)}</div>
       </div>
       <div class="memo-actions">
         <button class="edit-btn" data-id="${memo.id}">수정</button>
