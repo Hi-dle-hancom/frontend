@@ -8,7 +8,7 @@ const config = {
   development: {
     username: process.env.RDS_USERNAME || "admin",
     password: process.env.RDS_PASSWORD || "lds*13041226",
-    database: process.env.RDS_DB_NAME || "userdb",
+    database: process.env.RDS_DB_NAME || "usermanage",
     host:
       process.env.RDS_HOSTNAME ||
       "hancom2.cv88qo4gg15o.ap-northeast-2.rds.amazonaws.com",
@@ -28,7 +28,6 @@ const config = {
     logging: console.log,
     dialectOptions: {
       connectTimeout: 60000, // 1분 연결 타임아웃
-      socketPath: "/var/run/mysqld/mysqld.sock", // Unix 소켓 경로 지정
       ssl: null, // SSL 사용 안함
     },
     retry: {
