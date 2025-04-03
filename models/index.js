@@ -6,13 +6,14 @@ const env = process.env.NODE_ENV || "development";
 // RDS 데이터베이스 설정
 const config = {
   development: {
-    user: process.env.RDS_USERNAME || "admin",
+    username: process.env.RDS_USERNAME || "admin",
     password: process.env.RDS_PASSWORD || "lds*13041226",
     database: process.env.RDS_DB_NAME || "userdb",
     host:
       process.env.RDS_HOSTNAME ||
       "hancom2.cv88qo4gg15o.ap-northeast-2.rds.amazonaws.com",
     dialect: "mysql",
+    port: process.env.RDS_PORT || 3306,
 
     pool: {
       max: 5,
@@ -27,6 +28,14 @@ const config = {
     logging: true,
     dialectOptions: {
       connectTimeout: 60000, // 1분 연결 타임아웃
+      ssl: {
+        require: false,
+        rejectUnauthorized: false, // 인증서 검증 무시
+      },
+      options: {
+        requestTimeout: 30000, // 요청 타임아웃
+        encrypt: false,
+      },
     },
     retry: {
       max: 3, // 연결 재시도 횟수
@@ -38,7 +47,7 @@ console.log("데이터베이스 연결 정보:", {
   host: config[env].host,
   port: config[env].port,
   database: config[env].database,
-  user: config[env].user,
+  username: config[env].username,
 });
 
 // Sequelize 인스턴스 생성
@@ -46,7 +55,7 @@ let sequelize;
 try {
   sequelize = new Sequelize(
     config[env].database,
-    config[env].user,
+    config[env].username,
     config[env].password,
     config[env]
   );

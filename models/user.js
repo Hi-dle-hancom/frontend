@@ -40,7 +40,7 @@ module.exports = (sequelize, DataTypes) => {
     {
       timestamps: true,
       paranoid: true,
-      underscored: false,
+      underscored: true,
       createdAt: "created_at",
       updatedAt: "updated_at",
       deletedAt: "deleted_at",
@@ -50,8 +50,9 @@ module.exports = (sequelize, DataTypes) => {
       collate: "utf8_general_ci",
       hooks: {
         beforeCreate: (user, options) => {
-          user.created_at = new Date();
-          user.updated_at = new Date();
+          const now = new Date();
+          user.created_at = now;
+          user.updated_at = now;
         },
         beforeUpdate: (user, options) => {
           user.updated_at = new Date();

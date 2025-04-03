@@ -11,6 +11,7 @@ const RDS_INFO = {
   host: "hancom2.cv88qo4gg15o.ap-northeast-2.rds.amazonaws.com",
   database: "userdb",
   user: "admin",
+  port: 3306,
 };
 
 // 미들웨어 설정
@@ -42,14 +43,24 @@ async function initDatabase() {
       `RDS 데이터베이스 초기화 성공 - ${RDS_INFO.database}.userm 테이블`
     );
     dbConnected = true;
+    return true;
   } catch (err) {
     console.error("RDS 데이터베이스 초기화 실패:", err);
     console.log("데이터베이스 연결 없이 서버를 계속 실행합니다.");
+    return false;
   }
 }
 
-// 데이터베이스 초기화 실행
-initDatabase();
+// 서버 시작 함수
+async function startServer() {
+  // 데이터베이스 초기화 실행
+  await initDatabase();
+
+  // 서버 시작
+  app.listen(port, () => {
+    console.log(`서버가 http://localhost:${port} 에서 실행 중입니다`);
+  });
+}
 
 // 라우터 설정
 const indexRouter = require("./routes/index");
@@ -97,6 +108,4 @@ app.use((err, req, res, next) => {
 });
 
 // 서버 시작
-app.listen(port, () => {
-  console.log(`서버가 http://localhost:${port} 에서 실행 중입니다`);
-});
+startServer();
