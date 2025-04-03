@@ -1,0 +1,103 @@
+extends ../layout
+
+block content
+  h2.section-title 사용자 수정
+  
+  form(action=`/users/edit/${user.id}`, method="post")
+    div.form-group
+      label(for="name") 이름
+      input#name(type="text", name="name", value=user.name, required, placeholder="이름을 입력하세요")
+    
+    div.form-group
+      label(for="age") 나이
+      input#age(type="number", name="age", value=user.age, required, min="1", placeholder="나이를 입력하세요")
+    
+    div.form-group.checkbox-group
+      label(for="married") 결혼 여부
+      div.checkbox-wrapper
+        input#married(type="checkbox", name="married", checked=user.married)
+        span.checkbox-label 결혼
+    
+    div.form-meta
+      p.user-id 
+        span ID: 
+        strong #{user.id}
+      p.created-at
+        span 등록일: 
+        strong #{user.createdAt ? new Date(user.createdAt).toLocaleDateString('ko-KR') : '정보 없음'}
+    
+    div.buttons
+      button.btn-primary(type="submit")
+        span.material-symbols-rounded save
+        | 수정
+      a.btn-secondary(href="/users")
+        span.material-symbols-rounded arrow_back
+        | 취소
+
+  style.
+    .checkbox-group {
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .checkbox-wrapper {
+      display: flex;
+      align-items: center;
+      margin-top: 8px;
+    }
+    
+    .checkbox-label {
+      margin-left: 8px;
+      color: var(--text);
+      font-size: 15px;
+    }
+    
+    .form-meta {
+      margin: 25px 0;
+      padding: 15px;
+      background-color: rgba(255, 255, 255, 0.03);
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+    }
+    
+    .form-meta p {
+      margin-bottom: 8px;
+      color: var(--text-secondary);
+      font-size: 14px;
+    }
+    
+    .form-meta p:last-child {
+      margin-bottom: 0;
+    }
+    
+    .form-meta strong {
+      color: var(--text);
+      font-weight: 500;
+    }
+    
+    .btn-primary, .btn-secondary {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    
+    .btn-primary .material-symbols-rounded,
+    .btn-secondary .material-symbols-rounded {
+      font-size: 18px;
+    }
+    
+    .btn-secondary {
+      background-color: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+      box-shadow: none;
+      transition: var(--transition);
+      padding: 13px 24px;
+      text-decoration: none;
+    }
+    
+    .btn-secondary:hover {
+      background-color: rgba(255, 255, 255, 0.05);
+      transform: translateY(-3px);
+    } 

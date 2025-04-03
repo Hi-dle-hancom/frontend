@@ -1,0 +1,459 @@
+:root {
+  --primary: #5e60ce;
+  --primary-dark: #4f50b8;
+  --secondary: #ff6b6b;
+  --secondary-dark: #e64c4c;
+  --bg-dark: #101010;
+  --bg-card: rgba(32, 32, 32, 0.6);
+  --text: #ffffff;
+  --text-secondary: #cccccc;
+  --border: rgba(255, 255, 255, 0.1);
+  --shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
+  --transition: all 0.3s ease;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: "Noto Sans KR", system-ui, -apple-system, sans-serif;
+  line-height: 1.6;
+  color: var(--text);
+  background-color: var(--bg-dark);
+  position: relative;
+  overflow-x: hidden;
+  min-height: 100vh;
+}
+
+/* 레이아웃 */
+.container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+main {
+  padding-top: 100px;
+  padding-bottom: 50px;
+  min-height: calc(100vh - 130px);
+}
+
+/* 헤더 스타일 */
+header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  padding: 20px 0;
+  background-color: rgba(16, 16, 16, 0.85);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  z-index: 1000;
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+}
+
+header h1 {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  margin: 0;
+  color: var(--text);
+  background: linear-gradient(90deg, var(--primary) 0%, var(--secondary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-fill-color: transparent;
+}
+
+/* 섹션 제목 */
+.section-title {
+  font-size: 32px;
+  font-weight: 700;
+  margin-bottom: 40px;
+  position: relative;
+  text-align: center;
+  letter-spacing: 0.5px;
+  padding-bottom: 15px;
+  color: var(--text);
+}
+
+.section-title::after {
+  content: "";
+  position: absolute;
+  width: 60px;
+  height: 4px;
+  background-color: var(--primary);
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  border-radius: 2px;
+}
+
+/* 테이블 스타일 */
+table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin-bottom: 2rem;
+  background-color: var(--bg-card);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+th,
+td {
+  padding: 16px 20px;
+  text-align: left;
+}
+
+th {
+  background-color: rgba(24, 24, 24, 0.9);
+  font-weight: 500;
+  color: var(--text);
+  text-transform: uppercase;
+  font-size: 14px;
+  letter-spacing: 1px;
+}
+
+tr:not(:last-child) td {
+  border-bottom: 1px solid var(--border);
+}
+
+tr:hover {
+  background-color: rgba(60, 60, 70, 0.4);
+}
+
+/* 버튼 스타일 */
+.btn-new {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--primary);
+  color: white;
+  padding: 12px 24px;
+  margin-bottom: 30px;
+  border-radius: var(--radius-sm);
+  font-weight: 500;
+  font-size: 15px;
+  transition: var(--transition);
+  box-shadow: 0 4px 15px rgba(94, 96, 206, 0.25);
+  text-decoration: none;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-new::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.2),
+    transparent
+  );
+  transform: translateX(-100%);
+}
+
+.btn-new:hover {
+  transform: translateY(-3px);
+  background-color: var(--primary-dark);
+  box-shadow: 0 8px 25px rgba(94, 96, 206, 0.4);
+  text-decoration: none;
+}
+
+.btn-new:hover::before {
+  animation: shine 1.5s infinite;
+}
+
+@keyframes shine {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* 링크 스타일 */
+a {
+  color: var(--primary);
+  text-decoration: none;
+  margin-right: 15px;
+  transition: var(--transition);
+  font-weight: 500;
+  position: relative;
+}
+
+a:hover {
+  color: var(--secondary);
+}
+
+a::after {
+  content: "";
+  position: absolute;
+  width: 0;
+  height: 2px;
+  bottom: -2px;
+  left: 0;
+  background-color: var(--secondary);
+  transition: var(--transition);
+}
+
+a:hover::after {
+  width: 100%;
+}
+
+/* 폼 스타일 */
+form {
+  max-width: 500px;
+  margin: 0 auto;
+  background-color: var(--bg-card);
+  padding: 35px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+}
+
+.form-group {
+  margin-bottom: 25px;
+}
+
+label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  font-size: 15px;
+}
+
+input[type="text"],
+input[type="number"] {
+  width: 100%;
+  padding: 14px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 15px;
+  background-color: rgba(24, 24, 24, 0.6);
+  color: var(--text);
+  transition: var(--transition);
+}
+
+input[type="text"]:focus,
+input[type="number"]:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(94, 96, 206, 0.15);
+  background-color: rgba(30, 30, 35, 0.8);
+}
+
+input[type="checkbox"] {
+  margin-right: 10px;
+  accent-color: var(--primary);
+  width: 18px;
+  height: 18px;
+}
+
+.buttons {
+  margin-top: 35px;
+  display: flex;
+  gap: 15px;
+}
+
+button {
+  background-color: var(--primary);
+  color: white;
+  padding: 14px 24px;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 500;
+  transition: var(--transition);
+  box-shadow: 0 4px 15px rgba(94, 96, 206, 0.25);
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+button::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.2),
+    transparent
+  );
+  transform: translateX(-100%);
+}
+
+button:hover {
+  transform: translateY(-3px);
+  background-color: var(--primary-dark);
+  box-shadow: 0 8px 25px rgba(94, 96, 206, 0.4);
+}
+
+button:hover::before {
+  animation: shine 1.5s infinite;
+}
+
+/* 푸터 스타일 */
+footer {
+  background-color: rgba(16, 16, 16, 0.9);
+  color: #808080;
+  padding: 20px 0;
+  text-align: center;
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* 배경 요소 */
+.background-elements {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  overflow: hidden;
+}
+
+.bg-element {
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0.08;
+  filter: blur(60px);
+}
+
+.element-1 {
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, var(--primary) 0%, transparent 70%);
+  top: 10%;
+  left: 5%;
+  animation: float 25s infinite ease-in-out;
+}
+
+.element-2 {
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, var(--secondary) 0%, transparent 70%);
+  bottom: -200px;
+  right: -100px;
+  animation: float 30s infinite ease-in-out reverse;
+}
+
+.element-3 {
+  width: 300px;
+  height: 300px;
+  background: radial-gradient(circle, #808080 0%, transparent 70%);
+  top: 60%;
+  left: 30%;
+  animation: float 20s infinite ease-in-out 5s;
+}
+
+@keyframes float {
+  0% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-30px) rotate(5deg);
+  }
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+}
+
+/* 에러 페이지 스타일 */
+.error-status {
+  color: var(--secondary);
+  margin-bottom: 20px;
+  text-align: center;
+  font-size: 28px;
+}
+
+.error-message {
+  text-align: center;
+  margin-bottom: 30px;
+  font-size: 18px;
+  color: var(--text-secondary);
+}
+
+.error-action {
+  text-align: center;
+  margin-top: 40px;
+}
+
+/* 반응형 스타일 */
+@media (max-width: 768px) {
+  header {
+    padding: 15px 0;
+  }
+
+  .section-title {
+    font-size: 28px;
+    margin-bottom: 30px;
+  }
+
+  table {
+    font-size: 14px;
+  }
+
+  th,
+  td {
+    padding: 14px 16px;
+  }
+
+  form {
+    padding: 25px;
+  }
+}
+
+@media (max-width: 480px) {
+  header h1 {
+    font-size: 20px;
+  }
+
+  .section-title {
+    font-size: 24px;
+  }
+
+  .btn-new {
+    width: 100%;
+    text-align: center;
+  }
+
+  .buttons {
+    flex-direction: column;
+    gap: 15px;
+  }
+
+  button {
+    width: 100%;
+  }
+
+  input[type="text"],
+  input[type="number"] {
+    padding: 12px 16px;
+  }
+}
