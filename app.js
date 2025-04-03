@@ -6,14 +6,22 @@ const { sequelize } = require("./models");
 const app = express();
 const port = 3200;
 
+// RDS 데이터베이스 연결 정보
+const RDS_INFO = {
+  host: "hancom2.cv88qo4gg15o.ap-northeast-2.rds.amazonaws.com",
+  database: "userdb",
+  username: "admin",
+  port: 3306,
+};
+
 // 시퀄라이즈 연결 동기화
-console.log(
-  "RDS 데이터베이스(hancom2.cv88qo4gg15o.ap-northeast-2.rds.amazonaws.com) 연결 시도 중..."
-);
+console.log(`RDS 데이터베이스(${RDS_INFO.host}) 연결 시도 중... 포트: ${port}`);
 sequelize
   .sync({ force: false })
   .then(() => {
-    console.log("RDS 데이터베이스 연결 성공 - userdb.userm 테이블");
+    console.log(
+      `RDS 데이터베이스 연결 성공 - ${RDS_INFO.database}.userm 테이블`
+    );
   })
   .catch((err) => {
     console.error("RDS 데이터베이스 연결 실패:", err);
