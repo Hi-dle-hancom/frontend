@@ -11,6 +11,7 @@ const RDS_INFO = {
   host: "hancom2.cv88qo4gg15o.ap-northeast-2.rds.amazonaws.com",
   database: "userdb",
   user: "admin",
+  password: process.env.RDS_PASSWORD || "lds*13041226",
   port: 3306,
 };
 
