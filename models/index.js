@@ -25,17 +25,11 @@ const config = {
       timestamps: true,
       underscored: false,
     },
-    logging: true,
+    logging: console.log,
     dialectOptions: {
       connectTimeout: 60000, // 1분 연결 타임아웃
-      ssl: {
-        require: false,
-        rejectUnauthorized: false, // 인증서 검증 무시
-      },
-      options: {
-        requestTimeout: 30000, // 요청 타임아웃
-        encrypt: false,
-      },
+      socketPath: "/var/run/mysqld/mysqld.sock", // Unix 소켓 경로 지정
+      ssl: null, // SSL 사용 안함
     },
     retry: {
       max: 3, // 연결 재시도 횟수

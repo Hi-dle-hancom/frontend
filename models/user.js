@@ -64,6 +64,7 @@ module.exports = (sequelize, DataTypes) => {
   // 테이블 존재 확인 및 생성 함수
   User.checkAndCreateTable = async function (options) {
     try {
+      // 테이블 존재 여부 확인
       const tableExists = await sequelize
         .getQueryInterface()
         .showAllTables()
@@ -71,40 +72,23 @@ module.exports = (sequelize, DataTypes) => {
 
       if (!tableExists) {
         console.log("userm 테이블이 존재하지 않아 새로 생성합니다.");
-        return sequelize.getQueryInterface().createTable("userm", {
-          id: {
-            type: DataTypes.INTEGER,
-            autoIncrement: true,
-            primaryKey: true,
-            allowNull: false,
-          },
-          name: {
-            type: DataTypes.STRING(20),
-            allowNull: false,
-          },
-          age: {
-            type: DataTypes.INTEGER.UNSIGNED,
-            allowNull: false,
-          },
-          married: {
-            type: DataTypes.BOOLEAN,
-            allowNull: false,
-          },
-          created_at: {
-            type: DataTypes.DATE,
-            allowNull: false,
-            defaultValue: DataTypes.NOW,
-          },
-          updated_at: {
-            type: DataTypes.DATE,
-            allowNull: false,
-            defaultValue: DataTypes.NOW,
-          },
-          deleted_at: {
-            type: DataTypes.DATE,
-            allowNull: true,
-          },
-        });
+
+        // 직접 SQL 쿼리로 테이블 생성
+        await sequelize.query(`
+          CREATE TABLE IF NOT EXISTS userm (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(20) NOT NULL,
+            age INT UNSIGNED NOT NULL,
+            married BOOLEAN NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            deleted_at DATETIME NULL
+          ) CHARACTER SET utf8 COLLATE utf8_general_ci;
+        `);
+
+        console.log("userm 테이블이 성공적으로 생성되었습니다.");
+      } else {
+        console.log("userm 테이블이 이미 존재합니다.");
       }
 
       return Promise.resolve();

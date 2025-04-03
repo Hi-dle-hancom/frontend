@@ -26,42 +26,6 @@ console.log(`RDS 데이터베이스(${RDS_INFO.host}) 연결 시도 중... 포�
 
 let dbConnected = false;
 
-// 데이터베이스 초기화 함수
-async function initDatabase() {
-  try {
-    // 먼저 데이터베이스 연결 테스트
-    await sequelize.authenticate();
-    console.log("데이터베이스 연결 성공!");
-
-    // 테이블 확인 및 생성
-    await User.checkAndCreateTable();
-
-    // 데이터베이스 동기화
-    await sequelize.sync({ force: false, alter: false });
-
-    console.log(
-      `RDS 데이터베이스 초기화 성공 - ${RDS_INFO.database}.userm 테이블`
-    );
-    dbConnected = true;
-    return true;
-  } catch (err) {
-    console.error("RDS 데이터베이스 초기화 실패:", err);
-    console.log("데이터베이스 연결 없이 서버를 계속 실행합니다.");
-    return false;
-  }
-}
-
-// 서버 시작 함수
-async function startServer() {
-  // 데이터베이스 초기화 실행
-  await initDatabase();
-
-  // 서버 시작
-  app.listen(port, () => {
-    console.log(`서버가 http://localhost:${port} 에서 실행 중입니다`);
-  });
-}
-
 // 라우터 설정
 const indexRouter = require("./routes/index");
 const usersRouter = require("./routes/users");
@@ -106,6 +70,47 @@ app.use((err, req, res, next) => {
     },
   });
 });
+
+// 데이터베이스 초기화 함수
+async function initDatabase() {
+  try {
+    // 먼저 데이터베이스 연결 테스트
+    await sequelize.authenticate();
+    console.log("데이터베이스 연결 성공!");
+
+    // 테이블 확인 및 생성
+    await User.checkAndCreateTable();
+
+    // 데이터베이스 동기화
+    await sequelize.sync({ force: false, alter: false });
+
+    console.log(
+      `RDS 데이터베이스 초기화 성공 - ${RDS_INFO.database}.userm 테이블`
+    );
+    dbConnected = true;
+    return true;
+  } catch (err) {
+    console.error("RDS 데이터베이스 초기화 실패:", err);
+    console.log("데이터베이스 연결 없이 서버를 계속 실행합니다.");
+    return false;
+  }
+}
+
+// 서버 시작 함수
+async function startServer() {
+  try {
+    // 데이터베이스 초기화 실행
+    await initDatabase();
+
+    // 서버 시작
+    app.listen(port, "0.0.0.0", () => {
+      console.log(`서버가 http://0.0.0.0:${port} 에서 실행 중입니다`);
+    });
+  } catch (err) {
+    console.error("서버 시작 중 오류 발생:", err);
+    process.exit(1);
+  }
+}
 
 // 서버 시작
 startServer();
