@@ -4,15 +4,17 @@ const bodyParser = require("body-parser");
 const { sequelize, User } = require("./models");
 
 const app = express();
-const port = 3200;
+const port = process.env.PORT || 3200;
 
 // RDS 데이터베이스 연결 정보
 const RDS_INFO = {
-  host: "hancom2.cv88qo4gg15o.ap-northeast-2.rds.amazonaws.com",
-  database: "usermanage",
-  user: "admin",
+  host:
+    process.env.RDS_HOSTNAME ||
+    "hancom2.cv88qo4gg15o.ap-northeast-2.rds.amazonaws.com",
+  database: process.env.RDS_DB_NAME || "usermanage",
+  user: process.env.RDS_USERNAME || "admin",
   password: process.env.RDS_PASSWORD || "lds*13041226",
-  port: 3306,
+  port: process.env.RDS_PORT || 3306,
 };
 
 // 미들웨어 설정
@@ -21,6 +23,14 @@ app.set("view engine", "pug");
 app.use(express.static(path.join(__dirname, "public")));
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
+
+// 보안 미들웨어
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("X-XSS-Protection", "1; mode=block");
+  next();
+});
 
 // 시퀄라이즈 연결 동기화
 console.log(`RDS 데이터베이스(${RDS_INFO.host}) 연결 시도 중... 포트: ${port}`);
@@ -106,6 +116,9 @@ async function startServer() {
     // 서버 시작
     app.listen(port, "0.0.0.0", () => {
       console.log(`서버가 http://0.0.0.0:${port} 에서 실행 중입니다`);
+      console.log(
+        `데이터베이스 연결 상태: ${dbConnected ? "연결됨" : "연결 실패"}`
+      );
     });
   } catch (err) {
     console.error("서버 시작 중 오류 발생:", err);
