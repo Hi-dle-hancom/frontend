@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LEE DO SEON</title>
+    <link rel="stylesheet" href="./style.css" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="background-elements">
+      <div class="bg-element element-1"></div>
+      <div class="bg-element element-2"></div>
+      <div class="bg-element element-3"></div>
+    </div>
+
+    <header>
+      <div class="header-content">
+        <div class="logo">LEE DO SEON</div>
+        <nav>
+          <ul class="nav-links">
+            <li><a href="#profile">PROFILE</a></li>
+            <li><a href="#portfolio">PORTFOLIO</a></li>
+            <li><a href="#etc">ETC</a></li>
+          </ul>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero" id="profile">
+        <div class="hero-left">
+          <h1 class="animated-title">LEE DO SEON</h1>
+          <div class="social-links">
+            <a href="https://github.com/DoSeon-Lee/" target="_blank">GitHub</a>
+            <a href="https://doseon1226.tistory.com/" target="_blank"
+              >Tistory</a
+            >
+            <a href="https://www.instagram.com/b1ue.hxur/" target="_blank"
+              >instagram</a
+            >
+          </div>
+        </div>
+        <div class="hero-right">
+          <div class="hero-content">
+            <h2 class="tech-stack">WEB<br />React<br />ReactNative</h2>
+            <p class="hero-description">뭘 좋아할지 몰라서 다 준비해봤어</p>
+            <a href="#portfolio" class="view-more">VIEW MORE</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="portfolio" id="portfolio">
+        <h2 class="section-title">PORTFOLIO</h2>
+        <div class="portfolio-container">
+          <div class="portfolio-filters">
+            <button class="filter-btn active" data-filter="all">ALL</button>
+            <button class="filter-btn" data-filter="uiux">UI/UX</button>
+            <button class="filter-btn" data-filter="web">WEB</button>
+            <button class="filter-btn" data-filter="server">SERVER</button>
+            <button class="filter-btn" data-filter="etc">ETC</button>
+          </div>
+          <div class="portfolio-grid">
+            <div class="portfolio-item" data-category="web">
+              <div class="item-image" style="background-color: #333"></div>
+              <h3>ToDo List</h3>
+              <p>React Native를 이용한 할 일 관리 프로젝트</p>
+            </div>
+            <div class="portfolio-item" data-category="uiux">
+              <div class="item-image" style="background-color: #333"></div>
+              <h3>Wheather App</h3>
+              <p>React Native를 이용한 날씨 앱 프로젝트</p>
+            </div>
+            <div class="portfolio-item" data-category="visual">
+              <div class="item-image" style="background-color: #333"></div>
+              <h3>Component Template</h3>
+              <p>React Native를 이용한 통합 템플릿 프로젝트</p>
+            </div>
+            <div class="portfolio-item" data-category="web" data-port="3000">
+              <a href="http://52.79.123.70:3000/" target="_blank">
+                <div class="item-image" style="background-color: #333"></div>
+                <h3>Memo App</h3>
+                <p>Node.js와 React Native를 이용한 메모 앱 프로젝트</p>
+              </a>
+            </div>
+            <div class="portfolio-item" data-category="server" data-port="3100">
+              <a href="http://52.79.123.70:3100/" target="_blank">
+                <div class="item-image" style="background-color: #333"></div>
+                <h3>User Registration App</h3>
+                <p>AWS RDS를 이용한 사용자 등록 시스템</p>
+              </a>
+            </div>
+            <div class="portfolio-item" data-category="server" data-port="3200">
+              <a href="http://52.79.123.70:3200/" target="_blank">
+                <div class="item-image" style="background-color: #333"></div>
+                <h3>User Management System</h3>
+                <p>Node.js와 RDS를 이용한 사용자 관리 시스템</p>
+              </a>
+            </div>
+            <div class="portfolio-item" data-category="server" data-port="3200">
+              <a href="http://52.79.123.70:3300/" target="_blank">
+                <div class="item-image" style="background-color: #333"></div>
+                <h3>Book Management System</h3>
+                <p>Node.js와 MongoDB를 이용한 사용자 관리 시스템</p>
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <h3>본 페이지는 개인 포트폴리오용으로 제작되었습니다.</h3>
+      <p>© 2025 LEE DO SEON. All Rights Reserved.</p>
+    </footer>
+
+    <script src="./main.js"></script>
+  </body>
+</html>
