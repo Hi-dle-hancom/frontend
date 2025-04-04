@@ -1,14 +1,17 @@
 // 포트폴리오 필터링 기능
 document.addEventListener("DOMContentLoaded", () => {
-  // 모든 요소가 로드된 후 실행
+  // 모든 요소가 로드된 후 즉시 실행
   setTimeout(() => {
     const filterButtons = document.querySelectorAll(".filter-btn");
     const portfolioItems = document.querySelectorAll(".portfolio-item");
 
-    // 초기에 모든 항목 표시 - 투명도 설정을 1로 변경
+    // 초기에 모든 항목 표시 - 강제로 표시 및 투명도 설정
     portfolioItems.forEach((item) => {
       item.style.display = "block";
       item.style.opacity = 1;
+      // 높이 강제 지정으로 보이게 만듦
+      item.style.height = "auto";
+      item.style.visibility = "visible";
     });
 
     // 필터 버튼 클릭 이벤트
@@ -46,9 +49,11 @@ document.addEventListener("DOMContentLoaded", () => {
           item.style.display = "block";
           setTimeout(() => {
             item.style.opacity = 1;
-          }, 50);
+            item.style.visibility = "visible";
+          }, 0);
         } else {
           item.style.opacity = 0;
+          item.style.visibility = "hidden";
           setTimeout(() => {
             item.style.display = "none";
           }, 300);
@@ -74,7 +79,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // 페이지 로드 시 모든 항목이 보이도록
     filterPortfolio("all");
-  }, 100);
+
+    // 개발자 도구에 상태 출력
+    console.log("포트폴리오 항목 초기화 완료", portfolioItems.length);
+    portfolioItems.forEach((item) => {
+      console.log(
+        item.innerText,
+        "표시 상태:",
+        item.style.display,
+        "투명도:",
+        item.style.opacity
+      );
+    });
+  }, 0);
 
   // 스크롤 애니메이션
   const scrollElements = document.querySelectorAll(".scroll-animate");
