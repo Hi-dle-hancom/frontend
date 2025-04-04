@@ -26,12 +26,13 @@ block content
             td
               span(class=user.married ? 'tag married' : 'tag single')= user.married ? 'Yes' : 'No'
             td.actions
-              a(href=`/users/edit/${user.id}`)
+              a(href=`/users/${user.id}/edit`)
                 span.material-symbols-rounded edit
                 span 수정
-              a.delete-btn(href=`/users/delete/${user.id}`)
-                span.material-symbols-rounded delete
-                span 삭제
+              form(action=`/users/${user.id}?_method=DELETE`, method="post", class="delete-form")
+                button.delete-btn(type="submit")
+                  span.material-symbols-rounded delete
+                  span 삭제
       else
         tr.no-data
           td(colspan="5") 등록된 사용자가 없습니다.
@@ -82,8 +83,24 @@ block content
       margin-right: 4px;
     }
     
+    .delete-form {
+      margin: 0;
+      padding: 0;
+      background: none;
+      border: none;
+      box-shadow: none;
+      display: inline;
+    }
+    
     .delete-btn {
       color: var(--secondary);
+      background: none;
+      border: none;
+      padding: 0;
+      font: inherit;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
     }
     
     .delete-btn:hover {

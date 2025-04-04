@@ -3,7 +3,7 @@ extends ../layout
 block content
   h2.section-title 사용자 수정
   
-  form(action=`/users/edit/${user.id}`, method="post")
+  form(action=`/users/${user.id}?_method=PUT`, method="post")
     div.form-group
       label(for="name") 이름
       input#name(type="text", name="name", value=user.name, required, placeholder="이름을 입력하세요")
