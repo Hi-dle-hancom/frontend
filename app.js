@@ -1,20 +1,26 @@
 const express = require("express");
 const path = require("path");
-const bodyParser = require("body-parser");
-const connectDB = require("./models/db");
+const morgan = require("morgan");
+const nunjucks = require("nunjucks");
+const methodOverride = require("method-override");
+const connect = require("./models/db");
 
 const app = express();
-const port = process.env.PORT || 3200;
+const port = process.env.PORT || 3300;
+const host = "0.0.0.0"; // 모든 IP에서 접속 허용
 
 // MongoDB 연결
-connectDB();
+connect();
 
-// 미들웨어 설정
-app.set("views", path.join(__dirname, "views"));
+app.set("port", port);
 app.set("view engine", "pug");
+app.set("views", path.join(__dirname, "views"));
+
+app.use(morgan("dev"));
 app.use(express.static(path.join(__dirname, "public")));
-app.use(bodyParser.urlencoded({ extended: false }));
-app.use(bodyParser.json());
+app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
+app.use(methodOverride("_method"));
 
 // 보안 미들웨어
 app.use((req, res, next) => {
@@ -33,26 +39,20 @@ app.use("/users", usersRouter);
 
 // 404 오류 처리
 app.use((req, res, next) => {
-  res.status(404).render("error", {
-    message: "페이지를 찾을 수 없습니다",
-    error: { status: 404 },
-  });
+  const error = new Error(`${req.method} ${req.url} 라우터가 없습니다.`);
+  error.status = 404;
+  next(error);
 });
 
 // 오류 처리 미들웨어
 app.use((err, req, res, next) => {
-  console.error("애플리케이션 오류:", err);
-  const status = err.status || 500;
-  res.status(status).render("error", {
-    message: err.message || "서버에 오류가 발생했습니다",
-    error: {
-      status: status,
-      stack: process.env.NODE_ENV === "production" ? undefined : err.stack,
-    },
-  });
+  res.locals.message = err.message;
+  res.locals.error = process.env.NODE_ENV !== "production" ? err : {};
+  res.status(err.status || 500);
+  res.render("error");
 });
 
 // 서버 시작
-app.listen(port, "0.0.0.0", () => {
-  console.log(`서버가 http://0.0.0.0:${port} 에서 실행 중입니다`);
+app.listen(port, host, () => {
+  console.log(`서버가 http://${host}:${port} 에서 실행 중입니다`);
 });
