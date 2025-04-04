@@ -15,10 +15,11 @@
     "body-parser": "^2.2.0",
     "dotenv": "^16.4.7",
     "express": "^5.1.0",
+    "method-override": "^3.0.0",
     "mongoose": "^8.13.2",
-    "mysql2": "^3.14.0",
-    "pug": "^3.0.3",
-    "sequelize": "^6.37.7"
+    "morgan": "^1.10.0",
+    "nunjucks": "^3.2.4",
+    "pug": "^3.0.3"
   },
   "devDependencies": {
     "nodemon": "^3.1.9"
