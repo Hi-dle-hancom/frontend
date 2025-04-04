@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const User = require("../models/user");
+const mongoose = require("mongoose");
 
 // 사용자 목록 조회
 router.get("/", async (req, res, next) => {

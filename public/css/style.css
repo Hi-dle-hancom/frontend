@@ -393,10 +393,25 @@ footer {
 }
 
 .error-message {
-  text-align: center;
-  margin-bottom: 30px;
-  font-size: 18px;
-  color: var(--text-secondary);
+  background-color: rgba(255, 59, 48, 0.1);
+  border-left: 4px solid rgba(255, 59, 48, 0.7);
+  padding: 12px 16px;
+  margin-bottom: 20px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  font-size: 15px;
+  color: #fff;
+}
+
+.error-message .material-symbols-rounded {
+  color: rgba(255, 59, 48, 0.9);
+  margin-right: 12px;
+  font-size: 20px;
+}
+
+.error-message p {
+  margin: 0;
 }
 
 .error-action {

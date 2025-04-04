@@ -3,19 +3,24 @@ extends ../layout
 block content
   h2.section-title 새 사용자 등록
   
+  if error
+    div.error-message
+      span.material-symbols-rounded error
+      p= error
+  
   form(action="/users", method="post")
     div.form-group
       label(for="name") 이름
-      input#name(type="text", name="name", required, placeholder="이름을 입력하세요")
+      input#name(type="text", name="name", required, placeholder="이름을 입력하세요", value=user ? user.name : '')
     
     div.form-group
       label(for="age") 나이
-      input#age(type="number", name="age", required, min="1", placeholder="나이를 입력하세요")
+      input#age(type="number", name="age", required, min="1", placeholder="나이를 입력하세요", value=user ? user.age : '')
     
     div.form-group.checkbox-group
       label(for="married") 결혼 여부
       div.checkbox-wrapper
-        input#married(type="checkbox", name="married")
+        input#married(type="checkbox", name="married", checked=user && (user.married === 'on' || user.married === true || user.married === 'Y'))
         span.checkbox-label 결혼
     
     div.buttons
@@ -27,6 +32,23 @@ block content
         | 취소
 
   style.
+    .error-message {
+      background-color: rgba(255, 59, 48, 0.1);
+      border-left: 4px solid rgba(255, 59, 48, 0.7);
+      padding: 12px 16px;
+      margin-bottom: 20px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      font-size: 15px;
+    }
+    
+    .error-message .material-symbols-rounded {
+      color: rgba(255, 59, 48, 0.9);
+      margin-right: 8px;
+      font-size: 20px;
+    }
+    
     .checkbox-group {
       display: flex;
       flex-direction: column;
