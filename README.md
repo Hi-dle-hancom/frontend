@@ -1,22 +1,98 @@
-# LEE DO SEON Portfolio Website
+# 실시간 온라인 경매 시스템
 
-이 프로젝트는 LEE DO SEON의 포트폴리오 웹사이트입니다.
+## 프로젝트 소개
+
+이 프로젝트는 Node.js와 MongoDB를 사용한 실시간 온라인 경매 시스템입니다. 사용자들이 경매를 등록하고 실시간으로 입찰에 참여할 수 있는 플랫폼을 제공합니다.
+
+## 주요 기능
+
+### 1. 사용자 관리
+
+- 회원가입 및 로그인
+- 세션 기반 인증
+- 사용자별 보유 자산 관리
+
+### 2. 경매 관리
+
+- 경매 등록
+  - 경매명, 시작 가격, 이미지, 상세 설명 입력
+  - 이미지 업로드 기능 (최대 10MB)
+- 경매 목록 조회
+  - 전체 경매 목록 확인
+  - 내가 등록한 경매 목록 확인
+- 경매 상세 정보
+  - 경매 정보 상세 조회
+  - 실시간 입찰 현황 확인
+  - 남은 시간 실시간 표시
+
+### 3. 입찰 시스템
+
+- 실시간 입찰 기능
+- 입찰 규칙 적용
+  - 시작 가격보다 높은 금액만 입찰 가능
+  - 이전 입찰가보다 높은 금액만 입찰 가능
+  - 자신이 등록한 경매에는 입찰 불가
+  - 경매 종료 후 입찰 불가
+- 실시간 입찰 내역 확인
+
+### 4. 실시간 기능
+
+- Socket.IO를 활용한 실시간 업데이트
+- 새로운 입찰 발생 시 실시간 알림
+- 경매 종료 시간 실시간 카운트다운
 
 ## 기술 스택
 
-- HTML5
-- CSS3
-- JavaScript
+### 백엔드
+
 - Node.js
-- Express
+- Express.js
+- MongoDB (Mongoose)
+- Socket.IO
 
-## 설치 및 실행
+### 프론트엔드
 
-1. 프로젝트 클론
+- Nunjucks (템플릿 엔진)
+- JavaScript
+- HTML5/CSS3
+- Font Awesome (아이콘)
+
+### 주요 라이브러리
+
+- bcrypt: 비밀번호 암호화
+- multer: 파일 업로드 처리
+- dotenv: 환경 변수 관리
+- express-session: 세션 관리
+
+## 디자인 특징
+
+- 반응형 웹 디자인
+- 다크/라이트 모드 지원
+- 모던한 UI/UX
+- 직관적인 사용자 인터페이스
+
+## 보안 기능
+
+- 비밀번호 암호화 저장
+- 세션 기반 사용자 인증
+- 접근 권한 제어
+- XSS 및 CSRF 방지
+
+## 시작하기
+
+### 필수 요구사항
+
+- Node.js
+- MongoDB
+- npm 또는 yarn
+
+### 설치 방법
+
+1. 저장소 클론
 
 ```bash
 git clone [repository-url]
-cd portfolio
+cd auction_mongo
 ```
 
 2. 의존성 설치
@@ -25,40 +101,35 @@ cd portfolio
 npm install
 ```
 
-3. 개발 서버 실행
+3. 환경 변수 설정
+   `.env` 파일을 생성하고 다음 내용을 설정:
 
-```bash
-npm run dev
+```
+COOKIE_SECRET=쿠키비밀키
+MONGO_ID=몽고디비계정
+MONGO_PASSWORD=몽고디비비밀번호
 ```
 
-4. 프로덕션 서버 실행
+4. 서버 실행
 
 ```bash
 npm start
 ```
 
-## 프로젝트 구조
+## 폴더 구조
 
 ```
-portfolio/
-├── public/
-│   ├── css/
-│   │   └── style.css
-│   ├── js/
-│   │   └── main.js
-│   └── index.html
-├── server.js
-├── package.json
-└── README.md
+auction_mongo/
+├── controllers/     # 컨트롤러
+├── routes/         # 라우터
+├── schemas/        # MongoDB 스키마
+├── services/      # 비즈니스 로직
+├── views/         # 뷰 템플릿
+├── public/        # 정적 파일
+├── uploads/       # 업로드 파일
+└── app.js         # 메인 애플리케이션
 ```
-
-## 기능
-
-- 반응형 디자인
-- 포트폴리오 필터링
-- 스크롤 애니메이션
-- 모던한 UI/UX
 
 ## 라이선스
 
-© 2025 LEE DO SEON. All Rights Reserved.
+이 프로젝트는 MIT 라이선스를 따릅니다.

@@ -1,0 +1,10 @@
+{% extends 'layout.html' %} {% block content %}
+<div class="timeline">
+  <h2>Error</h2>
+  <p>{{ message }}</p>
+  {% if error and error.stack %}
+  <h3>Stack Trace</h3>
+  <pre>{{ error.stack }}</pre>
+  {% endif %}
+</div>
+{% endblock %}

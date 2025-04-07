@@ -1,20 +1,29 @@
 {
-  "name": "portfolio",
+  "name": "auction_mongo",
   "version": "1.0.0",
-  "description": "LEE DO SEON's Portfolio Website",
-  "main": "index.js",
+  "main": "app.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
+    "start": "node app",
+    "dev": "nodemon app"
   },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
   "dependencies": {
-    "express": "^4.18.2",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-router-dom": "^6.22.0",
-    "styled-components": "^6.1.8"
+    "bcrypt": "^5.1.1",
+    "color-hash": "^2.0.2",
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^16.4.7",
+    "express": "^5.1.0",
+    "express-session": "^1.18.1",
+    "mongoose": "^8.13.2",
+    "morgan": "^1.10.0",
+    "multer": "^1.4.5-lts.2",
+    "nunjucks": "^3.2.4",
+    "socket.io": "^4.8.1"
   },
   "devDependencies": {
-    "nodemon": "^3.0.3"
+    "nodemon": "^3.1.9"
   }
 }
