@@ -1,83 +1,107 @@
-import { Document, Types } from "mongoose";
-import { Request } from "express";
+import React from "react";
+import { StackNavigationProp } from "@react-navigation/stack";
+import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
+import { CompositeNavigationProp, RouteProp } from "@react-navigation/native";
 
-// MongoDB 문서 타입 정의
-export interface UserDocument extends Document {
-  email: string;
-  nick: string;
-  password: string;
-  money: number;
-  createdAt: Date;
-  comparePassword(password: string): Promise<boolean>;
+// 네비게이션 파라미터 타입 정의
+export type ComponentsStackParamList = {
+  ComponentsMain: undefined;
+  TextComponent: undefined;
+  ButtonComponent: undefined;
+  TextInputComponent: undefined;
+  ImageComponent: undefined;
+  ScrollViewComponent: undefined;
+  FlatListComponent: undefined;
+  SectionListComponent: undefined;
+  ModalComponent: undefined;
+  ActivityIndicatorComponent: undefined;
+  TouchableOpacityComponent: undefined;
+  KeyboardAvoidingViewComponent: undefined;
+  TouchableWithoutFeedbackComponent: undefined;
+  TouchableHighlightComponent: undefined;
+  PressableComponent: undefined;
+  StatusBarComponent: undefined;
+};
+
+export type StateManagementStackParamList = {
+  StateManagementMain: undefined;
+  UseStateExample: undefined;
+  UseEffectExample: undefined;
+  UseContextExample: undefined;
+  UseCallbackExample: undefined;
+  UseImperativeHandleExample: undefined;
+  UseLayoutEffectExample: undefined;
+  UseMemoExample: undefined;
+  UseReducerExample: undefined;
+  UseRefExample: undefined;
+  ReduxExample: undefined;
+  ContextAPIExample: undefined;
+  SwiperExample: undefined;
+};
+
+export type RootTabParamList = {
+  Components: undefined;
+  StateManagement: undefined;
+};
+
+// 네비게이션 Props 타입 정의
+export type ComponentsScreenNavigationProp = CompositeNavigationProp<
+  StackNavigationProp<ComponentsStackParamList>,
+  BottomTabNavigationProp<RootTabParamList>
+>;
+
+export type StateManagementScreenNavigationProp = CompositeNavigationProp<
+  StackNavigationProp<StateManagementStackParamList>,
+  BottomTabNavigationProp<RootTabParamList>
+>;
+
+export type ComponentsScreenRouteProp<
+  T extends keyof ComponentsStackParamList
+> = RouteProp<ComponentsStackParamList, T>;
+
+export type StateManagementScreenRouteProp<
+  T extends keyof StateManagementStackParamList
+> = RouteProp<StateManagementStackParamList, T>;
+
+// 컴포넌트 공통 Props 타입 정의
+export interface WithChildren {
+  children?: React.ReactNode;
 }
 
-export interface GoodDocument extends Document {
-  name: string;
-  img?: string;
-  price: number;
-  status: "SALE" | "SOLD" | "RESERVE";
-  owner: Types.ObjectId | UserDocument;
-  buyer?: Types.ObjectId | UserDocument;
-  endTime: Date;
-  createdAt: Date;
-  deleted: boolean;
-  deletedAt?: Date;
-  // 가상 필드
-  highestBid?: number;
-  bidCount?: number;
-  bid?: Array<{
-    bid: number;
-    msg?: string;
-    user: { nick: string };
-    createdAt: Date;
-  }>;
+export interface ButtonProps {
+  title: string;
+  onPress: () => void;
+  disabled?: boolean;
+  type?: "primary" | "secondary" | "outline";
+  fullWidth?: boolean;
 }
 
-export interface AuctionDocument extends Document {
-  good: Types.ObjectId | GoodDocument;
-  bidder: Types.ObjectId | UserDocument;
-  bid: number;
-  msg?: string;
-  createdAt: Date;
+export interface CardProps extends WithChildren {
+  title?: string;
+  footer?: React.ReactNode;
+  onPress?: () => void;
 }
 
-// 세션 사용자 타입
-export interface SessionUser {
-  id: string;
-  email: string;
-  nick: string;
-  money: number;
-}
-
-// 인증 요청 확장
-export interface AuthRequest extends Request {
-  session: {
-    user?: SessionUser;
-    [key: string]: any;
-  };
-  user?: SessionUser;
-}
-
-// 서비스 응답 타입
-export interface ServiceResponse<T = any> {
-  success: boolean;
-  data?: T;
+export interface InputProps {
+  value: string;
+  onChangeText: (text: string) => void;
+  placeholder?: string;
+  secureTextEntry?: boolean;
+  keyboardType?: "default" | "email-address" | "numeric" | "phone-pad";
+  autoCapitalize?: "none" | "sentences" | "words" | "characters";
+  maxLength?: number;
+  multiline?: boolean;
+  disabled?: boolean;
+  label?: string;
   error?: string;
 }
 
-// 소켓 이벤트 타입
-export interface BidEvent {
-  bid: number;
-  msg?: string;
-  nick: string;
-  date: Date;
+// Redux 관련 타입 정의
+export interface ReduxState {
+  count: number;
 }
 
-export interface NewGoodEvent {
-  good: GoodDocument;
-}
-
-export interface JoinLeaveEvent {
-  user: string;
-  chat: string;
-}
+export type ReduxAction =
+  | { type: "INCREMENT" }
+  | { type: "DECREMENT" }
+  | { type: "RESET" };
