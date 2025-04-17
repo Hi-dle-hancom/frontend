@@ -23,7 +23,7 @@ import PressableComponent from "../screens/NativeComponents/PressableComponent";
 import StatusBarComponent from "../screens/NativeComponents/StatusBarComponent";
 
 // Styles
-import { colors } from "../styles/colors";
+import { darkColors } from "../styles/colors";
 
 const Stack = createNativeStackNavigator<ComponentsStackParamList>();
 
@@ -36,7 +36,7 @@ const ComponentsNavigator: React.FC = () => {
     <Stack.Navigator
       screenOptions={{
         headerStyle: {
-          backgroundColor: colors.primary,
+          backgroundColor: darkColors.primary,
         },
         headerTintColor: "#fff",
         headerTitleStyle: {

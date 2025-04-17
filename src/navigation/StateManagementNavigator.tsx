@@ -20,7 +20,7 @@ import ContextAPIExample from "../screens/StateManagement/ContextAPIExample";
 import SwiperExample from "../screens/StateManagement/SwiperExample";
 
 // Styles
-import { colors } from "../styles/colors";
+import { darkColors } from "../styles/colors";
 
 const Stack = createNativeStackNavigator<StateManagementStackParamList>();
 
@@ -33,7 +33,7 @@ const StateManagementNavigator: React.FC = () => {
     <Stack.Navigator
       screenOptions={{
         headerStyle: {
-          backgroundColor: colors.primary,
+          backgroundColor: darkColors.primary,
         },
         headerTintColor: "#fff",
         headerTitleStyle: {

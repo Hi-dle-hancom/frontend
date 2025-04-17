@@ -1,6 +1,6 @@
 import React, { createContext, useState, useContext, useEffect } from "react";
 import { useColorScheme } from "react-native";
-import { colors } from "../styles/colors";
+import { darkColors, lightColors } from "../styles/colors";
 import { ThemeColors } from "../styles/colors";
 
 interface ThemeContextType {
@@ -32,11 +32,14 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
     setIsDarkMode((prevMode) => !prevMode);
   };
 
+  // 다크모드에 따라 적절한 색상 선택
+  const themeColors = isDarkMode ? darkColors : lightColors;
+
   // 컨텍스트 값
   const contextValue: ThemeContextType = {
     isDarkMode,
     toggleTheme,
-    colors: colors,
+    colors: themeColors,
   };
 
   return (

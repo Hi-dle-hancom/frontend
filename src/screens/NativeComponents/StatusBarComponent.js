@@ -9,13 +9,15 @@ import {
   Platform,
   Switch,
 } from "react-native";
+import { darkColors } from "../../styles/colors";
 
 const StatusBarComponent = () => {
   const [statusBarStyle, setStatusBarStyle] = useState("light-content");
   const [statusBarHidden, setStatusBarHidden] = useState(false);
-  const [statusBarTranslucent, setStatusBarTranslucent] = useState(false);
-  const [statusBarBackgroundColor, setStatusBarBackgroundColor] =
-    useState("#101010");
+  const [statusBarTranslucent, setStatusBarTranslucent] = useState(true);
+  const [statusBarBackgroundColor, setStatusBarBackgroundColor] = useState(
+    darkColors.background
+  );
 
   const toggleStatusBarStyle = () => {
     setStatusBarStyle(
