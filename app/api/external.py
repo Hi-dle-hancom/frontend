@@ -2,7 +2,7 @@ import requests
 from app.config.settings import TASHU_API_KEY, DUROONUBI_API_KEY, DAEJEON_BIKE_API_KEY
 
 class TashuAPI:
-    """타슈(대전 공공자전거) API 연동 클래스"""
+    """타슈(대전 공공자전거) API 연동 클래스d"""
     
     BASE_URL = "https://api.tashu.or.kr/api"  # 가정한 타슈 API URL
     
