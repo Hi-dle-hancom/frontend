@@ -2,7 +2,6 @@
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from "vscode";
 
-// 새로운 모듈들 import
 import { apiClient, GenerateRequest, AIResponse } from "./modules/apiClient";
 import { PromptExtractor, ExtractedPrompt } from "./modules/promptExtractor";
 import { TriggerDetector, TriggerEvent } from "./modules/triggerDetector";
