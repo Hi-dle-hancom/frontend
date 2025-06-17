@@ -141,6 +141,38 @@
           ],
           "default": "system",
           "description": "HAPA 테마 설정"
+        },
+        "hapa.apiBaseURL": {
+          "type": "string",
+          "default": "http://localhost:8000/api/v1",
+          "description": "HAPA API 서버 주소"
+        },
+        "hapa.apiKey": {
+          "type": "string",
+          "default": "hapa_demo_20241228_secure_key_for_testing",
+          "description": "HAPA API 인증 키"
+        },
+        "hapa.apiTimeout": {
+          "type": "number",
+          "default": 30000,
+          "description": "API 요청 타임아웃 (밀리초)"
+        },
+        "hapa.autoComplete": {
+          "type": "boolean",
+          "default": true,
+          "description": "자동 완성 기능 활성화"
+        },
+        "hapa.maxSuggestions": {
+          "type": "number",
+          "default": 5,
+          "minimum": 1,
+          "maximum": 10,
+          "description": "코드 완성 제안 최대 개수"
+        },
+        "hapa.enableLogging": {
+          "type": "boolean",
+          "default": false,
+          "description": "디버그 로깅 활성화"
         }
       }
     }
