@@ -1,7 +1,7 @@
 {
   "name": "hapa",
   "displayName": "HAPA",
-  "description": "Hancom AI Python Assistant - VSCode Extension과 웹 인터페이스로 구현하는 차세대 파이썬 개발자 도구",
+  "description": "Hancom AI Python Assistant - 맞춤형 AI 코딩 어시스턴트. 온보딩부터 개인화 설정까지, 당신만의 Python 개발 경험을 제공합니다.",
   "version": "0.4.0",
   "author": "하이들 (Hi-dle) Team",
   "publisher": "hancom",
@@ -75,6 +75,14 @@
       {
         "command": "hapa.showSettings",
         "title": "HAPA: 설정 보기"
+      },
+      {
+        "command": "hapa.showOnboarding",
+        "title": "HAPA: 온보딩 시작"
+      },
+      {
+        "command": "hapa.openUserSettings",
+        "title": "HAPA: 사용자 설정"
       }
     ],
     "viewsContainers": {
@@ -173,6 +181,187 @@
           "type": "boolean",
           "default": false,
           "description": "디버그 로깅 활성화"
+        },
+        "hapa.userProfile.isOnboardingCompleted": {
+          "type": "boolean",
+          "default": false,
+          "description": "온보딩 완료 여부"
+        },
+        "hapa.userProfile.pythonSkillLevel": {
+          "type": "string",
+          "enum": [
+            "beginner",
+            "intermediate",
+            "advanced",
+            "expert"
+          ],
+          "default": "intermediate",
+          "description": "Python 스킬 수준",
+          "enumDescriptions": [
+            "초급자 (기본 문법 학습 중)",
+            "중급자 (일반적인 프로그래밍 가능)",
+            "고급자 (복잡한 프로젝트 개발 가능)",
+            "전문가 (최적화 및 아키텍처 설계)"
+          ]
+        },
+        "hapa.userProfile.codeOutputStructure": {
+          "type": "string",
+          "enum": [
+            "minimal",
+            "standard",
+            "detailed",
+            "comprehensive"
+          ],
+          "default": "standard",
+          "description": "선호하는 코드 출력 구조",
+          "enumDescriptions": [
+            "최소한의 코드만 (핵심 로직만)",
+            "표준 구조 (일반적인 코드 + 기본 주석)",
+            "상세 구조 (자세한 주석 + 예외 처리)",
+            "포괄적 구조 (문서화 + 테스트 + 최적화)"
+          ]
+        },
+        "hapa.userProfile.explanationStyle": {
+          "type": "string",
+          "enum": [
+            "brief",
+            "standard",
+            "detailed",
+            "educational"
+          ],
+          "default": "standard",
+          "description": "설명 스타일",
+          "enumDescriptions": [
+            "간단한 설명 (핵심만)",
+            "표준 설명 (코드 + 간단한 설명)",
+            "상세 설명 (개념 + 이유 + 활용법)",
+            "교육적 설명 (단계별 + 예시 + 관련 개념)"
+          ]
+        },
+        "hapa.userProfile.preferredLanguageFeatures": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "type_hints",
+              "dataclasses",
+              "async_await",
+              "comprehensions",
+              "generators",
+              "decorators",
+              "context_managers",
+              "f_strings"
+            ]
+          },
+          "default": [
+            "type_hints",
+            "f_strings"
+          ],
+          "description": "선호하는 Python 언어 기능",
+          "uniqueItems": true
+        },
+        "hapa.userProfile.projectContext": {
+          "type": "string",
+          "enum": [
+            "web_development",
+            "data_science",
+            "automation",
+            "general_purpose",
+            "academic",
+            "enterprise"
+          ],
+          "default": "general_purpose",
+          "description": "주요 개발 분야",
+          "enumDescriptions": [
+            "웹 개발 (Django, Flask, FastAPI)",
+            "데이터 사이언스 (NumPy, Pandas, ML)",
+            "자동화 스크립팅 (시스템, 업무 자동화)",
+            "범용 개발 (다양한 목적)",
+            "학술/연구 (알고리즘, 연구 프로젝트)",
+            "기업용 개발 (대규모, 안정성 중시)"
+          ]
+        },
+        "hapa.userProfile.errorHandlingPreference": {
+          "type": "string",
+          "enum": [
+            "minimal",
+            "basic",
+            "comprehensive",
+            "production_ready"
+          ],
+          "default": "basic",
+          "description": "오류 처리 선호도",
+          "enumDescriptions": [
+            "최소한의 오류 처리",
+            "기본적인 try-catch",
+            "포괄적인 예외 처리",
+            "프로덕션 수준 오류 처리"
+          ]
+        },
+        "hapa.commentTrigger.resultDisplayMode": {
+          "type": "string",
+          "default": "sidebar",
+          "description": "주석 트리거 결과 표시 방식",
+          "enum": [
+            "immediate_insert",
+            "sidebar",
+            "confirm_insert",
+            "inline_preview"
+          ],
+          "enumDescriptions": [
+            "즉시 삽입: 코드를 커서 위치에 바로 삽입",
+            "사이드바 표시: 사이드바에 결과를 표시 (기본값)",
+            "확인 후 삽입: 결과를 확인한 후 삽입 여부 선택",
+            "인라인 미리보기: 에디터에서 미리보기 후 선택"
+          ]
+        },
+        "hapa.commentTrigger.autoInsertDelay": {
+          "type": "number",
+          "default": 0,
+          "description": "즉시 삽입 모드에서의 지연 시간 (밀리초, 0은 즉시)",
+          "minimum": 0,
+          "maximum": 5000
+        },
+        "hapa.commentTrigger.showNotification": {
+          "type": "boolean",
+          "default": true,
+          "description": "주석 트리거 실행 시 알림 표시 여부"
+        },
+        "hapa.autoComplete.maxSuggestions": {
+          "type": "number",
+          "default": 5,
+          "minimum": 1,
+          "maximum": 10,
+          "description": "자동 완성 제안 최대 개수"
+        },
+        "hapa.autoComplete.confidenceThreshold": {
+          "type": "number",
+          "default": 0.3,
+          "minimum": 0.1,
+          "maximum": 1,
+          "description": "자동 완성 제안 최소 신뢰도 (0.1-1.0)"
+        },
+        "hapa.autoComplete.enableInlineCompletion": {
+          "type": "boolean",
+          "default": true,
+          "description": "인라인 자동 완성 (GitHub Copilot 스타일) 활성화"
+        },
+        "hapa.autoComplete.debounceDelay": {
+          "type": "number",
+          "default": 300,
+          "minimum": 100,
+          "maximum": 1000,
+          "description": "자동 완성 디바운스 지연 시간 (ms)"
+        },
+        "hapa.autoComplete.showExplanations": {
+          "type": "boolean",
+          "default": true,
+          "description": "자동 완성 제안에 AI 설명 표시"
+        },
+        "hapa.autoComplete.enableContextAnalysis": {
+          "type": "boolean",
+          "default": true,
+          "description": "컨텍스트 분석을 통한 스마트 완성"
         }
       }
     }

@@ -1,5 +1,9 @@
 import * as vscode from "vscode";
-import { apiClient, GenerateRequest, AIResponse } from "../modules/apiClient";
+import {
+  apiClient,
+  CodeGenerationRequest,
+  CodeGenerationResponse,
+} from "../modules/apiClient";
 import { PromptExtractor, ExtractedPrompt } from "../modules/promptExtractor";
 import { CodeInserter } from "../modules/inserter";
 
@@ -75,12 +79,11 @@ export abstract class BaseWebviewProvider
         PromptExtractor.combinePromptWithContext(question);
 
       // 백엔드 API 호출
-      const request: GenerateRequest = {
-        prompt: extractedPrompt.prompt,
-        context: extractedPrompt.context,
-        selectedCode: extractedPrompt.selectedCode,
-        language: extractedPrompt.language,
-        requestType: "generate",
+      const request: CodeGenerationRequest = {
+        user_question: question,
+        code_context: extractedPrompt.context,
+        language: "python",
+        file_path: undefined,
       };
 
       // 로딩 상태 표시
@@ -90,7 +93,7 @@ export abstract class BaseWebviewProvider
       });
 
       // 실제 API 호출
-      const response = await apiClient.generate(request);
+      const response = await apiClient.generateCode(request);
 
       // 응답을 웹뷰에 전송
       webview.postMessage({

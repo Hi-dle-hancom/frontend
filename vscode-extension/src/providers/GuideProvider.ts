@@ -124,7 +124,7 @@ export class GuideProvider extends BaseWebviewProvider {
     <h2><span class="step-number">3</span> 사용 방법</h2>
     
     <h3>📱 사이드바에서 질문하기</h3>
-    <p>사이드바의 입력창에 원하는 작업을 자연어로 입력하고 Send 버튼을 클릭하세요.</p>
+            <p>사이드바의 입력창에 원하는 작업을 자연어로 입력하고 전송 버튼을 클릭하세요.</p>
     <div class="code-example">
 예시: "피보나치 수열을 계산하는 함수를 만들어주세요"
 예시: "리스트에서 중복을 제거하는 코드가 필요해요"
