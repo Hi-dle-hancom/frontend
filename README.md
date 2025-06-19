@@ -1,724 +1,791 @@
-# HAPA Frontend 🎨
+# HAPA DB Module 🗄️
 
-**HAPA Frontend**는 사용자가 AI 코딩 어시스턴트와 상호작용할 수 있는 두 가지 인터페이스를 제공합니다: **VSCode 확장 프로그램**과 **React 웹 인터페이스**. 개발자들이 선호하는 환경에서 원활하게 HAPA 서비스를 이용할 수 있도록 설계되었습니다.
+**HAPA DB Module**은 사용자 관리와 개인화 설정을 담당하는 **마이크로서비스**입니다. PostgreSQL 데이터베이스를 사용하여 사용자 인증, 개인 설정 저장, JWT 토큰 기반 세션 관리를 제공합니다.
 
 ## 📋 목차
 
-- [프로젝트 구조](#-프로젝트-구조)
-- [VSCode 확장 프로그램](#-vscode-확장-프로그램)
-- [React 웹 인터페이스](#-react-웹-인터페이스)
+- [서비스 개요](#-서비스-개요)
+- [시스템 요구사항](#-시스템-요구사항)
 - [빠른 시작](#-빠른-시작)
-- [개발 환경 설정](#-개발-환경-설정)
+- [API 엔드포인트](#-api-엔드포인트)
+- [데이터베이스 스키마](#-데이터베이스-스키마)
+- [환경 설정](#-환경-설정)
+- [보안](#-보안)
 - [배포](#-배포)
-- [기술 스택](#-기술-스택)
 - [문제 해결](#-문제-해결)
 
-## 📂 프로젝트 구조
+## 🎯 서비스 개요
 
-```
-Frontend/
-├── vscode-extension/           # VSCode 확장 프로그램
-│   ├── src/                   # TypeScript 소스 코드
-│   │   ├── extension.ts       # 메인 확장 진입점
-│   │   ├── core/             # 핵심 매니저 클래스
-│   │   ├── modules/          # 기능별 모듈
-│   │   │   ├── apiClient.ts  # Backend API 통신
-│   │   │   ├── inserter.ts   # 코드 삽입 기능
-│   │   │   ├── promptExtractor.ts # 프롬프트 추출
-│   │   │   └── triggerDetector.ts # 트리거 감지
-│   │   ├── providers/        # VSCode Webview 프로바이더
-│   │   │   ├── BaseWebviewProvider.ts
-│   │   │   ├── CompletionProvider.ts
-│   │   │   ├── GuideProvider.ts
-│   │   │   ├── OnboardingProvider.ts
-│   │   │   ├── SettingsProvider.ts
-│   │   │   └── SidebarProvider.ts
-│   │   ├── services/         # 서비스 레이어
-│   │   │   ├── ConfigService.ts
-│   │   │   └── ErrorService.ts
-│   │   ├── styles/          # CSS 스타일
-│   │   ├── templates/       # HTML 템플릿 생성기
-│   │   ├── test/           # 테스트 파일
-│   │   └── types/          # TypeScript 타입 정의
-│   ├── media/              # 확장 아이콘 및 리소스
-│   ├── package.json        # 확장 매니페스트
-│   ├── tsconfig.json       # TypeScript 설정
-│   └── webpack.config.js   # 빌드 설정
-├── landing-page/           # React 웹 인터페이스
-│   ├── src/               # React 소스 코드
-│   │   ├── components/    # React 컴포넌트
-│   │   │   ├── layout/   # 레이아웃 컴포넌트
-│   │   │   ├── pages/    # 페이지 컴포넌트
-│   │   │   └── ui/       # UI 컴포넌트
-│   │   ├── contexts/     # React Context
-│   │   ├── styles/       # 스타일 파일
-│   │   └── utils/        # 유틸리티 함수
-│   ├── public/           # 정적 파일
-│   ├── package.json      # React 앱 설정
-│   ├── tailwind.config.js # Tailwind CSS 설정
-│   └── postcss.config.js # PostCSS 설정
-├── docs/                 # 프론트엔드 문서
-│   ├── extension_development_survey.md
-│   ├── web_interface_tech_stack.md
-│   └── README.md         # 이 파일
-├── IMMEDIATE_FIXES_SUMMARY.md
-└── README_REFACTORING.md
-```
+### 주요 역할
 
-## 🔌 VSCode 확장 프로그램
+HAPA DB Module은 HAPA 생태계에서 다음과 같은 핵심 기능을 담당합니다:
 
-### 🎯 주요 기능
+#### **👤 사용자 관리**
 
-#### **🤖 AI 어시스턴트 통합**
-
-- **사이드바 대시보드**: Activity Bar에 HAPA 아이콘으로 접근
-- **실시간 AI 대화**: 자연어로 코딩 질문 및 코드 생성 요청
-- **스트리밍 응답**: 토큰 단위 실시간 코드 생성 경험
-
-#### **⚡ 스마트 코드 자동완성**
-
-- **인라인 자동완성**: 타이핑 중 실시간 코드 제안
-- **컨텍스트 인식**: 현재 파일과 프로젝트 맥락 이해
-- **다중 제안**: 여러 완성 옵션 제공
-
-#### **🔍 코드 분석 및 도구**
-
-- **컨텍스트 메뉴 통합**: 우클릭으로 AI 기능 접근
-- **선택 영역 분석**: 코드 설명, 개선점 제안, 테스트 생성
-- **주석 트리거**: `# TODO: 함수 만들기` 형태로 코드 생성
+- **간편 로그인/회원가입**: 이메일만으로 자동 사용자 생성
+- **JWT 토큰 발급**: 안전한 세션 관리
+- **사용자 정보 관리**: 프로필 및 메타데이터
 
 #### **⚙️ 개인화 설정**
 
-- **온보딩 플로우**: 처음 사용자 설정 가이드
-- **스킬 레벨 설정**: 초급자 → 전문가 맞춤 응답
-- **프로젝트 컨텍스트**: 웹 개발, 데이터 사이언스 등 분야별 최적화
+- **AI 스킬 레벨**: 초급자 → 전문가 맞춤 설정
+- **프로젝트 컨텍스트**: 웹 개발, 데이터 사이언스 등
+- **코드 생성 스타일**: 상세도, 설명 방식, 오류 처리 수준
+- **설정 동기화**: 여러 기기 간 설정 공유
 
-#### **📊 사용자 경험**
+#### **🔗 마이크로서비스 연동**
 
-- **히스토리 관리**: 이전 AI 대화 내역 저장
-- **설정 백업**: 클라우드 동기화 지원
-- **성능 최적화**: 빠른 응답 시간과 낮은 리소스 사용
+- **Backend API 서버**: 사용자별 코드 생성 개인화
+- **VSCode 확장**: 개인 설정 동기화
+- **웹 인터페이스**: 사용자 대시보드
 
-### 🛠️ 설치 및 개발
+### 시스템 아키텍처
 
-#### **개발 환경 설정**
-
-```bash
-# 프로젝트 클론
-git clone https://github.com/hancom/hapa-frontend.git
-cd Frontend/vscode-extension
-
-# 의존성 설치
-npm install
-
-# TypeScript 컴파일
-npm run compile
-
-# 실시간 컴파일 (개발용)
-npm run watch
+```
+HAPA Ecosystem
+├── Backend API (Port 8000)     # 메인 AI 서비스
+├── DB Module (Port 8001)       # 사용자 관리 서비스 ← 이 서비스
+├── VSCode Extension            # 클라이언트
+└── React Web App              # 웹 클라이언트
 ```
 
-#### **VSCode에서 디버깅**
+## 💻 시스템 요구사항
 
-```bash
-# VSCode로 확장 디렉토리 열기
-code .
+### 최소 요구사항
 
-# F5 키를 눌러 확장 프로그램 테스트 실행
-# 새로운 VSCode 창에서 확장 기능 테스트 가능
-```
+- **Python**: 3.8 이상
+- **PostgreSQL**: 12 이상
+- **RAM**: 최소 1GB (권장 2GB)
+- **디스크**: 최소 500MB 여유 공간
 
-#### **확장 패키징**
+### 권장 요구사항
 
-```bash
-# VSIX 파일 생성
-npm run package
-
-# 결과: hapa-0.4.0.vsix 파일 생성
-```
-
-### 🔧 주요 모듈 상세
-
-#### **apiClient.ts** - Backend API 통신
-
-```typescript
-// 코드 생성 요청
-const response = await apiClient.generateCode({
-  userQuestion: "피보나치 함수 만들어줘",
-  codeContext: currentFileContent,
-  filePath: activeDocument.fileName,
-});
-
-// 자동완성 요청
-const completions = await apiClient.getCompletions({
-  prefix: currentLineText,
-  cursorPosition: cursor.character,
-});
-```
-
-#### **triggerDetector.ts** - 주석 트리거 감지
-
-```typescript
-// 주석에서 트리거 감지 예시
-// "# TODO: 이메일 유효성 검사 함수"
-// "# GENERATE: 데이터베이스 연결 클래스"
-// "# AI: 파일 업로드 기능"
-```
-
-#### **inserter.ts** - 생성된 코드 삽입
-
-```typescript
-// 코드 삽입 옵션
-- 즉시 삽입 (immediate_insert)
-- 사이드바 표시 (sidebar)
-- 확인 후 삽입 (confirm_insert)
-- 인라인 미리보기 (inline_preview)
-```
-
-### ⚙️ 확장 설정
-
-#### **사용자 설정 (settings.json)**
-
-```json
-{
-  "hapa.apiBaseURL": "http://localhost:8000/api/v1",
-  "hapa.apiKey": "hapa_demo_20241228_secure_key_for_testing",
-  "hapa.autoComplete": true,
-  "hapa.maxSuggestions": 5,
-  "hapa.userProfile.pythonSkillLevel": "intermediate",
-  "hapa.userProfile.projectContext": "web_development",
-  "hapa.commentTrigger.resultDisplayMode": "sidebar",
-  "hapa.commentTrigger.showNotification": true
-}
-```
-
-#### **개인화 프로필 옵션**
-
-- **pythonSkillLevel**: `beginner` | `intermediate` | `advanced` | `expert`
-- **projectContext**: `web_development` | `data_science` | `automation` | `general_purpose`
-- **codeOutputStructure**: `minimal` | `standard` | `detailed` | `comprehensive`
-- **explanationStyle**: `brief` | `standard` | `detailed` | `educational`
-
-## 🌐 React 웹 인터페이스
-
-### 🎯 주요 기능
-
-#### **🏠 랜딩 페이지**
-
-- **제품 소개**: HAPA의 핵심 기능 및 가치 제안
-- **라이브 데모**: 실제 확장 프로그램 기능 미리보기
-- **다운로드 링크**: VSCode 확장 다운로드 및 설치 가이드
-
-#### **📱 반응형 디자인**
-
-- **모바일 최적화**: 스마트폰, 태블릿 완벽 지원
-- **VSCode 테마**: 확장 프로그램과 동일한 디자인 언어
-- **다크/라이트 모드**: 사용자 환경설정 연동
-
-#### **🎮 인터랙티브 요소**
-
-- **코드 에디터 시뮬레이션**: Monaco Editor 기반 라이브 데모
-- **애니메이션 효과**: 부드러운 UI/UX 전환
-- **성능 최적화**: 빠른 로딩과 부드러운 스크롤
-
-### 🛠️ 설치 및 개발
-
-#### **개발 환경 설정**
-
-```bash
-# 웹앱 디렉토리로 이동
-cd Frontend/landing-page
-
-# 의존성 설치
-npm install
-
-# 개발 서버 시작
-npm start
-```
-
-**✅ 성공!** 개발 서버가 시작되면:
-
-- **웹 인터페이스**: http://localhost:3000
-- **자동 새로고침**: 코드 변경시 실시간 반영
-
-#### **프로덕션 빌드**
-
-```bash
-# 프로덕션 빌드 생성
-npm run build
-
-# 빌드 결과: build/ 디렉토리
-# 웹 서버에 배포 가능한 정적 파일들
-```
-
-### 🎨 디자인 시스템
-
-#### **색상 팔레트**
-
-```css
-:root {
-  /* Primary Colors */
-  --vscode-blue: #007acc;
-  --vscode-dark-blue: #0e639c;
-
-  /* Background Colors */
-  --bg-dark: #1e1e1e;
-  --bg-sidebar: #252526;
-  --bg-editor: #1e1e1e;
-
-  /* Text Colors */
-  --text-primary: #cccccc;
-  --text-secondary: #9cdcfe;
-  --text-muted: #6a9955;
-}
-```
-
-#### **타이포그래피**
-
-- **Primary Font**: 'Segoe UI', system-ui, sans-serif
-- **Code Font**: 'Cascadia Code', 'Fira Code', monospace
-- **크기 시스템**: rem 기반 (1rem = 16px)
-
-#### **간격 시스템**
-
-```css
-/* Tailwind CSS 기반 */
-.spacing-xs {
-  margin: 0.25rem;
-} /* 4px */
-.spacing-sm {
-  margin: 0.5rem;
-} /* 8px */
-.spacing-md {
-  margin: 1rem;
-} /* 16px */
-.spacing-lg {
-  margin: 1.5rem;
-} /* 24px */
-.spacing-xl {
-  margin: 2rem;
-} /* 32px */
-```
+- **OS**: Ubuntu 20.04+, macOS 12+, Windows 10+
+- **Python**: 3.12.x
+- **PostgreSQL**: 15+
+- **Docker**: 20.10+ (컨테이너 배포 시)
 
 ## 🚀 빠른 시작
 
-### 1. 전체 프로젝트 클론
+### 1. 프로젝트 클론
 
 ```bash
-git clone https://github.com/hancom/hapa-frontend.git
-cd Frontend
+git clone https://github.com/hancom/hapa-db-module.git
+cd DB-Module
 ```
 
-### 2. VSCode 확장 개발
+### 2. PostgreSQL 설정
+
+#### **로컬 PostgreSQL 설치**
 
 ```bash
-# VSCode 확장 디렉토리로 이동
-cd vscode-extension
+# Ubuntu/Debian
+sudo apt update
+sudo apt install postgresql postgresql-contrib
 
-# 의존성 설치
-npm install
+# macOS (Homebrew)
+brew install postgresql
+brew services start postgresql
 
-# 개발 빌드
-npm run compile
-
-# VSCode에서 F5로 디버깅 시작
-code .
+# Windows
+# PostgreSQL 공식 인스톨러 사용
 ```
 
-### 3. React 웹앱 개발
+#### **데이터베이스 생성**
+
+```sql
+-- PostgreSQL에 연결
+psql -U postgres
+
+-- 데이터베이스 생성
+CREATE DATABASE hapa_users;
+CREATE USER hapa_user WITH PASSWORD 'secure_password_123';
+GRANT ALL PRIVILEGES ON DATABASE hapa_users TO hapa_user;
+
+\q
+```
+
+### 3. Python 환경 설정
 
 ```bash
-# 웹앱 디렉토리로 이동 (새 터미널)
-cd landing-page
+# Python 가상환경 생성
+python -m venv venv_db
+
+# 가상환경 활성화
+# Windows
+venv_db\Scripts\activate
+# macOS/Linux
+source venv_db/bin/activate
 
 # 의존성 설치
-npm install
+pip install --upgrade pip
+pip install -r requirements.txt
+```
 
+### 4. 환경 변수 설정
+
+```bash
+# .env 파일 생성
+cat > .env << EOF
+# 데이터베이스 설정
+DATABASE_URL=postgresql://hapa_user:secure_password_123@localhost:5432/hapa_users
+
+# JWT 보안 설정
+SECRET_KEY=hapa_db_module_secret_key_change_in_production
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=1440
+
+# 서버 설정
+HOST=0.0.0.0
+PORT=8001
+DEBUG=true
+EOF
+```
+
+### 5. 데이터베이스 초기화
+
+```bash
+# 데이터베이스 테이블 생성
+python database.py
+
+# 설정 옵션 초기 데이터 삽입
+python models.py
+```
+
+### 6. 서버 실행
+
+```bash
 # 개발 서버 시작
-npm start
+uvicorn main:app --reload --host 0.0.0.0 --port 8001
 ```
 
-### 4. Backend 서버 연결
+**✅ 성공!** 서버가 정상적으로 시작되면:
+
+- **API 서버**: http://localhost:8001
+- **API 문서**: http://localhost:8001/docs (Swagger UI)
+- **헬스 체크**: http://localhost:8001/health
+
+## 📡 API 엔드포인트
+
+### 기본 정보
+
+- **Base URL**: `http://localhost:8001`
+- **Content-Type**: `application/json`
+- **인증**: Bearer JWT Token (로그인 후 필요)
+
+### 🔐 인증 API
+
+| 메서드 | 엔드포인트 | 설명                        | 인증 |
+| ------ | ---------- | --------------------------- | ---- |
+| `POST` | `/login`   | 이메일 로그인/자동 회원가입 | ❌   |
+
+#### **로그인/회원가입 요청**
 
 ```bash
-# Backend 서버가 실행 중이어야 함
-# http://localhost:8000
-
-# 확장에서 API 연결 테스트
-curl -H "X-API-Key: hapa_demo_20241228_secure_key_for_testing" \
-     http://localhost:8000/health
+curl -X POST "http://localhost:8001/login" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "developer@example.com",
+    "username": "AI개발자"
+  }'
 ```
 
-## 🔧 개발 환경 설정
-
-### 시스템 요구사항
-
-#### **최소 요구사항**
-
-- **Node.js**: 18.0 이상
-- **npm**: 9.0 이상
-- **VSCode**: 1.80.0 이상
-- **RAM**: 최소 4GB (권장 8GB)
-
-#### **권장 요구사항**
-
-- **OS**: Windows 10+, macOS 12+, Ubuntu 20.04+
-- **Node.js**: 20.x LTS
-- **VSCode Extensions**: TypeScript, ESLint, Prettier
-
-### 개발 도구 설정
-
-#### **VSCode 설정 (workspace)**
+#### **응답 예시**
 
 ```json
 {
-  "typescript.preferences.importModuleSpecifier": "relative",
-  "typescript.suggest.autoImports": true,
-  "editor.formatOnSave": true,
-  "editor.codeActionsOnSave": {
-    "source.fixAll.eslint": true
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "bearer"
+}
+```
+
+### 👤 사용자 API
+
+| 메서드 | 엔드포인트  | 설명         | 인증 |
+| ------ | ----------- | ------------ | ---- |
+| `GET`  | `/users/me` | 내 정보 조회 | ✅   |
+
+#### **사용자 정보 조회**
+
+```bash
+curl -X GET "http://localhost:8001/users/me" \
+  -H "Authorization: Bearer your_jwt_token_here"
+```
+
+#### **응답 예시**
+
+```json
+{
+  "id": 1,
+  "email": "developer@example.com",
+  "username": "AI개발자"
+}
+```
+
+### ⚙️ 설정 관리 API
+
+| 메서드 | 엔드포인트           | 설명                       | 인증 |
+| ------ | -------------------- | -------------------------- | ---- |
+| `GET`  | `/settings/options`  | 사용 가능한 설정 옵션 조회 | ✅   |
+| `GET`  | `/users/me/settings` | 내 개인 설정 조회          | ✅   |
+| `POST` | `/users/me/settings` | 내 개인 설정 저장/수정     | ✅   |
+
+#### **설정 옵션 조회**
+
+```bash
+curl -X GET "http://localhost:8001/settings/options" \
+  -H "Authorization: Bearer your_jwt_token_here"
+```
+
+#### **응답 예시**
+
+```json
+[
+  {
+    "id": 1,
+    "setting_type": "python_skill_level",
+    "option_value": "beginner"
   },
-  "files.exclude": {
-    "**/node_modules": true,
-    "**/out": true,
-    "**/.vscode-test": true
+  {
+    "id": 2,
+    "setting_type": "python_skill_level",
+    "option_value": "intermediate"
+  },
+  {
+    "id": 3,
+    "setting_type": "project_context",
+    "option_value": "web_development"
+  },
+  {
+    "id": 4,
+    "setting_type": "code_output_structure",
+    "option_value": "detailed"
   }
-}
+]
 ```
 
-#### **환경 변수 설정**
+#### **개인 설정 저장**
 
 ```bash
-# VSCode 확장 개발용
-export VSCODE_EXTENSION_DEV=true
-export HAPA_API_URL=http://localhost:8000/api/v1
-export HAPA_API_KEY=hapa_demo_20241228_secure_key_for_testing
-
-# React 웹앱 개발용 (.env 파일)
-REACT_APP_API_URL=http://localhost:8000/api/v1
-REACT_APP_VERSION=0.4.0
-REACT_APP_ENVIRONMENT=development
+curl -X POST "http://localhost:8001/users/me/settings" \
+  -H "Authorization: Bearer your_jwt_token_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "option_ids": [2, 3, 4]
+  }'
 ```
 
-### 코드 품질 도구
+## 🗄️ 데이터베이스 스키마
 
-#### **ESLint 설정 (vscode-extension)**
+### 테이블 구조
 
-```json
-{
-  "extends": ["@typescript-eslint/recommended", "prettier"],
-  "rules": {
-    "@typescript-eslint/no-unused-vars": "error",
-    "@typescript-eslint/explicit-function-return-type": "warn",
-    "no-console": "warn"
-  }
-}
+```sql
+-- 사용자 정보 테이블
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    username VARCHAR(100) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 설정 옵션 마스터 테이블
+CREATE TABLE setting_options (
+    id SERIAL PRIMARY KEY,
+    setting_type VARCHAR(50) NOT NULL,   -- 설정 카테고리
+    option_value VARCHAR(100) NOT NULL,  -- 설정 값
+    description TEXT,                    -- 설명
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 사용자별 선택된 설정 테이블
+CREATE TABLE user_selected_options (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    option_id INTEGER REFERENCES setting_options(id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, option_id)
+);
 ```
 
-#### **Prettier 설정**
+### 초기 데이터 (설정 옵션)
 
-```json
-{
-  "semi": true,
-  "trailingComma": "es5",
-  "singleQuote": false,
-  "printWidth": 80,
-  "tabWidth": 2,
-  "useTabs": false
-}
+```sql
+-- Python 스킬 레벨 설정
+INSERT INTO setting_options (setting_type, option_value, description) VALUES
+('python_skill_level', 'beginner', '파이썬 초급자 - 기본 문법과 상세한 설명'),
+('python_skill_level', 'intermediate', '파이썬 중급자 - 일반적인 코딩 패턴'),
+('python_skill_level', 'advanced', '파이썬 고급자 - 최적화된 코드와 고급 기법'),
+('python_skill_level', 'expert', '파이썬 전문가 - 최신 기법과 성능 최적화');
+
+-- 프로젝트 컨텍스트 설정
+INSERT INTO setting_options (setting_type, option_value, description) VALUES
+('project_context', 'web_development', '웹 개발 - Flask, Django, FastAPI 중심'),
+('project_context', 'data_science', '데이터 사이언스 - pandas, numpy, sklearn'),
+('project_context', 'automation', '자동화 - 스크립팅, 크롤링, 자동화 도구'),
+('project_context', 'general_purpose', '범용 - 다양한 목적의 일반 코딩');
+
+-- 코드 출력 구조 설정
+INSERT INTO setting_options (setting_type, option_value, description) VALUES
+('code_output_structure', 'minimal', '최소한 - 핵심 코드만'),
+('code_output_structure', 'standard', '표준 - 일반적인 구조'),
+('code_output_structure', 'detailed', '상세함 - 주석과 설명 포함'),
+('code_output_structure', 'comprehensive', '종합적 - 테스트와 문서화 포함');
 ```
+
+### 데이터베이스 관계도
+
+```
+users (1) ←→ (N) user_selected_options (N) ←→ (1) setting_options
+                       │
+                       └── 사용자별 개인화 설정 저장
+```
+
+## 🔧 환경 설정
+
+### 환경 변수 (.env)
+
+```bash
+# ======================
+# 데이터베이스 설정
+# ======================
+DATABASE_URL=postgresql://username:password@localhost:5432/hapa_users
+DATABASE_POOL_SIZE=10
+DATABASE_MAX_CONNECTIONS=20
+
+# ======================
+# JWT 인증 설정
+# ======================
+SECRET_KEY=your_super_secret_key_change_in_production
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=1440  # 24시간
+
+# ======================
+# 서버 설정
+# ======================
+HOST=0.0.0.0
+PORT=8001
+DEBUG=true
+RELOAD=true
+
+# ======================
+# CORS 설정
+# ======================
+CORS_ORIGINS=http://localhost:3000,http://localhost:8000,vscode://
+
+# ======================
+# 로깅 설정
+# ======================
+LOG_LEVEL=INFO
+LOG_FORMAT=json
+
+# ======================
+# 보안 설정
+# ======================
+BCRYPT_ROUNDS=12
+SESSION_TIMEOUT=86400  # 24시간 (초)
+```
+
+### requirements.txt
+
+```txt
+fastapi==0.115.13
+uvicorn[standard]==0.34.3
+asyncpg==0.30.0
+python-jose[cryptography]==3.5.0
+passlib[bcrypt]==1.7.4
+python-dotenv==1.1.0
+pydantic==2.11.7
+python-multipart==0.0.9
+```
+
+## 🔒 보안
+
+### JWT 토큰 인증
+
+#### **토큰 발급 과정**
+
+1. 사용자가 이메일로 로그인 요청
+2. 이메일이 DB에 없으면 자동 회원가입
+3. JWT 토큰 생성 및 반환
+4. 클라이언트는 토큰을 헤더에 포함하여 API 요청
+
+#### **토큰 검증 과정**
+
+```python
+from jose import JWTError, jwt
+
+def verify_token(token: str):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            raise credentials_exception
+        return email
+    except JWTError:
+        raise credentials_exception
+```
+
+### 비밀번호 보안
+
+```python
+from passlib.context import CryptContext
+
+# bcrypt를 사용한 비밀번호 해싱
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def hash_password(password: str) -> str:
+    return pwd_context.hash(password)
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
+```
+
+### 데이터베이스 보안
+
+- **SQL Injection 방지**: asyncpg의 파라미터화된 쿼리 사용
+- **연결 풀링**: 데이터베이스 연결 최적화 및 보안
+- **트랜잭션 관리**: 데이터 무결성 보장
 
 ## 🧪 테스트
 
-### VSCode 확장 테스트
+### 단위 테스트
 
 ```bash
-cd vscode-extension
+# pytest 설치
+pip install pytest pytest-asyncio httpx
 
-# 단위 테스트 실행
-npm test
+# 테스트 실행
+pytest tests/ -v
 
-# 통합 테스트 실행
-npm run test:integration
-
-# 테스트 커버리지
-npm run test:coverage
+# 커버리지 포함
+pytest tests/ --cov=. --cov-report=html
 ```
 
-### React 웹앱 테스트
+### API 테스트 예시
+
+```python
+import pytest
+from httpx import AsyncClient
+from main import app
+
+@pytest.mark.asyncio
+async def test_login():
+    async with AsyncClient(app=app, base_url="http://test") as ac:
+        response = await ac.post("/login", json={
+            "email": "test@example.com",
+            "username": "테스트사용자"
+        })
+    assert response.status_code == 200
+    assert "access_token" in response.json()
+
+@pytest.mark.asyncio
+async def test_get_user_settings():
+    # JWT 토큰을 사용한 인증 테스트
+    async with AsyncClient(app=app, base_url="http://test") as ac:
+        headers = {"Authorization": "Bearer valid_jwt_token"}
+        response = await ac.get("/users/me/settings", headers=headers)
+    assert response.status_code == 200
+```
+
+### 통합 테스트
 
 ```bash
-cd landing-page
-
-# 단위 테스트
-npm test
-
-# 스냅샷 테스트 업데이트
-npm test -- --updateSnapshot
-
-# E2E 테스트 (Cypress)
-npm run cypress:open
+# 실제 데이터베이스를 사용한 통합 테스트
+python -m pytest tests/integration/ -v
 ```
-
-### 테스트 시나리오
-
-#### **VSCode 확장 기능 테스트**
-
-1. **확장 활성화**: VSCode 시작시 정상 로드
-2. **API 연결**: Backend 서버와 통신 확인
-3. **코드 생성**: AI 코드 생성 기능 동작
-4. **자동완성**: 인라인 자동완성 제안
-5. **UI 인터랙션**: 사이드바, 설정 패널 동작
-
-#### **웹앱 기능 테스트**
-
-1. **페이지 로딩**: 모든 페이지 정상 렌더링
-2. **반응형 디자인**: 다양한 화면 크기 지원
-3. **라이브 데모**: 코드 에디터 시뮬레이션
-4. **네비게이션**: 페이지 간 이동 기능
-5. **성능**: 로딩 시간 및 런타임 성능
 
 ## 🐳 배포
 
-### VSCode 확장 배포
+### Docker 배포
 
-#### **VSCode Marketplace 게시**
+#### **Dockerfile**
 
-```bash
-# vsce 도구 설치
-npm install -g vsce
+```dockerfile
+FROM python:3.12-slim
 
-# 확장 패키징
-cd vscode-extension
-vsce package
-
-# Marketplace에 게시
-vsce publish
-```
-
-#### **수동 설치용 VSIX 파일**
-
-```bash
-# VSIX 파일 생성
-vsce package
-
-# 생성된 파일: hapa-0.4.0.vsix
-# VSCode에서 "Install from VSIX" 로 설치 가능
-```
-
-### React 웹앱 배포
-
-#### **정적 파일 배포**
-
-```bash
-cd landing-page
-
-# 프로덕션 빌드
-npm run build
-
-# 결과: build/ 디렉토리
-# 웹 서버(Nginx, Apache, Vercel 등)에 배포
-```
-
-#### **Docker 배포**
-
-```bash
-# Dockerfile 예시
-FROM node:18-alpine AS builder
 WORKDIR /app
-COPY package*.json ./
-RUN npm install
-COPY . .
-RUN npm run build
 
-FROM nginx:alpine
-COPY --from=builder /app/build /usr/share/nginx/html
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+# 시스템 의존성 설치
+RUN apt-get update && apt-get install -y \
+    libpq-dev \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python 의존성 설치
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 애플리케이션 코드 복사
+COPY . .
+
+# 포트 노출
+EXPOSE 8001
+
+# 서버 실행
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"]
 ```
 
-#### **Vercel 배포 (추천)**
+#### **docker-compose.yml**
+
+```yaml
+version: "3.8"
+
+services:
+  db-module:
+    build: .
+    ports:
+      - "8001:8001"
+    environment:
+      - DATABASE_URL=postgresql://hapa_user:password@postgres:5432/hapa_users
+      - SECRET_KEY=production_secret_key
+      - DEBUG=false
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=hapa_users
+      - POSTGRES_USER=hapa_user
+      - POSTGRES_PASSWORD=secure_password_123
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+volumes:
+  postgres_data:
+```
+
+#### **Docker 실행**
 
 ```bash
-# Vercel CLI 설치
-npm install -g vercel
+# 개발 환경
+docker-compose up -d
 
-# 배포
-cd landing-page
-vercel --prod
+# 로그 확인
+docker-compose logs -f db-module
 
-# 결과: https://hapa-landing.vercel.app
+# 컨테이너 중지
+docker-compose down
 ```
 
-## 🛠️ 기술 스택
+### 프로덕션 배포
 
-### VSCode 확장
+#### **환경 변수 설정 (production)**
 
-| 기술                     | 버전  | 목적                      |
-| ------------------------ | ----- | ------------------------- |
-| **TypeScript**           | 4.9+  | 타입 안전성과 개발자 경험 |
-| **VSCode Extension API** | 1.80+ | 확장 프로그램 기능        |
-| **Webpack**              | 5.0+  | 번들링 및 최적화          |
-| **ESLint**               | 8.0+  | 코드 품질 관리            |
-| **Prettier**             | 2.0+  | 코드 포맷팅               |
-| **Mocha**                | 10.0+ | 테스트 프레임워크         |
+```bash
+# 보안 강화된 프로덕션 설정
+export DATABASE_URL="postgresql://user:password@db-server:5432/hapa_users"
+export SECRET_KEY="production_jwt_secret_key_very_secure"
+export DEBUG=false
+export LOG_LEVEL=WARNING
+export CORS_ORIGINS="https://hapa.hancom.com,https://api.hapa.hancom.com"
+```
 
-### React 웹앱
+#### **서버 실행 (프로덕션)**
 
-| 기술                 | 버전  | 목적                     |
-| -------------------- | ----- | ------------------------ |
-| **React**            | 19.1+ | UI 라이브러리            |
-| **TypeScript**       | 4.9+  | 타입 안전성              |
-| **Tailwind CSS**     | 3.3+  | 유틸리티 기반 스타일링   |
-| **React Router**     | 7.6+  | 클라이언트 사이드 라우팅 |
-| **Create React App** | 5.0+  | 개발 환경 설정           |
-| **Jest**             | 29.0+ | 테스트 프레임워크        |
-| **Testing Library**  | 16.3+ | React 컴포넌트 테스트    |
+```bash
+# Gunicorn 사용 (더 안정적)
+pip install gunicorn
+gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8001
 
-### 공통 도구
+# 또는 Uvicorn (단일 프로세스)
+uvicorn main:app --host 0.0.0.0 --port 8001 --workers 4
+```
 
-| 도구                   | 용도             |
-| ---------------------- | ---------------- |
-| **Git**                | 버전 관리        |
-| **GitHub Actions**     | CI/CD 파이프라인 |
-| **Docker**             | 컨테이너화       |
-| **Vercel**             | 웹앱 배포        |
-| **VSCode Marketplace** | 확장 배포        |
+## 📊 모니터링
+
+### 헬스 체크
+
+```bash
+# 서비스 상태 확인
+curl http://localhost:8001/health
+
+# 응답 예시
+{
+  "status": "healthy",
+  "database": "connected",
+  "timestamp": "2024-12-28T10:30:00Z"
+}
+```
+
+### 로그 모니터링
+
+```python
+import logging
+import json
+
+# 구조화된 로깅 설정
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
+logger = logging.getLogger("hapa-db-module")
+
+# API 요청 로깅
+logger.info("User login", extra={
+    "user_email": "user@example.com",
+    "endpoint": "/login",
+    "status": "success"
+})
+```
+
+### 성능 메트릭
+
+- **API 응답 시간**: 엔드포인트별 평균/최대 응답 시간
+- **데이터베이스 쿼리 시간**: 느린 쿼리 감지
+- **동시 연결 수**: 활성 사용자 세션 수
+- **에러율**: HTTP 4xx/5xx 에러 비율
 
 ## 🐛 문제 해결
 
 ### 자주 발생하는 문제
 
-#### **1. VSCode 확장 활성화 실패**
+#### **1. 데이터베이스 연결 오류**
 
 ```bash
-# 확장 로그 확인
-개발자 도구 > 콘솔 탭에서 에러 메시지 확인
+# PostgreSQL 서비스 상태 확인
+sudo systemctl status postgresql
 
-# 의존성 재설치
-cd vscode-extension
-rm -rf node_modules package-lock.json
-npm install
-npm run compile
+# 데이터베이스 연결 테스트
+psql -U hapa_user -d hapa_users -h localhost
+
+# 연결 문자열 확인
+python -c "
+import asyncpg
+import asyncio
+
+async def test_connection():
+    conn = await asyncpg.connect('postgresql://hapa_user:password@localhost:5432/hapa_users')
+    print('Database connection successful!')
+    await conn.close()
+
+asyncio.run(test_connection())
+"
 ```
 
-#### **2. Backend API 연결 오류**
+#### **2. JWT 토큰 오류**
 
 ```bash
-# Backend 서버 상태 확인
-curl http://localhost:8000/health
-
-# API Key 확인
-curl -H "X-API-Key: hapa_demo_20241228_secure_key_for_testing" \
-     http://localhost:8000/api/v1/code/generate
-
-# 확장 설정에서 API URL 확인
+# 토큰 디코딩 테스트
+python -c "
+from jose import jwt
+token = 'your_jwt_token_here'
+secret = 'your_secret_key'
+try:
+    payload = jwt.decode(token, secret, algorithms=['HS256'])
+    print('Token valid:', payload)
+except Exception as e:
+    print('Token invalid:', e)
+"
 ```
 
-#### **3. React 웹앱 빌드 실패**
+#### **3. 포트 충돌 (8001번 포트)**
 
 ```bash
-# Node.js 버전 확인
-node --version  # 18+ 필요
+# 포트 사용 프로세스 확인
+lsof -i :8001
 
-# 캐시 클리어
-cd landing-page
-rm -rf node_modules package-lock.json
-npm install
+# 프로세스 종료
+kill -9 PID
 
-# TypeScript 에러 확인
-npm run type-check
+# 다른 포트로 실행
+uvicorn main:app --port 8002
 ```
 
-#### **4. 확장 패키징 오류**
+#### **4. 의존성 설치 오류**
 
 ```bash
-# vsce 도구 업데이트
-npm install -g vsce@latest
+# Python 버전 확인
+python --version  # 3.8+ 필요
 
-# package.json 검증
-vsce ls
-
-# 패키징 재시도
-vsce package --verbose
+# 가상환경 재생성
+rm -rf venv_db
+python -m venv venv_db
+source venv_db/bin/activate  # Linux/macOS
+pip install --upgrade pip
+pip install -r requirements.txt
 ```
 
-#### **5. 웹앱 성능 이슈**
+#### **5. 데이터베이스 테이블 생성 오류**
 
 ```bash
-# 번들 크기 분석
-npm run build
-npm install -g serve
-serve -s build
+# 테이블 존재 확인
+psql -U hapa_user -d hapa_users -c "\dt"
 
-# Lighthouse 성능 측정
-# Chrome DevTools > Lighthouse 탭 사용
+# 테이블 수동 생성
+python -c "
+import asyncio
+from database import create_tables
+asyncio.run(create_tables())
+print('Tables created successfully!')
+"
 ```
 
 ### 디버깅 팁
 
-#### **1. VSCode 확장 디버깅**
+#### **1. 디버그 모드 활성화**
 
-```typescript
-// 개발자 콘솔에 로그 출력
-console.log("[HAPA] Extension activated");
+```bash
+# .env 파일에서 설정
+DEBUG=true
+LOG_LEVEL=DEBUG
 
-// VSCode 출력 채널 사용
-const outputChannel = vscode.window.createOutputChannel("HAPA");
-outputChannel.appendLine("Debug message");
-outputChannel.show();
+# 또는 환경변수로 설정
+export DEBUG=true
+export LOG_LEVEL=DEBUG
+uvicorn main:app --reload
 ```
 
-#### **2. React 컴포넌트 디버깅**
+#### **2. 데이터베이스 쿼리 로깅**
 
-```typescript
-// React DevTools 사용
-// Chrome 확장: React Developer Tools
+```python
+# database.py에 로깅 추가
+import logging
+logger = logging.getLogger(__name__)
 
-// 컨솔 로그
-console.log("[HAPA] Component rendered:", props);
-
-// 성능 프로파일링
-import { Profiler } from "react";
-
-function onRenderCallback(id: string, phase: string, actualDuration: number) {
-  console.log(`[HAPA] ${id} ${phase} took ${actualDuration}ms`);
-}
+async def execute_query(query: str, *args):
+    logger.debug(f"Executing query: {query} with args: {args}")
+    result = await connection.fetch(query, *args)
+    logger.debug(f"Query result: {result}")
+    return result
 ```
 
-#### **3. 네트워크 요청 디버깅**
+#### **3. API 응답 디버깅**
 
-```typescript
-// API 호출 로깅
-const response = await fetch(url, {
-  method: "POST",
-  headers: { "X-API-Key": apiKey },
-  body: JSON.stringify(data),
-});
+```bash
+# Verbose 모드로 curl 실행
+curl -v -X POST "http://localhost:8001/login" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "test@example.com", "username": "테스트"}'
 
-console.log("API Response:", response.status, await response.json());
+# JSON 응답 예쁘게 출력
+curl http://localhost:8001/users/me \
+  -H "Authorization: Bearer token" | jq .
 ```
 
 ### 지원 및 문의
 
 - **GitHub Issues**: 버그 리포트 및 기능 요청
-- **Discord**: 실시간 커뮤니티 지원 (준비중)
-- **문서**: `/docs` 디렉토리의 상세 가이드
-- **VSCode Marketplace**: 확장 리뷰 및 평점
+- **문서**: `/docs` 디렉토리의 상세 문서 참조
+- **API 문서**: http://localhost:8001/docs (Swagger UI)
 
 ---
 
 ## 📚 관련 문서
 
-- **[확장 개발 가이드](docs/extension_development_survey.md)**: VSCode 확장 개발 상세
-- **[웹 인터페이스 기술 스택](docs/web_interface_tech_stack.md)**: React 앱 기술 문서
-- **[리팩토링 가이드](README_REFACTORING.md)**: 코드 개선 방향
-- **[즉시 수정 사항](IMMEDIATE_FIXES_SUMMARY.md)**: 알려진 이슈 및 해결책
+- **[Backend API 연동](../Backend/README.md)**: 메인 API 서버와 연동
+- **[Frontend 클라이언트](../Frontend/README.md)**: VSCode 확장 및 웹앱 연동
+- **[데이터베이스 스키마](models.py)**: 상세한 데이터 모델
+- **[인증 시스템](auth.py)**: JWT 토큰 및 보안 구현
 
 ---
 
-**버전**: v0.4.0  
+**버전**: v1.0.0  
 **상태**: 프로덕션 준비 완료  
-**VSCode 확장**: Marketplace 게시 준비  
-**웹 인터페이스**: Vercel 배포 준비  
+**데이터베이스**: PostgreSQL 15 지원  
+**인증**: JWT 토큰 기반  
 **최종 업데이트**: 2024년 12월 28일
