@@ -221,7 +221,7 @@ export class ErrorService {
    * 재시도 가능한 에러인지 확인
    */
   private isRetryableError(category: ErrorCategory, error?: Error): boolean {
-    if (category === ErrorCategory.NETWORK) return true;
+    if (category === ErrorCategory.NETWORK) {return true;}
     if (category === ErrorCategory.API && error) {
       // 일시적인 서버 오류는 재시도 가능
       const message = error.message.toLowerCase();
@@ -361,7 +361,7 @@ export class ErrorService {
     errorInfo: ErrorInfo,
     options: ErrorHandlingOptions
   ): Promise<void> {
-    if (!action) return;
+    if (!action) {return;}
 
     switch (action) {
       case "다시 시도":

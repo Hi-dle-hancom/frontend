@@ -270,7 +270,7 @@ export class CodeInserter {
     let minIndent = Infinity;
 
     for (const line of lines) {
-      if (line.trim() === "") continue;
+      if (line.trim() === "") {continue;}
 
       const indent = line.search(/\S/);
       if (indent >= 0 && indent < minIndent) {
@@ -295,7 +295,7 @@ export class CodeInserter {
 
     return lines
       .map((line, index) => {
-        if (line.trim() === "") return "";
+        if (line.trim() === "") {return "";}
 
         // 첫 번째 줄이 아니면 추가 들여쓰기 적용
         if (index === 0) {
