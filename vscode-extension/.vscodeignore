@@ -1,0 +1,24 @@
+.vscode/**
+.vscode-test/**
+src/**
+.gitignore
+.yarnrc
+vsc-extension-quickstart.md
+**/tsconfig.json
+**/eslint.config.mjs
+**/*.map
+**/*.ts
+**/.vscode-test.*
+
+# Test files
+test_hapa.py
+**/test/**
+
+# Documentation files (keep only essential ones)
+VISUAL_REVIEW_GUIDE.md
+temp_vsix_check/**
+
+# Development files
+node_modules/**
+package-lock.json
+.git/**
