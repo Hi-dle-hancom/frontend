@@ -1,0 +1,99 @@
+{
+  "short_name": "HAPA",
+  "name": "HAPA - Hancom AI Python Assistant",
+  "description": "VS Code Extension으로 제공하는 차세대 AI 코딩 도구",
+  "icons": [
+    {
+      "src": "favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "logo192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "logo512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "maskable any"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#007acc",
+  "background_color": "#ffffff",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "lang": "ko",
+  "dir": "ltr",
+  "categories": ["developer", "productivity", "utilities"],
+  "screenshots": [
+    {
+      "src": "logo512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "label": "HAPA AI Assistant 메인 화면"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Live Demo",
+      "short_name": "Demo",
+      "description": "AI 코드 생성 데모를 직접 체험해보세요",
+      "url": "/#demo",
+      "icons": [
+        {
+          "src": "logo192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "VS Code Extension 다운로드",
+      "short_name": "Download",
+      "description": "HAPA VS Code Extension을 다운로드하세요",
+      "url": "https://marketplace.visualstudio.com/items?itemName=hancom.hapa",
+      "icons": [
+        {
+          "src": "logo192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "가이드",
+      "short_name": "Guide",
+      "description": "HAPA 사용 가이드를 확인하세요",
+      "url": "/guide",
+      "icons": [
+        {
+          "src": "logo192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ],
+  "related_applications": [
+    {
+      "platform": "webapp",
+      "url": "https://hapa.hancom.com/",
+      "id": "com.hancom.hapa"
+    }
+  ],
+  "prefer_related_applications": false,
+  "edge_side_panel": {
+    "preferred_width": 400
+  },
+  "launch_handler": {
+    "client_mode": "navigate-new"
+  },
+  "protocol_handlers": [
+    {
+      "protocol": "web+hapa",
+      "url": "/share?code=%s"
+    }
+  ]
+}
