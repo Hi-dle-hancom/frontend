@@ -1,652 +1,546 @@
-# 🎨 HAPA Frontend Applications
+# 🖥️ HAPA Backend API Server
 
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
-[![React](https://img.shields.io/badge/React-19+-blue.svg)](https://react.dev/)
-[![VSCode](https://img.shields.io/badge/VSCode-API-blue.svg)](https://code.visualstudio.com/api)
-[![Tailwind](https://img.shields.io/badge/Tailwind-3.0+-blue.svg)](https://tailwindcss.com/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-green.svg)](https://fastapi.tiangolo.com/)
+[![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/)
+[![Uvicorn](https://img.shields.io/badge/Uvicorn-0.24+-purple.svg)](https://www.uvicorn.org/)
 
-> **HAPA의 사용자 인터페이스 컬렉션**  
-> VSCode 확장과 React 웹 애플리케이션으로 구성된 프론트엔드 생태계
+> **HAPA의 핵심 AI 코드 생성 백엔드 서버**  
+> FastAPI 기반 고성능 RESTful API 서비스
 
-## 🎯 **개요**
+## 🎯 **서버 개요**
 
-HAPA Frontend는 두 가지 핵심 사용자 인터페이스를 제공합니다:
+HAPA Backend는 AI 기반 코드 생성, 분석, 자동완성을 담당하는 **핵심 마이크로서비스**입니다. 스트리밍 응답, 스마트 캐싱, 성능 모니터링을 통해 최적화된 개발자 경험을 제공합니다.
 
-1. **VSCode Extension**: 개발자 워크플로우에 완전히 통합된 에디터 확장
-2. **React Web App**: 브라우저 기반 랜딩 페이지 및 데모 인터페이스
+### ✨ **주요 기능**
 
-## 📂 **프로젝트 구조**
-
-```
-Frontend/
-├── 📁 vscode-extension/        # VSCode 확장 프로그램
-│   ├── src/                         # TypeScript 소스코드
-│   │   ├── extension.ts            # 확장 진입점
-│   │   ├── core/                   # 핵심 관리자
-│   │   ├── providers/              # 웹뷰 프로바이더
-│   │   ├── services/               # 비즈니스 로직
-│   │   ├── modules/                # 기능 모듈
-│   │   ├── templates/              # HTML 템플릿
-│   │   ├── styles/                 # CSS 스타일
-│   │   └── types/                  # TypeScript 타입
-│   ├── package.json                # 확장 메타데이터
-│   └── tsconfig.json               # TypeScript 설정
-├── 📁 landing-page/                 # React 웹 애플리케이션
-│   ├── src/                        # React 소스코드
-│   │   ├── App.tsx                 # 메인 컴포넌트
-│   │   ├── components/             # UI 컴포넌트
-│   │   ├── contexts/               # React Context
-│   │   ├── hooks/                  # 커스텀 훅
-│   │   ├── store/                  # 상태 관리
-│   │   ├── styles/                 # CSS 파일
-│   │   └── utils/                  # 유틸리티
-│   ├── public/                     # 정적 자산
-│   ├── package.json                # React 의존성
-│   └── tailwind.config.js          # Tailwind 설정
-└── README.md                       # 이 파일
-```
-
----
-
-# 🔌 VSCode Extension
-
-## ✨ **주요 기능**
-
-- 🤖 **AI 대화 인터페이스**: 사이드바에서 자연어로 코딩 질문
-- ⚡ **실시간 자동완성**: 타이핑하면서 즉시 코드 제안
-- 🎯 **컨텍스트 기반 생성**: 현재 파일과 프로젝트 맥락 이해
+- 🤖 **AI 코드 생성**: 사용자 질문을 Python 코드로 변환
+- ⚡ **실시간 자동완성**: 컨텍스트 기반 코드 완성 제안
+- 🌊 **스트리밍 응답**: 토큰 단위 실시간 응답 스트리밍
 - 📊 **개인화 설정**: 스킬 레벨별 맞춤 코드 생성
-- 🌐 **오프라인 지원**: 네트워크 없이도 기본 기능 사용
-- 📝 **히스토리 관리**: 이전 대화 및 생성 결과 저장
-- 🔧 **설정 동기화**: VSCode 설정과 완전 통합
-
-## 🚀 **설치 및 실행**
-
-### 개발 환경 설정
-
-```bash
-# 1. 프로젝트 클론
-git clone [repository-url]
-cd Frontend/vscode-extension copy
-
-# 2. 의존성 설치
-npm install
-
-# 3. TypeScript 컴파일
-npm run compile
-
-# 4. VSCode에서 실행
-# F5를 눌러 Extension Development Host 실행
-```
-
-### 패키징 및 설치
-
-```bash
-# 1. VSIX 패키지 생성
-npm install -g vsce
-vsce package
-
-# 2. 로컬 설치
-code --install-extension hapa-0.4.0.vsix
-
-# 3. 마켓플레이스 발행
-vsce publish
-```
+- 🔒 **보안 강화**: API 키 인증 및 Rate Limiting
+- 📈 **성능 모니터링**: Prometheus 메트릭 수집
+- 💾 **스마트 캐싱**: Redis 기반 응답 캐시
 
 ## 🏗️ **아키텍처**
 
-### 핵심 컴포넌트
+```
+Backend/
+├── 📁 app/                    # 메인 애플리케이션
+│   ├── 📁 api/               # API 엔드포인트
+│   │   ├── api.py            # 메인 라우터
+│   │   └── endpoints/        # 개별 엔드포인트
+│   │       ├── code_generation.py      # 코드 생성 API
+│   │       ├── enhanced_code_generation.py  # 강화된 코드 생성
+│   │       ├── validation.py # 입력 검증 API
+│   │       ├── feedback.py   # 피드백 수집 API
+│   │       ├── history.py    # 히스토리 관리 API
+│   │       ├── cache.py      # 캐시 관리 API
+│   │       ├── metrics.py    # 메트릭 API
+│   │       └── users.py      # 사용자 프로필 API
+│   ├── 📁 core/              # 핵심 설정
+│   │   ├── config.py         # 환경 설정
+│   │   ├── security.py       # 보안 설정
+│   │   └── logging_config.py # 로깅 설정
+│   ├── 📁 services/          # 비즈니스 로직
+│   │   ├── ai_model.py       # AI 모델 인터페이스
+│   │   ├── enhanced_ai_model.py  # 강화된 AI 모델
+│   │   ├── code_generator.py # 코드 생성 서비스
+│   │   ├── cache_service.py  # 캐시 서비스
+│   │   ├── validation_service.py  # 검증 서비스
+│   │   ├── feedback_service.py    # 피드백 서비스
+│   │   ├── history_service.py     # 히스토리 서비스
+│   │   ├── performance_profiler.py # 성능 프로파일링
+│   │   ├── response_parser.py     # 응답 파싱
+│   │   └── environment_validator.py # 환경 변수 검증
+│   └── 📁 schemas/           # 데이터 모델
+│       ├── code_generation.py    # 코드 생성 스키마
+│       ├── validation.py     # 검증 스키마
+│       ├── feedback.py       # 피드백 스키마
+│       └── users.py          # 사용자 스키마
+├── 📁 data/                  # 데이터 저장소
+│   ├── cache/               # 파일 기반 캐시
+│   ├── feedback/            # 사용자 피드백
+│   ├── history/             # 대화 히스토리
+│   └── settings/            # 사용자 설정
+├── 📁 tests/                # 테스트 코드
+├── main.py                  # 애플리케이션 진입점
+├── requirements.txt         # Python 의존성
+└── Dockerfile              # Docker 설정
+```
 
-```typescript
-// ExtensionManager - 전체 확장 생명주기 관리
-class ExtensionManager {
-  private providers: Map<string, BaseWebviewProvider>;
-  private services: ServiceContainer;
+## 🚀 **빠른 시작**
 
-  async activate(context: vscode.ExtensionContext) {
-    // 프로바이더와 서비스 초기화
+### 로컬 개발 환경
+
+```bash
+# 1. 가상환경 생성 및 활성화
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+# 2. 의존성 설치
+pip install -r requirements.txt
+
+# 3. 환경 변수 설정
+cp .env.development .env
+# .env 파일에서 필요한 값들 수정
+
+# 4. 개발 서버 시작
+python main.py
+```
+
+### Docker 실행
+
+```bash
+# 1. Docker 이미지 빌드
+docker build -t hapa-backend .
+
+# 2. 컨테이너 실행
+docker run -p 8000:8000 \
+  -e SECRET_KEY="your-secret-key" \
+  -e AI_MODEL_API_KEY="your-api-key" \
+  hapa-backend
+```
+
+### 서버 확인
+
+```bash
+# 헬스 체크
+curl http://localhost:8000/health
+
+# API 문서 확인
+open http://localhost:8000/docs
+```
+
+## 🔧 **환경 설정**
+
+### 필수 환경 변수
+
+```bash
+# 기본 설정
+ENVIRONMENT=development          # development/production
+DEBUG=true                      # 디버그 모드
+HOST=0.0.0.0                   # 서버 호스트
+PORT=8000                      # 서버 포트
+
+# 보안 설정
+SECRET_KEY=your-32-char-secret-key     # JWT 시크릿 키 (32자 이상)
+API_KEY_EXPIRY_DAYS=90         # API 키 만료 기간
+
+# AI 모델 설정
+AI_MODEL_API_KEY=your-ai-api-key       # AI 모델 API 키
+AI_MODEL_ENDPOINT=https://api.openai.com/v1/completions
+
+# 데이터베이스 설정
+DATABASE_URL=sqlite:///./data/hapa.db  # 개발용 SQLite
+# DATABASE_URL=postgresql://user:pass@host:5432/db  # 운영용
+
+# 성능 설정
+CACHE_TTL=1800                 # 캐시 유효시간 (초)
+MAX_CACHE_SIZE=1000           # 최대 캐시 항목 수
+REQUEST_TIMEOUT=30            # 요청 타임아웃 (초)
+MAX_WORKERS=4                 # 최대 워커 수
+
+# Rate Limiting
+RATE_LIMIT_ENABLED=true       # Rate Limiting 활성화
+DEFAULT_RATE_LIMIT=100        # 기본 요청 한도
+RATE_LIMIT_WINDOW_MINUTES=60  # 제한 윈도우 (분)
+```
+
+### 운영 환경 추가 설정
+
+```bash
+# 운영 환경 전용
+ENVIRONMENT=production
+DEBUG=false
+CORS_ORIGINS=["https://your-domain.com"]
+
+# SSL 설정
+SSL_ENABLED=true
+SSL_CERT_PATH=/path/to/cert.pem
+SSL_KEY_PATH=/path/to/key.pem
+
+# 모니터링
+ENABLE_METRICS=true
+METRICS_PORT=9090
+HEALTH_CHECK_INTERVAL=60
+```
+
+## 📡 **API 엔드포인트**
+
+### 🤖 **코드 생성 API**
+
+#### **기본 코드 생성**
+
+```http
+POST /api/v1/generate-code
+Content-Type: application/json
+X-API-Key: your-api-key
+
+{
+  "user_question": "리스트에서 중복 제거하는 함수 만들어줘",
+  "code_context": "데이터 처리 스크립트",
+  "language": "python",
+  "user_profile": {
+    "pythonSkillLevel": "intermediate",
+    "codeOutputStructure": "standard",
+    "explanationStyle": "detailed"
   }
 }
-
-// BaseWebviewProvider - 웹뷰 공통 기능
-abstract class BaseWebviewProvider {
-  protected webview: vscode.Webview;
-  protected context: vscode.ExtensionContext;
-
-  abstract getHtmlContent(): string;
-  abstract handleMessage(message: WebviewMessage): void;
-}
 ```
 
-### 주요 서비스
-
-| 서비스                   | 역할                     | 파일 위치                              |
-| ------------------------ | ------------------------ | -------------------------------------- |
-| **ConfigService**        | 설정 관리 및 검증        | `src/services/ConfigService.ts`        |
-| **ErrorService**         | 오류 처리 및 로깅        | `src/services/EnhancedErrorService.ts` |
-| **OfflineService**       | 오프라인 큐 및 캐시 관리 | `src/services/OfflineService.ts`       |
-| **TelemetryService**     | 사용량 분석              | `src/services/TelemetryService.ts`     |
-| **AccessibilityService** | 접근성 지원              | `src/services/AccessibilityService.ts` |
-
-### 프로바이더 구조
-
-```typescript
-// 사이드바 메인 인터페이스
-class SidebarProvider extends BaseWebviewProvider {
-  // AI 대화, 설정, 히스토리 통합 관리
-}
-
-// 온보딩 프로세스
-class OnboardingProvider extends BaseWebviewProvider {
-  // 사용자 프로필 설정 및 튜토리얼
-}
-
-// 코드 완성 제공
-class CompletionProvider implements vscode.CompletionItemProvider {
-  // 실시간 자동완성 로직
-}
-```
-
-## 🔧 **설정**
-
-### extension.json 주요 설정
+**응답:**
 
 ```json
 {
-  "hapa.apiBaseURL": "http://localhost:8000/api/v1",
-  "hapa.apiKey": "your-api-key",
-  "hapa.enableCodeAnalysis": true,
-  "hapa.autoComplete": true,
-  "hapa.maxSuggestions": 5,
-  "hapa.theme": "system",
-  "hapa.commentTrigger": {
-    "enabled": true,
-    "resultDisplayMode": "sidebar",
-    "autoInsertDelay": 2000
-  }
+  "generated_code": "def remove_duplicates(lst):\n    return list(set(lst))",
+  "explanation": "set()을 사용하여 중복을 제거하고 다시 리스트로 변환합니다.",
+  "status": "success"
 }
 ```
 
-### 사용자 프로필 설정
+#### **스트리밍 코드 생성**
 
-```typescript
-interface UserProfile {
-  pythonSkillLevel: "beginner" | "intermediate" | "advanced" | "expert";
-  codeOutputStructure: "minimal" | "standard" | "detailed" | "comprehensive";
-  explanationStyle: "brief" | "standard" | "detailed" | "educational";
-  projectContext:
-    | "web_development"
-    | "data_science"
-    | "automation"
-    | "general_purpose";
+```http
+POST /api/v1/generate-code-streaming
+Content-Type: application/json
+X-API-Key: your-api-key
+
+{
+  "user_question": "Flask 웹 애플리케이션 만들어줘",
+  "language": "python"
 }
 ```
 
-## 📡 **API 통신**
+**스트리밍 응답:**
 
-### API 클라이언트
-
-```typescript
-// API 요청 예시
-const apiClient = new HAPAAPIClient();
-
-// 코드 생성
-const response = await apiClient.generateCode({
-  user_question: "리스트 정렬 함수",
-  code_context: editor.document.getText(),
-  language: "python",
-  user_profile: userProfile,
-});
-
-// 스트리밍 응답
-await apiClient.generateCodeStreaming("Flask 웹앱 만들기", currentCode, {
-  onChunk: (chunk) => updateUI(chunk),
-  onComplete: (code) => insertCode(code),
-});
+```
+data: {"type": "start", "content": "", "sequence": 0}
+data: {"type": "code", "content": "from flask import Flask\n", "sequence": 1}
+data: {"type": "code", "content": "app = Flask(__name__)\n", "sequence": 2}
+data: {"type": "done", "content": "", "sequence": 3}
 ```
 
-### 오프라인 지원
+### ⚡ **자동완성 API**
 
-```typescript
-// 오프라인 큐 시스템
-class OfflineService {
-  addToQueue(type: "completion" | "analysis" | "generation", payload: any) {
-    // 네트워크 복구 시 자동 처리
-  }
+```http
+POST /api/v1/complete-code
+Content-Type: application/json
+X-API-Key: your-api-key
 
-  getCachedResponse(requestPayload: any): any | null {
-    // 캐시된 응답 반환
-  }
+{
+  "prefix": "def fibonacci(",
+  "language": "python",
+  "cursor_position": 13,
+  "context": "수학 함수 라이브러리"
 }
 ```
 
-## 🧪 **테스트**
+**응답:**
 
-```bash
-# 단위 테스트
-npm test
-
-# 통합 테스트
-npm run test:integration
-
-# 커버리지 리포트
-npm run test:coverage
-
-# E2E 테스트 (VSCode 환경)
-npm run test:e2e
-```
-
----
-
-# 🌐 React Web Application
-
-## ✨ **주요 기능**
-
-- 🏠 **랜딩 페이지**: HAPA 소개 및 기능 설명
-- 🎮 **라이브 데모**: 브라우저에서 직접 AI 코딩 체험
-- 📊 **사용자 대시보드**: 개인 통계 및 설정 관리
-- 🎨 **반응형 디자인**: 모든 디바이스에서 최적화된 UI
-- ♿ **접근성 지원**: WCAG 2.1 AA 준수
-- 🌙 **다크 모드**: 시스템 설정 따라 자동 전환
-
-## 🚀 **설치 및 실행**
-
-### 개발 환경
-
-```bash
-# 1. 디렉토리 이동
-cd Frontend/landing-page
-
-# 2. 의존성 설치
-npm install
-
-# 3. 개발 서버 시작
-npm start
-
-# 4. 브라우저에서 확인
-# http://localhost:3000
-```
-
-### 프로덕션 빌드
-
-```bash
-# 1. 빌드 생성
-npm run build
-
-# 2. 정적 파일 서빙
-npm install -g serve
-serve -s build
-
-# 3. Docker 빌드
-docker build -t hapa-frontend .
-docker run -p 3000:80 hapa-frontend
-```
-
-## 🏗️ **아키텍처**
-
-### 컴포넌트 구조
-
-```
-src/components/
-├── 📁 layout/                  # 레이아웃 컴포넌트
-│   ├── Header.tsx             # 네비게이션 헤더
-│   ├── Footer.tsx             # 푸터
-│   └── Layout.tsx             # 메인 레이아웃
-├── 📁 pages/                  # 페이지 컴포넌트
-│   ├── HomePage.tsx           # 메인 랜딩 페이지
-│   ├── AboutPage.tsx          # 소개 페이지
-│   └── GuidePage.tsx          # 사용법 가이드
-├── 📁 ui/                     # UI 컴포넌트
-│   ├── ThunderButton.tsx      # 커스텀 버튼
-│   ├── ThunderCard.tsx        # 카드 컴포넌트
-│   ├── ThunderDemo.tsx        # 데모 인터페이스
-│   └── LazyImage.tsx          # 지연 로딩 이미지
-└── ErrorBoundary.tsx          # 에러 경계
-```
-
-### 상태 관리
-
-```typescript
-// AppStore - Zustand 기반 전역 상태
-interface AppState {
-  theme: "light" | "dark" | "system";
-  user: User | null;
-  isLoading: boolean;
-  error: string | null;
-
-  setTheme: (theme: AppState["theme"]) => void;
-  setUser: (user: User) => void;
-  setLoading: (loading: boolean) => void;
-  setError: (error: string | null) => void;
+```json
+{
+  "completions": [
+    {
+      "code": "n):\n    if n <= 1:\n        return n\n    return fibonacci(n-1) + fibonacci(n-2)",
+      "label": "피보나치 순열 (재귀)",
+      "confidence": 0.95,
+      "category": "function",
+      "complexity": "simple"
+    }
+  ],
+  "status": "success"
 }
-
-const useAppStore = create<AppState>((set) => ({
-  theme: "system",
-  user: null,
-  isLoading: false,
-  error: null,
-
-  setTheme: (theme) => set({ theme }),
-  setUser: (user) => set({ user }),
-  setLoading: (loading) => set({ isLoading: loading }),
-  setError: (error) => set({ error }),
-}));
 ```
 
-### 커스텀 훅
+### 🔍 **검증 및 분석 API**
 
-```typescript
-// 성능 최적화 훅
-export const useDebounce = <T extends (...args: any[]) => any>(
-  callback: T,
-  delay: number
-): T => {
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+#### **코드 검증**
 
-  return useCallback(
-    (...args: Parameters<T>) => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
+```http
+POST /api/v1/validate-code
+Content-Type: application/json
+X-API-Key: your-api-key
 
-      timeoutRef.current = setTimeout(() => {
-        callback(...args);
-      }, delay);
-    },
-    [callback, delay]
-  ) as T;
-};
-
-// 접근성 훅
-export const useAccessibility = () => {
-  const [isHighContrast, setIsHighContrast] = useState(false);
-  const [fontSize, setFontSize] = useState("medium");
-
-  // 접근성 설정 관리
-};
+{
+  "code": "def hello():\n    print('Hello World')",
+  "language": "python",
+  "validation_type": "syntax"
+}
 ```
 
-## 🎨 **스타일링**
+#### **코드 분석**
 
-### Tailwind CSS 설정
+```http
+POST /api/v1/analyze-code
+Content-Type: application/json
+X-API-Key: your-api-key
 
-```javascript
-// tailwind.config.js
-module.exports = {
-  content: ["./src/**/*.{js,jsx,ts,tsx}"],
-  darkMode: "class",
-  theme: {
-    extend: {
-      colors: {
-        thunder: {
-          50: "#f0f9ff",
-          500: "#0ea5e9",
-          900: "#0c4a6e",
-        },
-      },
-      animation: {
-        fadeIn: "fadeIn 0.5s ease-in-out",
-        slideUp: "slideUp 0.3s ease-out",
-      },
-    },
+{
+  "code": "def process_data(data): return [x*2 for x in data]",
+  "analysis_type": "performance"
+}
+```
+
+### 📊 **피드백 및 히스토리 API**
+
+#### **피드백 제출**
+
+```http
+POST /api/v1/submit-feedback
+Content-Type: application/json
+X-API-Key: your-api-key
+
+{
+  "type": "positive",
+  "comment": "생성된 코드가 정확하고 효율적입니다",
+  "code_snippet": "def remove_duplicates(lst): return list(set(lst))",
+  "user_question": "중복 제거 함수"
+}
+```
+
+#### **히스토리 조회**
+
+```http
+GET /api/v1/user/history?limit=10
+X-API-Key: your-api-key
+```
+
+### 🔧 **시스템 API**
+
+#### **헬스 체크**
+
+```http
+GET /health
+```
+
+**응답:**
+
+```json
+{
+  "status": "healthy",
+  "version": "0.4.0",
+  "timestamp": "2024-12-28T10:00:00Z",
+  "system_info": {
+    "cpu_usage": 15.2,
+    "memory_usage": 45.8,
+    "disk_usage": 23.1
   },
-  plugins: [require("@tailwindcss/forms"), require("@tailwindcss/typography")],
-};
+  "environment_validation": {
+    "status": "healthy",
+    "issues": {
+      "critical": 0,
+      "errors": 0,
+      "warnings": 1
+    }
+  }
+}
 ```
 
-### 테마 시스템
+#### **메트릭 조회**
 
-```css
-/* styles/thunderClient.css */
-.theme-light {
-  --color-primary: #0ea5e9;
-  --color-background: #ffffff;
-  --color-text: #1f2937;
-}
+```http
+GET /metrics
+```
 
-.theme-dark {
-  --color-primary: #38bdf8;
-  --color-background: #111827;
-  --color-text: #f9fafb;
-}
+## 🔒 **보안**
 
-.theme-high-contrast {
-  --color-primary: #000000;
-  --color-background: #ffffff;
-  --color-text: #000000;
-}
+### API 키 인증
+
+```python
+# API 키 생성 (개발용)
+from app.core.security import create_demo_api_key
+
+demo_key = create_demo_api_key()
+print(f"Demo API Key: {demo_key['api_key']}")
+```
+
+### Rate Limiting
+
+- **기본 제한**: 100 요청/시간
+- **코드 생성**: 50 요청/시간
+- **스트리밍**: 10 동시 연결
+- **IP별 제한**: 1000 요청/일
+
+### 보안 헤더
+
+```python
+# 운영 환경에서 자동 적용
+ENABLE_SECURITY_HEADERS=true
+ENABLE_CSRF_PROTECTION=true
+```
+
+## 📊 **모니터링**
+
+### Prometheus 메트릭
+
+```bash
+# 메트릭 확인
+curl http://localhost:8000/metrics
+
+# 주요 메트릭
+- hapa_requests_total: 총 요청 수
+- hapa_request_duration_seconds: 요청 처리 시간
+- hapa_cache_hits_total: 캐시 히트 수
+- hapa_ai_model_requests_total: AI 모델 요청 수
+```
+
+### 로깅
+
+```python
+# 로그 레벨별 설정
+LOG_LEVEL=DEBUG    # 개발: DEBUG, 운영: WARNING
+LOG_FILE_ROTATION=true
+LOG_MAX_SIZE=50MB
+```
+
+### 성능 통계
+
+```http
+GET /stats
 ```
 
 ## 🧪 **테스트**
 
-### 테스트 구조
+### 단위 테스트
 
 ```bash
-# Jest + Testing Library
-npm test
+# 전체 테스트 실행
+python -m pytest tests/ -v
 
-# 개별 컴포넌트 테스트
-npm test HomePage.test.tsx
+# 커버리지 포함
+python -m pytest tests/ --cov=app --cov-report=html
 
-# 커버리지 리포트
-npm test -- --coverage
-
-# E2E 테스트 (Playwright)
-npm run test:e2e
+# 특정 모듈 테스트
+python -m pytest tests/test_code_generation.py -v
 ```
 
-### 테스트 예시
+### 통합 테스트
 
-```typescript
-// HomePage.test.tsx
-import { render, screen } from "@testing-library/react";
-import { HomePage } from "../HomePage";
+```bash
+# 통합 테스트 실행
+python test_integration.py
 
-describe("HomePage", () => {
-  test("renders hero section", () => {
-    render(<HomePage />);
+# API 테스트
+python -m pytest tests/test_api.py -v
+```
 
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("HAPA");
-    expect(screen.getByText(/AI 코딩 어시스턴트/)).toBeInTheDocument();
-  });
+### 성능 테스트
 
-  test("demo button works", async () => {
-    const user = userEvent.setup();
-    render(<HomePage />);
+```bash
+# AI 모델 보안 테스트
+python test_ai_model_security.py
 
-    const demoButton = screen.getByRole("button", { name: /데모 시작/ });
-    await user.click(demoButton);
-
-    expect(screen.getByTestId("demo-interface")).toBeVisible();
-  });
-});
+# 부하 테스트 (개발 도구)
+# locust -f tests/locustfile.py --host=http://localhost:8000
 ```
 
 ## 🚀 **배포**
 
-### Vercel 배포
-
-```bash
-# 1. Vercel CLI 설치
-npm install -g vercel
-
-# 2. 프로젝트 배포
-vercel
-
-# 3. 환경 변수 설정
-vercel env add REACT_APP_API_URL
-```
-
 ### Docker 배포
 
-```dockerfile
-# Dockerfile
-FROM node:18-alpine AS builder
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY . .
-RUN npm run build
-
-FROM nginx:alpine
-COPY --from=builder /app/build /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/nginx.conf
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+```yaml
+# docker-compose.yml
+version: "3.8"
+services:
+  backend:
+    build: ./Backend
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - SECRET_KEY=${SECRET_KEY}
+      - AI_MODEL_API_KEY=${AI_MODEL_API_KEY}
+    volumes:
+      - ./data:/app/data
 ```
 
-### GitHub Pages 배포
+### 프로덕션 배포
 
 ```bash
-# 1. gh-pages 설치
-npm install --save-dev gh-pages
+# 1. 환경 변수 검증
+python -c "from app.services.environment_validator import validate_environment_on_startup; validate_environment_on_startup()"
 
-# 2. package.json에 스크립트 추가
-"scripts": {
-  "predeploy": "npm run build",
-  "deploy": "gh-pages -d build"
-}
+# 2. 운영 서버 시작
+uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
 
-# 3. 배포 실행
-npm run deploy
-```
-
----
-
-# 🔧 공통 개발 도구
-
-## 📦 **의존성 관리**
-
-### VSCode Extension
-
-```json
-{
-  "dependencies": {
-    "axios": "^1.6.2",
-    "vscode": "^1.85.0"
-  },
-  "devDependencies": {
-    "@types/node": "^20.x",
-    "@types/vscode": "^1.85.0",
-    "typescript": "^5.3.0",
-    "eslint": "^8.56.0"
-  }
-}
-```
-
-### React Web App
-
-```json
-{
-  "dependencies": {
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "zustand": "^4.4.7",
-    "tailwindcss": "^3.4.0"
-  },
-  "devDependencies": {
-    "@testing-library/react": "^14.1.2",
-    "@testing-library/jest-dom": "^6.1.5",
-    "playwright": "^1.40.0"
-  }
-}
-```
-
-## 🔍 **코드 품질**
-
-### ESLint 설정
-
-```javascript
-// eslint.config.mjs
-export default [
-  {
-    files: ["**/*.{ts,tsx}"],
-    rules: {
-      "@typescript-eslint/no-unused-vars": "error",
-      "@typescript-eslint/no-explicit-any": "warn",
-      "react-hooks/exhaustive-deps": "error",
-    },
-  },
-];
-```
-
-### Prettier 설정
-
-```json
-{
-  "semi": false,
-  "singleQuote": false,
-  "tabWidth": 2,
-  "trailingComma": "es5",
-  "printWidth": 80
-}
+# 3. 모니터링 확인
+curl http://localhost:8000/health
+curl http://localhost:9090/metrics
 ```
 
 ## 🐛 **트러블슈팅**
 
-### VSCode Extension
+### 자주 발생하는 문제
+
+#### 1. 환경 변수 오류
 
 ```bash
-# 1. 개발 호스트에서 콘솔 확인
-# Ctrl+Shift+P > "Developer: Reload Window"
-
-# 2. 확장 로그 확인
-# Help > Toggle Developer Tools > Console
-
-# 3. 패키징 오류
-vsce package --debug
+# 환경 변수 검증
+python -c "from app.services.environment_validator import environment_validator; results = environment_validator.validate_all(); print(results)"
 ```
 
-### React App
+#### 2. AI 모델 연결 실패
 
 ```bash
-# 1. 빌드 오류 해결
-rm -rf node_modules package-lock.json
-npm install
-
-# 2. 타입 오류 확인
-npm run type-check
-
-# 3. 메모리 부족 오류
-export NODE_OPTIONS="--max_old_space_size=4096"
-npm run build
+# API 키 확인
+curl -H "Authorization: Bearer $AI_MODEL_API_KEY" https://api.openai.com/v1/models
 ```
 
-## 📚 **추가 리소스**
+#### 3. 메모리 사용량 증가
 
-### VSCode Extension
+```python
+# 캐시 정리
+import requests
+requests.delete("http://localhost:8000/api/v1/cache/clear")
+```
 
-- [VSCode Extension API](https://code.visualstudio.com/api)
-- [Webview API Guide](https://code.visualstudio.com/api/extension-guides/webview)
-- [Extension Marketplace](https://marketplace.visualstudio.com/)
+#### 4. 포트 충돌
 
-### React
+```bash
+# 포트 사용 확인
+lsof -i :8000
+kill -9 <PID>
+```
 
-- [React 19 Documentation](https://react.dev/)
-- [Tailwind CSS](https://tailwindcss.com/docs)
-- [Testing Library](https://testing-library.com/docs/react-testing-library/intro/)
+### 로그 분석
 
----
+```bash
+# 에러 로그 확인
+grep "ERROR" logs/app.log | tail -20
+
+# 성능 이슈 확인
+grep "SLOW" logs/app.log | tail -10
+```
+
+## 📚 **추가 문서**
+
+- [📋 **API 명세서**](../docs/backend/api_specification_v1.0.md)
+- [🔧 **환경 설정 가이드**](../docs/backend/README_Environment_Setup.md)
+- [🚀 **배포 가이드**](../docs/backend/README_Deploy.md)
+- [📊 **성능 최적화**](../docs/backend/performance_optimization_report.md)
+- [🔒 **보안 가이드**](../docs/backend/security_enhancement_report.md)
 
 ## 🤝 **기여하기**
 
 1. **포크** 후 feature 브랜치 생성
-2. **개발 가이드라인** 준수
-3. **테스트 작성** 및 통과 확인
+2. **코드 수정** 및 테스트 작성
+3. **Lint 검사** 통과 확인
 4. **Pull Request** 생성
 
-### 커밋 컨벤션
+### 코드 스타일
 
-```
-feat(extension): 새로운 자동완성 기능 추가
-fix(web): 다크모드 토글 버그 수정
-docs(readme): 설치 가이드 업데이트
-style(css): 버튼 스타일 개선
-test(unit): HomePage 컴포넌트 테스트 추가
+```bash
+# 코드 포맷팅
+black app/
+isort app/
+
+# 린트 검사
+flake8 app/
+mypy app/
 ```
 
 ---
 
-**개발팀**: 한컴AI Frontend Team  
+**개발팀**: 한컴AI Backend Team  
 **버전**: v0.4.0  
-**문의**: frontend-dev@hancom.com
+**문의**: backend-dev@hancom.com
