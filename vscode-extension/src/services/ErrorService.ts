@@ -1,13 +1,7 @@
-/**
- * HAPA VSCode Extension - 에러 핸들링 서비스
- * @fileoverview 모든 에러를 중앙에서 일관성 있게 처리
- */
-
 import * as vscode from "vscode";
-import { MessageType } from "../types";
 
 /**
- * 에러 카테고리
+ * 에러 카테고리 열거형
  */
 export enum ErrorCategory {
   API = "api",
@@ -19,7 +13,7 @@ export enum ErrorCategory {
 }
 
 /**
- * 에러 심각도
+ * 에러 심각도 열거형
  */
 export enum ErrorSeverity {
   LOW = "low",
@@ -29,7 +23,7 @@ export enum ErrorSeverity {
 }
 
 /**
- * 에러 정보
+ * 에러 정보 인터페이스
  */
 export interface ErrorInfo {
   id: string;
@@ -41,10 +35,11 @@ export interface ErrorInfo {
   originalError?: Error;
   userAction?: string;
   retryable: boolean;
+  stack?: string;
 }
 
 /**
- * 에러 핸들링 옵션
+ * 에러 처리 옵션 인터페이스
  */
 export interface ErrorHandlingOptions {
   showToUser?: boolean;
@@ -56,7 +51,7 @@ export interface ErrorHandlingOptions {
 }
 
 /**
- * 에러 핸들링 서비스
+ * 에러 서비스 클래스
  */
 export class ErrorService {
   private static instance: ErrorService;
@@ -76,7 +71,7 @@ export class ErrorService {
   }
 
   /**
-   * 에러 처리
+   * 에러 처리 메인 메서드
    */
   public async handleError(
     error: Error | string,
@@ -86,7 +81,7 @@ export class ErrorService {
   ): Promise<void> {
     const errorInfo = this.createErrorInfo(error, category, severity);
 
-    // 에러 히스토리에 추가
+    // 히스토리에 추가
     this.addToHistory(errorInfo);
 
     // 콘솔 로깅
@@ -115,10 +110,8 @@ export class ErrorService {
   ): Promise<void> {
     const category = this.determineAPIErrorCategory(error);
     const severity = this.determineAPIErrorSeverity(error);
-
     const enhancedOptions: ErrorHandlingOptions = {
       ...options,
-      showRetryOption: true,
       customMessage: this.getAPIErrorMessage(error),
     };
 
@@ -169,26 +162,6 @@ export class ErrorService {
   }
 
   /**
-   * 사용자 입력 에러 처리
-   */
-  public async handleUserInputError(
-    error: Error | string,
-    options: ErrorHandlingOptions = {}
-  ): Promise<void> {
-    const enhancedOptions: ErrorHandlingOptions = {
-      ...options,
-      showRetryOption: false,
-    };
-
-    await this.handleError(
-      error,
-      ErrorCategory.USER_INPUT,
-      ErrorSeverity.LOW,
-      enhancedOptions
-    );
-  }
-
-  /**
    * 에러 정보 생성
    */
   private createErrorInfo(
@@ -207,6 +180,7 @@ export class ErrorService {
       timestamp: new Date(),
       originalError,
       retryable: this.isRetryableError(category, originalError),
+      stack: typeof error === "string" ? undefined : error.stack,
     };
   }
 
@@ -221,9 +195,10 @@ export class ErrorService {
    * 재시도 가능한 에러인지 확인
    */
   private isRetryableError(category: ErrorCategory, error?: Error): boolean {
-    if (category === ErrorCategory.NETWORK) {return true;}
+    if (category === ErrorCategory.NETWORK) {
+      return true;
+    }
     if (category === ErrorCategory.API && error) {
-      // 일시적인 서버 오류는 재시도 가능
       const message = error.message.toLowerCase();
       return (
         message.includes("timeout") ||
@@ -320,37 +295,39 @@ export class ErrorService {
     const message = options.customMessage || errorInfo.message;
     const actions: string[] = [];
 
-    // 액션 버튼 추가
     if (options.userAction) {
       actions.push(options.userAction);
     }
-
     if (options.showRetryOption && errorInfo.retryable) {
       actions.push("다시 시도");
     }
 
-    actions.push("무시");
-
-    // 심각도에 따른 표시 방법 결정
     let result: string | undefined;
 
     switch (errorInfo.severity) {
       case ErrorSeverity.CRITICAL:
+        result = await vscode.window.showErrorMessage(
+          `심각한 오류: ${message}`,
+          ...actions
+        );
+        break;
       case ErrorSeverity.HIGH:
         result = await vscode.window.showErrorMessage(message, ...actions);
         break;
       case ErrorSeverity.MEDIUM:
         result = await vscode.window.showWarningMessage(message, ...actions);
         break;
-      default:
+      case ErrorSeverity.LOW:
         result = await vscode.window.showInformationMessage(
           message,
           ...actions
         );
+        break;
     }
 
-    // 사용자 액션 처리
-    await this.handleUserAction(result, errorInfo, options);
+    if (result) {
+      await this.handleUserAction(result, errorInfo, options);
+    }
   }
 
   /**
@@ -361,21 +338,14 @@ export class ErrorService {
     errorInfo: ErrorInfo,
     options: ErrorHandlingOptions
   ): Promise<void> {
-    if (!action) {return;}
+    if (!action) return;
 
-    switch (action) {
-      case "다시 시도":
-        // 재시도 로직은 호출자가 처리
-        break;
-      case "HAPA 설정 열기":
-        await vscode.commands.executeCommand(
-          "workbench.action.openSettings",
-          "hapa"
-        );
-        break;
-      case options.userAction:
-        // 커스텀 액션은 호출자가 처리
-        break;
+    if (action === "다시 시도") {
+      console.log("사용자가 재시도를 요청했습니다.");
+    } else if (action === "HAPA 설정 열기") {
+      await vscode.commands.executeCommand("hapa.showSettings");
+    } else if (action === options.userAction) {
+      console.log(`사용자 액션 실행: ${action}`);
     }
   }
 
@@ -383,41 +353,34 @@ export class ErrorService {
    * 텔레메트리 전송
    */
   private async sendTelemetry(errorInfo: ErrorInfo): Promise<void> {
-    // 프라이버시를 고려하여 민감한 정보는 제외
-    const telemetryData = {
-      errorId: errorInfo.id,
+    console.log("텔레메트리 데이터:", {
+      id: errorInfo.id,
       category: errorInfo.category,
       severity: errorInfo.severity,
-      timestamp: errorInfo.timestamp.toISOString(),
-      // 개인 정보는 포함하지 않음
-    };
-
-    // 실제 텔레메트리 서비스로 전송
-    // 현재는 로그만 남김
-    console.log("[TELEMETRY]", telemetryData);
+      timestamp: errorInfo.timestamp,
+    });
   }
 
   /**
-   * 에러 히스토리에 추가
+   * 히스토리에 추가
    */
   private addToHistory(errorInfo: ErrorInfo): void {
-    this.errorHistory.unshift(errorInfo);
+    this.errorHistory.push(errorInfo);
 
-    // 최대 크기 제한
     if (this.errorHistory.length > this.maxHistorySize) {
-      this.errorHistory = this.errorHistory.slice(0, this.maxHistorySize);
+      this.errorHistory = this.errorHistory.slice(-this.maxHistorySize);
     }
   }
 
   /**
-   * 에러 히스토리 가져오기
+   * 에러 히스토리 조회
    */
   public getErrorHistory(): readonly ErrorInfo[] {
-    return this.errorHistory;
+    return [...this.errorHistory];
   }
 
   /**
-   * 특정 카테고리의 에러 통계
+   * 에러 통계 조회
    */
   public getErrorStats(): Record<ErrorCategory, number> {
     const stats: Record<ErrorCategory, number> = {
@@ -429,15 +392,15 @@ export class ErrorService {
       [ErrorCategory.UNKNOWN]: 0,
     };
 
-    for (const error of this.errorHistory) {
+    this.errorHistory.forEach((error) => {
       stats[error.category]++;
-    }
+    });
 
     return stats;
   }
 
   /**
-   * 에러 히스토리 초기화
+   * 히스토리 초기화
    */
   public clearHistory(): void {
     this.errorHistory = [];
@@ -451,8 +414,3 @@ export class ErrorService {
     return this.errorHistory.some((error) => error.timestamp > cutoff);
   }
 }
-
-/**
- * 에러 서비스 인스턴스 내보내기
- */
-export const errorService = ErrorService.getInstance();

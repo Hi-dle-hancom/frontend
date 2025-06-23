@@ -2,9 +2,17 @@ import React from "react";
 
 const HomePage: React.FC = () => {
   return (
-    <div className="vscode-bg-secondary min-h-screen">
+    <div
+      className="vscode-bg-secondary min-h-screen"
+      data-testid="home-page"
+      role="main"
+    >
       {/* Hero Section - VSCode Extension 스타일 */}
-      <section className="thunder-container py-16">
+      <section
+        className="thunder-container py-16"
+        data-testid="hero-section"
+        role="banner"
+      >
         <div className="text-center mb-16">
           {/* HAPA 브랜드 아이콘 - Extension 스타일 */}
           <div className="flex justify-center mb-8">

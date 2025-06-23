@@ -236,10 +236,10 @@ export function deepMerge<T extends Record<string, any>>(
   target: T,
   source: Partial<T>
 ): T {
-  const result = deepClone(target);
+  const result: any = { ...target };
 
   for (const key in source) {
-    if (source.hasOwnProperty(key)) {
+    if (Object.prototype.hasOwnProperty.call(source, key)) {
       const sourceValue = source[key];
       const targetValue = result[key];
 
@@ -252,19 +252,22 @@ export function deepMerge<T extends Record<string, any>>(
         !Array.isArray(targetValue)
       ) {
         result[key] = deepMerge(targetValue, sourceValue);
-      } else {
+      } else if (sourceValue !== undefined) {
         result[key] = sourceValue;
       }
     }
   }
 
-  return result;
+  return result as T;
 }
 
 /**
  * 객체에서 특정 키들만 선택
  */
-export function pick<T, K extends keyof T>(obj: T, keys: K[]): Pick<T, K> {
+export function pick<T extends Record<string, any>, K extends keyof T>(
+  obj: T,
+  keys: K[]
+): Pick<T, K> {
   const result = {} as Pick<T, K>;
   keys.forEach((key) => {
     if (key in obj) {
@@ -277,7 +280,10 @@ export function pick<T, K extends keyof T>(obj: T, keys: K[]): Pick<T, K> {
 /**
  * 객체에서 특정 키들 제외
  */
-export function omit<T, K extends keyof T>(obj: T, keys: K[]): Omit<T, K> {
+export function omit<T extends Record<string, any>, K extends keyof T>(
+  obj: T,
+  keys: K[]
+): Omit<T, K> {
   const result = { ...obj };
   keys.forEach((key) => {
     delete result[key];
@@ -341,7 +347,7 @@ export async function copyToClipboard(text: string): Promise<boolean> {
       return success;
     }
   } catch (error) {
-    console.error("Failed to copy text: ", error);
+    // 클립보드 복사 실패는 사용자에게 적절한 UI 피드백 제공
     return false;
   }
 }

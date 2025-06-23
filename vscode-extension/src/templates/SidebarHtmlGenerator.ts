@@ -1012,6 +1012,29 @@ export class SidebarHtmlGenerator {
       background-color: var(--vscode-button-secondaryHoverBackground);
     }
     
+    .continue-btn {
+      background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);
+      color: white;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .continue-btn:hover {
+      background: linear-gradient(135deg, #F57C00 0%, #E65100 100%);
+      transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(255, 152, 0, 0.3);
+    }
+    
+    .continue-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    
+    .continue-btn:disabled:hover {
+      transform: none;
+      box-shadow: none;
+    }
+    
     .explanation {
       font-size: 12px;
       color: var(--vscode-foreground);
@@ -1409,7 +1432,7 @@ export class SidebarHtmlGenerator {
     <div class="sidebar-header hapa-animate-fade-in-down">
       <div class="sidebar-title">
         <div class="sidebar-icon hapa-hover-scale">H</div>
-        HAPA AI Assistant
+        HAPA
       </div>
       <div class="header-actions hapa-animate-fade-in-right hapa-animate-delay-100">
         <div class="connection-status">
@@ -1454,12 +1477,11 @@ export class SidebarHtmlGenerator {
       <div class="request-section hapa-animate-fade-in-up hapa-animate-delay-300">
         <div class="input-group">
           <div class="input-header">
-            <label class="input-label hapa-animate-fade-in hapa-animate-delay-400">Ask AI Assistant</label>
+            <label class="input-label hapa-animate-fade-in hapa-animate-delay-400">Ask HAPA</label>
             <!-- 코드 맥락 표시 영역 -->
             <div class="code-context-indicator hapa-animate-fade-in hapa-animate-delay-600" id="codeContextIndicator">
-              <div class="context-icon">📝</div>
               <div class="context-info">
-                <div class="context-message">편집기가 열려있지 않습니다</div>
+                <div class="context-message">편집기가 열려있지 않습니다.</div>
                 <div class="context-details"></div>
               </div>
             </div>
@@ -1501,9 +1523,12 @@ export class SidebarHtmlGenerator {
               <span class="codicon codicon-insert"></span>
               삽입
             </button>
+            <button class="action-btn continue-btn hapa-button" id="continueBtn" onclick="continueResponse()" style="display: none;">
+              <span class="codicon codicon-arrow-right"></span>
+              이어서 응답
+            </button>
           </div>
           <div class="response-empty hapa-animate-fade-in" id="responseEmpty">
-            <div class="empty-icon">⚡</div>
             <div class="empty-title hapa-theme-text-primary">응답 없음</div>
             <div class="empty-description hapa-theme-text-secondary">
               전송 버튼을 클릭하여 AI 요청을 실행하세요.
@@ -1770,6 +1795,9 @@ export class SidebarHtmlGenerator {
       isStreaming = false;
       hideStreamingIndicator();
       
+      // 토큰 제한 감지 로직
+      const isTokenLimited = detectTokenLimit(currentStreamingContent);
+      
       // 응답 완료 시 히스토리에 질문 저장 (중복 검사 포함)
       if (window.currentQuestion && currentStreamingContent) {
         addToHistory(window.currentQuestion, currentStreamingContent);
@@ -1798,6 +1826,18 @@ export class SidebarHtmlGenerator {
           timeIndicator.innerHTML = \`<small style="color: var(--hapa-description-foreground); font-size: 11px; margin-top: 8px; display: block;">⏱️ 응답 시간: \${responseTime}초</small>\`;
           responseDisplay.appendChild(timeIndicator);
         }
+        
+        // 토큰 제한 경고 메시지 추가
+        if (isTokenLimited) {
+          const tokenLimitWarning = document.createElement('div');
+          tokenLimitWarning.className = 'token-limit-warning hapa-animate-fade-in';
+          tokenLimitWarning.innerHTML = \`
+            <div style="background: var(--hapa-warning-light); color: var(--hapa-warning); padding: 8px; border-radius: 4px; font-size: 11px; margin-top: 8px; border-left: 3px solid var(--hapa-warning);">
+              ⚠️ 응답이 토큰 제한으로 인해 중단되었을 가능성이 있습니다.
+            </div>
+          \`;
+          responseDisplay.appendChild(tokenLimitWarning);
+        }
       }
       
       // 응답 액션 버튼 표시 (애니메이션과 함께)
@@ -1805,6 +1845,17 @@ export class SidebarHtmlGenerator {
       if (responseActions) {
         responseActions.style.display = 'flex';
         responseActions.classList.add('hapa-animate-fade-in-up');
+        
+        // 토큰 제한이 감지된 경우 이어가기 버튼 표시
+        const continueBtn = document.getElementById('continueBtn');
+        if (continueBtn) {
+          if (isTokenLimited) {
+            continueBtn.style.display = 'inline-flex';
+            continueBtn.classList.add('hapa-animate-bounce-in');
+          } else {
+            continueBtn.style.display = 'none';
+          }
+        }
       }
       
       // 코드 삽입 강조 효과를 위한 스타일 추가
@@ -2332,6 +2383,89 @@ export class SidebarHtmlGenerator {
     // body 요소 관찰 시작
     if (document.body) {
       observer.observe(document.body, { childList: true, subtree: true });
+    }
+    
+         /**
+      * 토큰 제한 감지 함수
+      * 응답 내용을 분석하여 토큰 제한으로 인한 중단 여부 판단
+      */
+     function detectTokenLimit(content) {
+       if (!content || typeof content !== 'string') {
+         return false;
+       }
+       
+       // 토큰 제한 감지 패턴들
+       const patterns = [
+         '\\\\.\\\\.\\\\.\\\\s*$',                    // 마지막이 ... 으로 끝나는 경우
+         '[^\\\\\.!?]\\\\s*$',                        // 문장이 완전하지 않게 끝나는 경우
+         '\`\`\`[^\`]*$',                             // 코드 블록이 닫히지 않은 경우
+         'def\\\\s+\\\\w+\\\\([^)]*$',                // 함수 정의가 중간에 끝난 경우
+         'class\\\\s+\\\\w+\\\\([^)]*$',              // 클래스 정의가 중간에 끝난 경우
+         'if\\\\s+.*:\\\\s*$',                        // if 문이 미완성인 경우
+         'for\\\\s+.*:\\\\s*$',                       // for 문이 미완성인 경우
+         'while\\\\s+.*:\\\\s*$',                     // while 문이 미완성인 경우
+         'try\\\\s*:\\\\s*$',                         // try 문이 미완성인 경우
+         'with\\\\s+.*:\\\\s*$',                      // with 문이 미완성인 경우
+         'return\\\\s*$',                             // return 문이 미완성인 경우
+         'import\\\\s+[\\\\w,\\\\s]*$',               // import 문이 미완성인 경우
+         'from\\\\s+\\\\w+\\\\s+import\\\\s*$'       // from import 문이 미완성인 경우
+       ];
+       
+       // 코드 길이가 상당히 긴 경우 (1500자 이상)도 토큰 제한 가능성
+       const isLongResponse = content.length > 1500;
+       
+       // 패턴 매칭으로 토큰 제한 감지
+       const trimmedContent = content.trim();
+       const hasTokenLimitPattern = patterns.some(pattern => {
+         const regex = new RegExp(pattern);
+         return regex.test(trimmedContent);
+       });
+       
+       // 코드 블록 개수와 닫힘 여부 확인
+       const codeBlockMatches = content.match(/\`\`\`/g);
+       const codeBlockCount = codeBlockMatches ? codeBlockMatches.length : 0;
+       const isCodeBlockUnclosed = codeBlockCount % 2 !== 0;
+       
+       return hasTokenLimitPattern || (isLongResponse && isCodeBlockUnclosed);
+     }
+    
+    /**
+     * 응답 이어가기 기능
+     * 기존 응답에 추가로 응답을 요청
+     */
+    function continueResponse() {
+      if (!currentStreamingContent) {
+        vscode.postMessage({
+          command: 'showError',
+          message: '이어갈 응답이 없습니다.'
+        });
+        return;
+      }
+      
+      // 이어가기 버튼 비활성화
+      const continueBtn = document.getElementById('continueBtn');
+      if (continueBtn) {
+        continueBtn.disabled = true;
+        continueBtn.innerHTML = '<span class="codicon codicon-loading codicon-modifier-spin"></span> 이어가는 중...';
+      }
+      
+      // 이어가기 요청 메시지 생성
+      const continuePrompt = "이전 응답을 계속해서 완성해주세요.";
+      
+      // 현재 응답을 임시 저장
+      const previousContent = currentStreamingContent;
+      
+      // 스트리밍 시작
+      isStreaming = true;
+      showStreamingIndicator();
+      requestStartTime = Date.now();
+      
+      // 이어가기 요청 전송
+      vscode.postMessage({
+        command: 'continueResponse',
+        previousContent: previousContent,
+        continuePrompt: continuePrompt
+      });
     }
   </script>
 </body>

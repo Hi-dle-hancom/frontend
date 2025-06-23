@@ -353,6 +353,89 @@ export class SidebarProvider extends BaseWebviewProvider {
         // 연결 새로고침 (상태 표시용)
         vscode.window.showInformationMessage("연결이 새로고침되었습니다.");
         return;
+      case "continueResponse":
+        // 응답 이어가기 처리
+        this.handleContinueResponse(
+          message.previousContent,
+          message.continuePrompt
+        );
+        return;
+    }
+  }
+
+  /**
+   * 응답 이어가기 처리
+   */
+  private async handleContinueResponse(
+    previousContent: string,
+    continuePrompt: string
+  ) {
+    if (!this._view?.webview) {
+      return;
+    }
+
+    // 이어가기 요청을 위한 프롬프트 구성
+    const fullPrompt = `${continuePrompt}
+
+이전 응답:
+${previousContent}
+
+위 내용에 이어서 완성해주세요.`;
+
+    // 현재 활성 편집기의 컨텍스트 가져오기
+    const activeEditor = vscode.window.activeTextEditor;
+    let codeContext = undefined;
+
+    if (
+      activeEditor &&
+      activeEditor.selection &&
+      !activeEditor.selection.isEmpty
+    ) {
+      codeContext = activeEditor.document.getText(activeEditor.selection);
+    }
+
+    // 스트리밍 콜백 설정
+    const callbacks: StreamingCallbacks = {
+      onStart: () => {
+        // 시작 신호는 UI에서 이미 처리됨
+      },
+
+      onChunk: (chunk: StreamingChunk) => {
+        if (this._view?.webview) {
+          this._view.webview.postMessage({
+            command: "streamingChunk",
+            chunk: chunk,
+          });
+        }
+      },
+
+      onComplete: (fullContent: string) => {
+        if (this._view?.webview) {
+          this._view.webview.postMessage({
+            command: "streamingComplete",
+            content: fullContent,
+          });
+        }
+      },
+
+      onError: (error: Error) => {
+        if (this._view?.webview) {
+          this._view.webview.postMessage({
+            command: "streamingError",
+            error: error.message,
+          });
+        }
+        vscode.window.showErrorMessage(`응답 이어가기 오류: ${error.message}`);
+      },
+    };
+
+    try {
+      await apiClient.generateCodeStreaming(fullPrompt, codeContext, callbacks);
+    } catch (error) {
+      console.error("응답 이어가기 실패:", error);
+      callbacks.onError?.(
+        error instanceof Error ? error : new Error("알 수 없는 오류")
+      );
     }
   }
 

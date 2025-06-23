@@ -160,7 +160,7 @@ export interface ErrorResponse {
   status: string;
   error_message: string;
   error_code?: string;
-  error_details?: Record<string, any>;
+  error_details?: Record<string, string | number | boolean | null>;
 }
 
 // ============================================================================
@@ -198,11 +198,22 @@ export interface StreamingCallbacks {
 export type MessageType = "info" | "warning" | "error" | "success";
 
 /**
+ * 웹뷰 메시지 데이터 타입
+ */
+export type WebviewMessageData =
+  | string
+  | number
+  | boolean
+  | null
+  | Record<string, unknown>
+  | Array<unknown>;
+
+/**
  * 웹뷰 메시지
  */
 export interface WebviewMessage {
   command: string;
-  data?: any;
+  data?: WebviewMessageData;
   timestamp?: string;
   messageId?: string;
 }
@@ -293,7 +304,7 @@ export interface WebviewProviderOptions {
 /**
  * 이벤트 핸들러
  */
-export type EventHandler<T = any> = (data: T) => void | Promise<void>;
+export type EventHandler<T = unknown> = (data: T) => void | Promise<void>;
 
 /**
  * 이벤트 구독 해제 함수
@@ -303,7 +314,7 @@ export type Unsubscribe = () => void;
 /**
  * 이벤트 에미터 인터페이스
  */
-export interface EventEmitter<T = any> {
+export interface EventEmitter<T = unknown> {
   on(event: string, handler: EventHandler<T>): Unsubscribe;
   emit(event: string, data: T): void;
   off(event: string, handler: EventHandler<T>): void;

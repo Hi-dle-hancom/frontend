@@ -1,22 +1,22 @@
 import React from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { AppProvider } from "./contexts/AppContext";
 import { Layout } from "./components/layout";
-import { HomePage, AboutPage, GuidePage } from "./components/pages";
+import { HomePage } from "./components/pages";
+import ErrorBoundary from "./components/ErrorBoundary";
 
 function App() {
   return (
-    <AppProvider>
-      <Router>
-        <Layout>
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/about" element={<AboutPage />} />
-            <Route path="/guide" element={<GuidePage />} />
-          </Routes>
-        </Layout>
-      </Router>
-    </AppProvider>
+    <div data-testid="app-root">
+      <ErrorBoundary>
+        <AppProvider>
+          <div data-testid="app-context-provider">
+            <Layout>
+              <HomePage />
+            </Layout>
+          </div>
+        </AppProvider>
+      </ErrorBoundary>
+    </div>
   );
 }
 

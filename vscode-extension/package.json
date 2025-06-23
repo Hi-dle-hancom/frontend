@@ -83,6 +83,74 @@
       {
         "command": "hapa.openUserSettings",
         "title": "HAPA: 사용자 설정"
+      },
+      {
+        "command": "hapa.showUsageReport",
+        "title": "HAPA: 사용 통계 보고서"
+      },
+      {
+        "command": "hapa.showTelemetryStats",
+        "title": "HAPA: 텔레메트리 상태"
+      },
+      {
+        "command": "hapa.toggleTelemetry",
+        "title": "HAPA: 텔레메트리 토글"
+      },
+      {
+        "command": "hapa.showAccessibilityReport",
+        "title": "HAPA: 접근성 보고서"
+      },
+      {
+        "command": "hapa.announceStatus",
+        "title": "HAPA: 현재 상태 안내"
+      },
+      {
+        "command": "hapa.readSelection",
+        "title": "HAPA: 선택 텍스트 읽기"
+      },
+      {
+        "command": "hapa.increaseFontSize",
+        "title": "HAPA: 폰트 크기 증가"
+      },
+      {
+        "command": "hapa.decreaseFontSize",
+        "title": "HAPA: 폰트 크기 감소"
+      },
+      {
+        "command": "hapa.toggleHighContrast",
+        "title": "HAPA: 고대비 모드 토글"
+      },
+      {
+        "command": "hapa.toggleKeyboardNavigation",
+        "title": "HAPA: 키보드 네비게이션 토글"
+      },
+      {
+        "command": "hapa.toggleScreenReader",
+        "title": "HAPA: 스크린 리더 모드 토글"
+      },
+      {
+        "command": "hapa.showResponsiveReport",
+        "title": "HAPA: 반응형 디자인 보고서"
+      },
+      {
+        "command": "hapa.showResponsiveCSS",
+        "title": "HAPA: 반응형 CSS 보기"
+      },
+      {
+        "command": "hapa.toggleResponsive",
+        "title": "HAPA: 반응형 디자인 토글"
+      },
+      {
+        "command": "hapa.setBreakpointMobile",
+        "title": "HAPA: 모바일 브레이크포인트 설정"
+      },
+      {
+        "command": "hapa.setBreakpointTablet",
+        "title": "HAPA: 태블릿 브레이크포인트 설정"
+      },
+      {
+        "command": "hapa.setBreakpointDesktop",
+        "title": "HAPA: 데스크톱 브레이크포인트 설정"
       }
     ],
     "viewsContainers": {
@@ -90,7 +158,7 @@
         {
           "id": "hapa-sidebar",
           "title": "HAPA",
-          "icon": "media/icon.svg"
+          "icon": "$(robot)"
         }
       ]
     },
@@ -362,6 +430,83 @@
           "type": "boolean",
           "default": true,
           "description": "컨텍스트 분석을 통한 스마트 완성"
+        },
+        "hapa.telemetry.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "익명화된 사용 통계 수집 허용"
+        },
+        "hapa.telemetry.consented": {
+          "type": "boolean",
+          "default": false,
+          "description": "텔레메트리 수집 동의 여부"
+        },
+        "hapa.accessibility.highContrast": {
+          "type": "boolean",
+          "default": false,
+          "description": "고대비 모드 활성화"
+        },
+        "hapa.accessibility.largeText": {
+          "type": "boolean",
+          "default": false,
+          "description": "큰 텍스트 모드 활성화"
+        },
+        "hapa.accessibility.screenReaderOptimized": {
+          "type": "boolean",
+          "default": false,
+          "description": "스크린 리더 최적화"
+        },
+        "hapa.accessibility.keyboardNavigation": {
+          "type": "boolean",
+          "default": true,
+          "description": "키보드 네비게이션 활성화"
+        },
+        "hapa.accessibility.focusIndicators": {
+          "type": "boolean",
+          "default": true,
+          "description": "포커스 표시 강화"
+        },
+        "hapa.accessibility.announcements": {
+          "type": "boolean",
+          "default": false,
+          "description": "음성 안내 활성화"
+        },
+        "hapa.accessibility.fontSize": {
+          "type": "number",
+          "default": 14,
+          "minimum": 8,
+          "maximum": 72,
+          "description": "기본 폰트 크기"
+        },
+        "hapa.accessibility.colorTheme": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "light",
+            "dark",
+            "high-contrast"
+          ],
+          "default": "auto",
+          "description": "색상 테마 설정"
+        },
+        "hapa.responsive.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "반응형 디자인 활성화"
+        },
+        "hapa.responsive.adaptationThreshold": {
+          "type": "number",
+          "default": 50,
+          "minimum": 10,
+          "maximum": 200,
+          "description": "반응형 적응 임계값 (px)"
+        },
+        "hapa.responsive.debounceDelay": {
+          "type": "number",
+          "default": 150,
+          "minimum": 50,
+          "maximum": 500,
+          "description": "반응형 디바운스 지연시간 (ms)"
         }
       }
     }

@@ -14,7 +14,7 @@ import {
 } from "../providers/CompletionProvider";
 import { configService } from "../services/ConfigService";
 import {
-  errorService,
+  ErrorService,
   ErrorCategory,
   ErrorSeverity,
 } from "../services/ErrorService";
@@ -63,7 +63,7 @@ export class ExtensionManager {
       this.isActivated = true;
       console.log("✅ HAPA Extension 활성화 완료");
     } catch (error) {
-      await errorService.handleError(
+      await ErrorService.getInstance().handleError(
         error instanceof Error ? error : new Error(String(error)),
         ErrorCategory.SYSTEM,
         ErrorSeverity.CRITICAL,
@@ -97,7 +97,7 @@ export class ExtensionManager {
 
       // 서비스 정리
       configService.dispose();
-      errorService.clearHistory();
+      ErrorService.getInstance().clearHistory();
 
       this.isActivated = false;
       console.log("✅ HAPA Extension 비활성화 완료");

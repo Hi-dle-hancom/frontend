@@ -1,5 +1,4 @@
 import React from "react";
-import { Link } from "react-router-dom";
 
 const Header: React.FC = () => {
   return (
@@ -7,8 +6,8 @@ const Header: React.FC = () => {
       <div className="thunder-container">
         <div className="flex items-center justify-between py-4">
           {/* Logo and Title - VSCode Extension Style */}
-          <Link
-            to="/"
+          <a
+            href="/"
             className="flex items-center gap-3 hover:opacity-80 transition-opacity"
           >
             <div
@@ -25,19 +24,19 @@ const Header: React.FC = () => {
                 AI Python Assistant
               </p>
             </div>
-          </Link>
+          </a>
 
           {/* Navigation - VSCode Extension Style */}
           <nav className="hidden md:flex items-center gap-1">
-            <Link to="/" className="vscode-btn vscode-btn-secondary">
+            <a href="/" className="vscode-btn vscode-btn-secondary">
               Home
-            </Link>
-            <Link to="/about" className="vscode-btn vscode-btn-secondary">
+            </a>
+            <a href="/about" className="vscode-btn vscode-btn-secondary">
               About
-            </Link>
-            <Link to="/guide" className="vscode-btn vscode-btn-secondary">
+            </a>
+            <a href="/guide" className="vscode-btn vscode-btn-secondary">
               Guide
-            </Link>
+            </a>
           </nav>
 
           {/* Action Buttons - VSCode Extension Style */}
@@ -61,15 +60,15 @@ const Header: React.FC = () => {
         {/* Mobile Navigation */}
         <div className="md:hidden border-t border-vscode-panel-border">
           <div className="vscode-tabs">
-            <Link to="/" className="vscode-tab active">
+            <a href="/" className="vscode-tab active">
               Home
-            </Link>
-            <Link to="/about" className="vscode-tab">
+            </a>
+            <a href="/about" className="vscode-tab">
               About
-            </Link>
-            <Link to="/guide" className="vscode-tab">
+            </a>
+            <a href="/guide" className="vscode-tab">
               Guide
-            </Link>
+            </a>
           </div>
         </div>
       </div>

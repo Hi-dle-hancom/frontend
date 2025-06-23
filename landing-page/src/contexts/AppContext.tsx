@@ -348,11 +348,30 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
 
     // 시스템 테마인 경우 실제 테마 적용
     if (state.theme === "system") {
-      const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-      const actualTheme = mediaQuery.matches ? "dark" : "light";
-      document.documentElement.setAttribute("data-theme", actualTheme);
+      // 테스트 환경에서 window.matchMedia가 없을 수 있으므로 안전하게 체크
+      if (typeof window !== "undefined" && window.matchMedia) {
+        try {
+          const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+          const actualTheme = mediaQuery?.matches ? "dark" : "light";
+          if (typeof document !== "undefined") {
+            document.documentElement.setAttribute("data-theme", actualTheme);
+          }
+        } catch (error) {
+          // matchMedia 접근 실패 시 기본값 사용
+          if (typeof document !== "undefined") {
+            document.documentElement.setAttribute("data-theme", "light");
+          }
+        }
+      } else {
+        // 테스트 환경이나 SSR 환경에서는 기본값으로 light 테마 사용
+        if (typeof document !== "undefined") {
+          document.documentElement.setAttribute("data-theme", "light");
+        }
+      }
     } else {
-      document.documentElement.setAttribute("data-theme", state.theme);
+      if (typeof document !== "undefined") {
+        document.documentElement.setAttribute("data-theme", state.theme);
+      }
     }
   }, [state.theme]);
 
