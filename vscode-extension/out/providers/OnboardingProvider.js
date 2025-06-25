@@ -1,671 +1,517 @@
-import * as vscode from "vscode";
-import { BaseWebviewProvider } from "./BaseWebviewProvider";
-
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.OnboardingProvider = void 0;
+const vscode = __importStar(require("vscode"));
+const BaseWebviewProvider_1 = require("./BaseWebviewProvider");
 /**
  * 사용자 온보딩 웹뷰 프로바이더
  */
-export class OnboardingProvider extends BaseWebviewProvider {
-  private currentStep: number = 0;
-  private readonly totalSteps: number = 6;
-  private userProfile: any = {};
-
-  constructor(extensionUri: vscode.Uri) {
-    super(extensionUri);
-  }
-
-  /**
-   * 웹뷰 패널용 public HTML 생성 메서드
-   */
-  public getPublicHtmlContent(webview: vscode.Webview): string {
-    return this.getHtmlContent(webview);
-  }
-
-  /**
-   * 웹뷰 패널용 public 메시지 핸들러 설정 메서드
-   */
-  public setupPublicHandlers(webview: vscode.Webview): void {
-    this.setupMessageHandlers(webview);
-  }
-
-  protected getHtmlContent(webview: vscode.Webview): string {
-    return this.generateOnboardingHtml();
-  }
-
-  protected handleCustomMessage(message: any) {
-    switch (message.command) {
-      case "nextStep":
-        this.handleNextStep(message.data);
-        break;
-      case "previousStep":
-        this.handlePreviousStep();
-        break;
-      case "completeOnboarding":
-        this.completeOnboarding(message.data);
-        break;
-      case "skipOnboarding":
-        this.skipOnboarding();
-        break;
+class OnboardingProvider extends BaseWebviewProvider_1.BaseWebviewProvider {
+    currentStep = 0;
+    totalSteps = 6;
+    userProfile = {};
+    constructor(extensionUri) {
+        super(extensionUri);
     }
-  }
-
-  /**
-   * 다음 단계로 이동
-   */
-  private handleNextStep(stepData: any) {
-    // 현재 단계 데이터 저장
-    this.userProfile = { ...this.userProfile, ...stepData };
-
-    if (this.currentStep < this.totalSteps - 1) {
-      this.currentStep++;
-      this.updateWebview();
+    /**
+     * 웹뷰 패널용 public HTML 생성 메서드
+     */
+    getPublicHtmlContent(webview) {
+        return this.getHtmlContent(webview);
     }
-  }
-
-  /**
-   * 이전 단계로 이동
-   */
-  private handlePreviousStep() {
-    if (this.currentStep > 0) {
-      this.currentStep--;
-      this.updateWebview();
+    /**
+     * 웹뷰 패널용 public 메시지 핸들러 설정 메서드
+     */
+    setupPublicHandlers(webview) {
+        this.setupMessageHandlers(webview);
     }
-  }
-
-  /**
-   * 온보딩 완료 (개선된 버전 - 유효성 검증 강화)
-   */
-  private async completeOnboarding(finalData: any) {
-    try {
-      // 1. 최종 데이터 검증 및 병합
-      const validatedData = this.validateAndMergeData(finalData);
-      if (!validatedData) {
-        vscode.window.showErrorMessage(
-          "입력 데이터가 유효하지 않습니다. 다시 확인해주세요."
-        );
-        return;
-      }
-
-      this.userProfile = validatedData;
-
-      // 2. 온보딩 완료 로그
-      console.log("📝 온보딩 완료 데이터:", {
-        email: this.userProfile.email,
-        skillLevel: this.userProfile.skillLevel,
-        projectContext: this.userProfile.projectContext,
-        features: this.userProfile.languageFeatures?.length || 0,
-      });
-
-      // 3. 로컬 설정 저장 (우선 처리)
-      await this.saveToLocalConfig();
-
-      // 4. 진행률 표시
-      vscode.window.withProgress(
-        {
-          location: vscode.ProgressLocation.Notification,
-          title: "HAPA 설정 저장 중...",
-          cancellable: false,
-        },
-        async (progress) => {
-          progress.report({ increment: 30, message: "로컬 설정 저장 완료" });
-
-          // 5. DB 저장 시도
-          const dbSaveSuccess = await this.saveUserProfileToDB();
-          progress.report({ increment: 70, message: "서버 동기화 중..." });
-
-          await new Promise((resolve) => setTimeout(resolve, 500)); // 사용자 경험을 위한 짧은 지연
-
-          if (dbSaveSuccess) {
-            vscode.window
-              .showInformationMessage(
-                "🎉 HAPA 온보딩이 완료되었습니다! 설정이 서버에 저장되어 다른 기기에서도 동기화됩니다.",
-                "HAPA 시작하기"
-              )
-              .then((selection) => {
-                if (selection === "HAPA 시작하기") {
-                  vscode.commands.executeCommand("hapa.openSidebar");
-                }
-              });
-          } else {
-            vscode.window
-              .showWarningMessage(
-                "⚠️ 온보딩은 완료되었지만 서버 저장에 실패했습니다. 설정은 로컬에 저장되었습니다.",
-                "확인",
-                "다시 시도"
-              )
-              .then((selection) => {
-                if (selection === "다시 시도") {
-                  this.saveUserProfileToDB();
-                }
-              });
-          }
-
-          // 6. 완료 화면 표시
-          if (this._view) {
-            this._view.webview.html = this.generateCompletionHtml();
-          }
-
-          // 7. 완료 이벤트 발생 (다른 모듈에서 감지 가능)
-          vscode.commands.executeCommand(
-            "hapa.onboardingCompleted",
-            this.userProfile
-          );
-
-          return dbSaveSuccess;
+    getHtmlContent(webview) {
+        return this.generateOnboardingHtml();
+    }
+    handleCustomMessage(message) {
+        switch (message.command) {
+            case "nextStep":
+                this.handleNextStep(message.data);
+                break;
+            case "previousStep":
+                this.handlePreviousStep();
+                break;
+            case "completeOnboarding":
+                this.completeOnboarding(message.data);
+                break;
+            case "skipOnboarding":
+                this.skipOnboarding();
+                break;
         }
-      );
-    } catch (error) {
-      console.error("❌ 온보딩 완료 중 오류:", error);
-      vscode.window
-        .showErrorMessage(
-          `설정 저장 중 오류가 발생했습니다: ${
-            (error as Error).message
-          }. 다시 시도해주세요.`,
-          "다시 시도"
-        )
-        .then((selection) => {
-          if (selection === "다시 시도") {
-            this.completeOnboarding(finalData);
-          }
-        });
     }
-  }
-
-  /**
-   * 온보딩 데이터 유효성 검증 및 병합
-   */
-  private validateAndMergeData(finalData: any): any | null {
-    try {
-      const merged = { ...this.userProfile, ...finalData };
-
-      // 필수 필드 검증
-      const requiredFields = [
-        "email",
-        "skillLevel",
-        "outputStructure",
-        "explanationStyle",
-        "projectContext",
-      ];
-      for (const field of requiredFields) {
-        if (!merged[field]) {
-          console.error(`❌ 필수 필드 누락: ${field}`);
-          return null;
+    /**
+     * 다음 단계로 이동
+     */
+    handleNextStep(stepData) {
+        // 현재 단계 데이터 저장
+        this.userProfile = { ...this.userProfile, ...stepData };
+        if (this.currentStep < this.totalSteps - 1) {
+            this.currentStep++;
+            this.updateWebview();
         }
-      }
-
-      // 이메일 형식 재검증
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(merged.email)) {
-        console.error("❌ 이메일 형식 오류");
-        return null;
-      }
-
-      // 언어 기능 배열 검증
-      if (!Array.isArray(merged.languageFeatures)) {
-        merged.languageFeatures = [];
-      }
-
-      // 기본값 설정
-      merged.username = merged.username || merged.email.split("@")[0];
-      merged.errorHandling = merged.errorHandling || "basic";
-      merged.commentTriggerMode = merged.commentTriggerMode || "confirm_insert";
-
-      console.log("✅ 데이터 유효성 검증 완료");
-      return merged;
-    } catch (error) {
-      console.error("❌ 데이터 검증 중 오류:", error);
-      return null;
     }
-  }
-
-  /**
-   * 로컬 VSCode 설정 저장
-   */
-  private async saveToLocalConfig(): Promise<void> {
-    const config = vscode.workspace.getConfiguration("hapa");
-
-    await config.update(
-      "userProfile.isOnboardingCompleted",
-      true,
-      vscode.ConfigurationTarget.Global
-    );
-
-    // 이메일 저장 (Step 0에서 수집)
-    if (this.userProfile.email) {
-      await config.update(
-        "userProfile.email",
-        this.userProfile.email,
-        vscode.ConfigurationTarget.Global
-      );
-    }
-
-    if (this.userProfile.username) {
-      await config.update(
-        "userProfile.username",
-        this.userProfile.username,
-        vscode.ConfigurationTarget.Global
-      );
-    }
-
-    await config.update(
-      "userProfile.pythonSkillLevel",
-      this.userProfile.skillLevel,
-      vscode.ConfigurationTarget.Global
-    );
-    await config.update(
-      "userProfile.codeOutputStructure",
-      this.userProfile.outputStructure,
-      vscode.ConfigurationTarget.Global
-    );
-    await config.update(
-      "userProfile.explanationStyle",
-      this.userProfile.explanationStyle,
-      vscode.ConfigurationTarget.Global
-    );
-    await config.update(
-      "userProfile.projectContext",
-      this.userProfile.projectContext,
-      vscode.ConfigurationTarget.Global
-    );
-    await config.update(
-      "userProfile.errorHandlingPreference",
-      this.userProfile.errorHandling,
-      vscode.ConfigurationTarget.Global
-    );
-
-    if (this.userProfile.languageFeatures) {
-      await config.update(
-        "userProfile.preferredLanguageFeatures",
-        this.userProfile.languageFeatures,
-        vscode.ConfigurationTarget.Global
-      );
-    }
-
-    // 주석 트리거 설정 저장
-    if (this.userProfile.commentTriggerMode) {
-      await config.update(
-        "commentTrigger.resultDisplayMode",
-        this.userProfile.commentTriggerMode,
-        vscode.ConfigurationTarget.Global
-      );
-    }
-  }
-
-  /**
-   * DB에 사용자 프로필 저장 (개선된 버전 - 재시도 로직 포함)
-   */
-  private async saveUserProfileToDB(): Promise<boolean> {
-    const maxRetries = 3;
-    let retryCount = 0;
-
-    while (retryCount < maxRetries) {
-      try {
-        // 이메일이 없으면 DB 저장 건너뛰기
-        if (!this.userProfile.email) {
-          console.log("이메일이 없어 DB 저장을 건너뜁니다.");
-          return false;
+    /**
+     * 이전 단계로 이동
+     */
+    handlePreviousStep() {
+        if (this.currentStep > 0) {
+            this.currentStep--;
+            this.updateWebview();
         }
-
-        // 1. 사용자 등록/로그인 (재시도 포함)
-        const authResult = await this.loginOrRegisterUserWithRetry();
-        if (!authResult || !authResult.access_token) {
-          throw new Error("사용자 인증 실패");
-        }
-
-        // 2. 설정을 DB 옵션 ID로 매핑
-        const settingsMapping = this.mapOnboardingDataToSettings();
-        console.log(`온보딩 설정 매핑: ${settingsMapping.length}개 옵션`);
-
-        // 3. 프로필 저장 API 호출 (재시도 포함)
-        const saveResult = await this.saveSettingsToDBWithRetry(
-          authResult.access_token,
-          settingsMapping
-        );
-
-        if (saveResult) {
-          // JWT 토큰 로컬 저장
-          const config = vscode.workspace.getConfiguration("hapa");
-          await config.update(
-            "auth.accessToken",
-            authResult.access_token,
-            vscode.ConfigurationTarget.Global
-          );
-
-          console.log("✅ DB 저장 성공");
-          return true;
-        }
-
-        throw new Error("설정 저장 API 실패");
-      } catch (error) {
-        retryCount++;
-        console.error(
-          `❌ DB 저장 실패 (시도 ${retryCount}/${maxRetries}):`,
-          error
-        );
-
-        if (retryCount >= maxRetries) {
-          // 최종 실패 시 사용자에게 안내
-          vscode.window
-            .showWarningMessage(
-              `🔄 서버 연결에 실패했습니다 (${maxRetries}회 시도). 설정은 로컬에 저장되었으며, 나중에 다시 동기화를 시도할 수 있습니다.`,
-              "다시 시도",
-              "나중에"
-            )
-            .then((selection) => {
-              if (selection === "다시 시도") {
-                this.saveUserProfileToDB(); // 재시도
-              }
+    }
+    /**
+     * 온보딩 완료 (개선된 버전 - 유효성 검증 강화)
+     */
+    async completeOnboarding(finalData) {
+        try {
+            // 1. 최종 데이터 검증 및 병합
+            const validatedData = this.validateAndMergeData(finalData);
+            if (!validatedData) {
+                vscode.window.showErrorMessage("입력 데이터가 유효하지 않습니다. 다시 확인해주세요.");
+                return;
+            }
+            this.userProfile = validatedData;
+            // 2. 온보딩 완료 로그
+            console.log("📝 온보딩 완료 데이터:", {
+                email: this.userProfile.email,
+                skillLevel: this.userProfile.skillLevel,
+                projectContext: this.userProfile.projectContext,
+                features: this.userProfile.languageFeatures?.length || 0,
             });
-
-          return false;
+            // 3. 로컬 설정 저장 (우선 처리)
+            await this.saveToLocalConfig();
+            // 4. 진행률 표시
+            vscode.window.withProgress({
+                location: vscode.ProgressLocation.Notification,
+                title: "HAPA 설정 저장 중...",
+                cancellable: false,
+            }, async (progress) => {
+                progress.report({ increment: 30, message: "로컬 설정 저장 완료" });
+                // 5. DB 저장 시도
+                const dbSaveSuccess = await this.saveUserProfileToDB();
+                progress.report({ increment: 70, message: "서버 동기화 중..." });
+                await new Promise((resolve) => setTimeout(resolve, 500)); // 사용자 경험을 위한 짧은 지연
+                if (dbSaveSuccess) {
+                    vscode.window
+                        .showInformationMessage("🎉 HAPA 온보딩이 완료되었습니다! 설정이 서버에 저장되어 다른 기기에서도 동기화됩니다.", "HAPA 시작하기")
+                        .then((selection) => {
+                        if (selection === "HAPA 시작하기") {
+                            vscode.commands.executeCommand("hapa.openSidebar");
+                        }
+                    });
+                }
+                else {
+                    vscode.window
+                        .showWarningMessage("⚠️ 온보딩은 완료되었지만 서버 저장에 실패했습니다. 설정은 로컬에 저장되었습니다.", "확인", "다시 시도")
+                        .then((selection) => {
+                        if (selection === "다시 시도") {
+                            this.saveUserProfileToDB();
+                        }
+                    });
+                }
+                // 6. 완료 화면 표시
+                if (this._view) {
+                    this._view.webview.html = this.generateCompletionHtml();
+                }
+                // 7. 완료 이벤트 발생 (다른 모듈에서 감지 가능)
+                vscode.commands.executeCommand("hapa.onboardingCompleted", this.userProfile);
+                return dbSaveSuccess;
+            });
         }
-
-        // 재시도 전 잠시 대기 (exponential backoff)
-        await new Promise((resolve) =>
-          setTimeout(resolve, Math.pow(2, retryCount) * 1000)
-        );
-      }
-    }
-
-    return false;
-  }
-
-  /**
-   * 재시도 로직이 포함된 사용자 인증
-   */
-  private async loginOrRegisterUserWithRetry(): Promise<{
-    access_token: string;
-    token_type: string;
-  } | null> {
-    const maxRetries = 2;
-
-    for (let i = 0; i < maxRetries; i++) {
-      try {
-        const result = await this.loginOrRegisterUser();
-        if (result) return result;
-        throw new Error("인증 응답 없음");
-      } catch (error) {
-        console.error(`인증 시도 ${i + 1} 실패:`, error);
-        if (i === maxRetries - 1) throw error;
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-      }
-    }
-
-    return null;
-  }
-
-  /**
-   * 재시도 로직이 포함된 설정 저장
-   */
-  private async saveSettingsToDBWithRetry(
-    accessToken: string,
-    optionIds: number[]
-  ): Promise<boolean> {
-    const maxRetries = 2;
-
-    for (let i = 0; i < maxRetries; i++) {
-      try {
-        const result = await this.saveSettingsToDB(accessToken, optionIds);
-        if (result) return true;
-        throw new Error("설정 저장 응답 실패");
-      } catch (error) {
-        console.error(`설정 저장 시도 ${i + 1} 실패:`, error);
-        if (i === maxRetries - 1) throw error;
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-      }
-    }
-
-    return false;
-  }
-
-  /**
-   * 사용자 등록/로그인 API 호출
-   */
-  private async loginOrRegisterUser(): Promise<{
-    access_token: string;
-    token_type: string;
-  } | null> {
-    try {
-      const config = vscode.workspace.getConfiguration("hapa");
-      const baseURL = config.get("apiBaseURL", "http://localhost:8000/api/v1");
-
-      // 테스트 사용자 감지 및 특별 처리
-      const isTestUser = this.userProfile.email?.startsWith("real.db.user");
-
-      if (isTestUser) {
-        console.log("🧪 [테스트 모드] real.db.user 온보딩 테스트 진행");
-        console.log(`테스트 사용자: ${this.userProfile.email}`);
-      }
-
-      const response = await fetch(`${baseURL}/users/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(isTestUser && { "X-Test-Mode": "onboarding" }),
-        },
-        body: JSON.stringify({
-          email: this.userProfile.email,
-          username:
-            this.userProfile.username || this.userProfile.email.split("@")[0],
-        }),
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-
-        if (isTestUser) {
-          console.log("🧪 [테스트 모드] 로그인/등록 성공:", {
-            email: this.userProfile.email,
-            tokenType: result.token_type,
-            tokenLength: result.access_token?.length,
-          });
+        catch (error) {
+            console.error("❌ 온보딩 완료 중 오류:", error);
+            vscode.window
+                .showErrorMessage(`설정 저장 중 오류가 발생했습니다: ${error.message}. 다시 시도해주세요.`, "다시 시도")
+                .then((selection) => {
+                if (selection === "다시 시도") {
+                    this.completeOnboarding(finalData);
+                }
+            });
         }
-
-        return result;
-      } else {
-        const errorText = await response.text();
-        console.error("로그인/등록 실패:", {
-          status: response.status,
-          statusText: response.statusText,
-          error: errorText,
-        });
-
-        if (isTestUser) {
-          console.error(
-            "🧪 [테스트 모드] 로그인/등록 실패 - 서버 상태를 확인하세요"
-          );
+    }
+    /**
+     * 온보딩 데이터 유효성 검증 및 병합
+     */
+    validateAndMergeData(finalData) {
+        try {
+            const merged = { ...this.userProfile, ...finalData };
+            // 필수 필드 검증
+            const requiredFields = [
+                "email",
+                "skillLevel",
+                "outputStructure",
+                "explanationStyle",
+                "projectContext",
+            ];
+            for (const field of requiredFields) {
+                if (!merged[field]) {
+                    console.error(`❌ 필수 필드 누락: ${field}`);
+                    return null;
+                }
+            }
+            // 이메일 형식 재검증
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(merged.email)) {
+                console.error("❌ 이메일 형식 오류");
+                return null;
+            }
+            // 언어 기능 배열 검증
+            if (!Array.isArray(merged.languageFeatures)) {
+                merged.languageFeatures = [];
+            }
+            // 기본값 설정
+            merged.username = merged.username || merged.email.split("@")[0];
+            merged.errorHandling = merged.errorHandling || "basic";
+            merged.commentTriggerMode = merged.commentTriggerMode || "confirm_insert";
+            console.log("✅ 데이터 유효성 검증 완료");
+            return merged;
         }
-
+        catch (error) {
+            console.error("❌ 데이터 검증 중 오류:", error);
+            return null;
+        }
+    }
+    /**
+     * 로컬 VSCode 설정 저장
+     */
+    async saveToLocalConfig() {
+        const config = vscode.workspace.getConfiguration("hapa");
+        await config.update("userProfile.isOnboardingCompleted", true, vscode.ConfigurationTarget.Global);
+        // 이메일 저장 (Step 0에서 수집)
+        if (this.userProfile.email) {
+            await config.update("userProfile.email", this.userProfile.email, vscode.ConfigurationTarget.Global);
+        }
+        if (this.userProfile.username) {
+            await config.update("userProfile.username", this.userProfile.username, vscode.ConfigurationTarget.Global);
+        }
+        await config.update("userProfile.pythonSkillLevel", this.userProfile.skillLevel, vscode.ConfigurationTarget.Global);
+        await config.update("userProfile.codeOutputStructure", this.userProfile.outputStructure, vscode.ConfigurationTarget.Global);
+        await config.update("userProfile.explanationStyle", this.userProfile.explanationStyle, vscode.ConfigurationTarget.Global);
+        await config.update("userProfile.projectContext", this.userProfile.projectContext, vscode.ConfigurationTarget.Global);
+        await config.update("userProfile.errorHandlingPreference", this.userProfile.errorHandling, vscode.ConfigurationTarget.Global);
+        if (this.userProfile.languageFeatures) {
+            await config.update("userProfile.preferredLanguageFeatures", this.userProfile.languageFeatures, vscode.ConfigurationTarget.Global);
+        }
+        // 주석 트리거 설정 저장
+        if (this.userProfile.commentTriggerMode) {
+            await config.update("commentTrigger.resultDisplayMode", this.userProfile.commentTriggerMode, vscode.ConfigurationTarget.Global);
+        }
+    }
+    /**
+     * DB에 사용자 프로필 저장 (개선된 버전 - 재시도 로직 포함)
+     */
+    async saveUserProfileToDB() {
+        const maxRetries = 3;
+        let retryCount = 0;
+        while (retryCount < maxRetries) {
+            try {
+                // 이메일이 없으면 DB 저장 건너뛰기
+                if (!this.userProfile.email) {
+                    console.log("이메일이 없어 DB 저장을 건너뜁니다.");
+                    return false;
+                }
+                // 1. 사용자 등록/로그인 (재시도 포함)
+                const authResult = await this.loginOrRegisterUserWithRetry();
+                if (!authResult || !authResult.access_token) {
+                    throw new Error("사용자 인증 실패");
+                }
+                // 2. 설정을 DB 옵션 ID로 매핑
+                const settingsMapping = this.mapOnboardingDataToSettings();
+                console.log(`온보딩 설정 매핑: ${settingsMapping.length}개 옵션`);
+                // 3. 프로필 저장 API 호출 (재시도 포함)
+                const saveResult = await this.saveSettingsToDBWithRetry(authResult.access_token, settingsMapping);
+                if (saveResult) {
+                    // JWT 토큰 로컬 저장
+                    const config = vscode.workspace.getConfiguration("hapa");
+                    await config.update("auth.accessToken", authResult.access_token, vscode.ConfigurationTarget.Global);
+                    console.log("✅ DB 저장 성공");
+                    return true;
+                }
+                throw new Error("설정 저장 API 실패");
+            }
+            catch (error) {
+                retryCount++;
+                console.error(`❌ DB 저장 실패 (시도 ${retryCount}/${maxRetries}):`, error);
+                if (retryCount >= maxRetries) {
+                    // 최종 실패 시 사용자에게 안내
+                    vscode.window
+                        .showWarningMessage(`🔄 서버 연결에 실패했습니다 (${maxRetries}회 시도). 설정은 로컬에 저장되었으며, 나중에 다시 동기화를 시도할 수 있습니다.`, "다시 시도", "나중에")
+                        .then((selection) => {
+                        if (selection === "다시 시도") {
+                            this.saveUserProfileToDB(); // 재시도
+                        }
+                    });
+                    return false;
+                }
+                // 재시도 전 잠시 대기 (exponential backoff)
+                await new Promise((resolve) => setTimeout(resolve, Math.pow(2, retryCount) * 1000));
+            }
+        }
+        return false;
+    }
+    /**
+     * 재시도 로직이 포함된 사용자 인증
+     */
+    async loginOrRegisterUserWithRetry() {
+        const maxRetries = 2;
+        for (let i = 0; i < maxRetries; i++) {
+            try {
+                const result = await this.loginOrRegisterUser();
+                if (result)
+                    return result;
+                throw new Error("인증 응답 없음");
+            }
+            catch (error) {
+                console.error(`인증 시도 ${i + 1} 실패:`, error);
+                if (i === maxRetries - 1)
+                    throw error;
+                await new Promise((resolve) => setTimeout(resolve, 1000));
+            }
+        }
         return null;
-      }
-    } catch (error) {
-      console.error("로그인/등록 오류:", error);
-
-      if (this.userProfile.email?.startsWith("real.db.user")) {
-        console.error(
-          "🧪 [테스트 모드] 네트워크 오류 - Backend/DB Module이 실행 중인지 확인하세요"
-        );
-      }
-
-      return null;
     }
-  }
-
-  /**
-   * 온보딩 데이터를 DB 설정 옵션 ID로 매핑
-   */
-  private mapOnboardingDataToSettings(): number[] {
-    const mapping: number[] = [];
-
-    // Python 스킬 수준 (ID: 1-4)
-    const skillMapping: Record<string, number> = {
-      beginner: 1,
-      intermediate: 2,
-      advanced: 3,
-      expert: 4,
-    };
-    if (
-      this.userProfile.skillLevel &&
-      skillMapping[this.userProfile.skillLevel]
-    ) {
-      mapping.push(skillMapping[this.userProfile.skillLevel]);
-    }
-
-    // 코드 출력 구조 (ID: 5-8)
-    const outputMapping: Record<string, number> = {
-      minimal: 5,
-      standard: 6,
-      detailed: 7,
-      comprehensive: 8,
-    };
-    if (
-      this.userProfile.outputStructure &&
-      outputMapping[this.userProfile.outputStructure]
-    ) {
-      mapping.push(outputMapping[this.userProfile.outputStructure]);
-    }
-
-    // 설명 스타일 (ID: 9-12)
-    const explanationMapping: Record<string, number> = {
-      brief: 9,
-      standard: 10,
-      detailed: 11,
-      educational: 12,
-    };
-    if (
-      this.userProfile.explanationStyle &&
-      explanationMapping[this.userProfile.explanationStyle]
-    ) {
-      mapping.push(explanationMapping[this.userProfile.explanationStyle]);
-    }
-
-    // 프로젝트 컨텍스트 (ID: 13-16)
-    const contextMapping: Record<string, number> = {
-      web_development: 13,
-      data_science: 14,
-      automation: 15,
-      general_purpose: 16,
-    };
-    if (
-      this.userProfile.projectContext &&
-      contextMapping[this.userProfile.projectContext]
-    ) {
-      mapping.push(contextMapping[this.userProfile.projectContext]);
-    }
-
-    // 주석 트리거 모드 (ID: 17-20)
-    const triggerMapping: Record<string, number> = {
-      immediate_insert: 17,
-      sidebar: 18,
-      confirm_insert: 19,
-      inline_preview: 20,
-    };
-    if (
-      this.userProfile.commentTriggerMode &&
-      triggerMapping[this.userProfile.commentTriggerMode]
-    ) {
-      mapping.push(triggerMapping[this.userProfile.commentTriggerMode]);
-    }
-
-    // 선호 언어 기능 (ID: 21-24)
-    const featureMapping: Record<string, number> = {
-      type_hints: 21,
-      dataclasses: 22,
-      async_await: 23,
-      f_strings: 24,
-    };
-    if (
-      this.userProfile.languageFeatures &&
-      Array.isArray(this.userProfile.languageFeatures)
-    ) {
-      this.userProfile.languageFeatures.forEach((feature: string) => {
-        if (featureMapping[feature]) {
-          mapping.push(featureMapping[feature]);
+    /**
+     * 재시도 로직이 포함된 설정 저장
+     */
+    async saveSettingsToDBWithRetry(accessToken, optionIds) {
+        const maxRetries = 2;
+        for (let i = 0; i < maxRetries; i++) {
+            try {
+                const result = await this.saveSettingsToDB(accessToken, optionIds);
+                if (result)
+                    return true;
+                throw new Error("설정 저장 응답 실패");
+            }
+            catch (error) {
+                console.error(`설정 저장 시도 ${i + 1} 실패:`, error);
+                if (i === maxRetries - 1)
+                    throw error;
+                await new Promise((resolve) => setTimeout(resolve, 1000));
+            }
         }
-      });
+        return false;
     }
-
-    // 에러 처리 선호도 (ID: 25-27)
-    const errorMapping: Record<string, number> = {
-      basic: 25,
-      detailed: 26,
-      robust: 27,
-    };
-    if (
-      this.userProfile.errorHandling &&
-      errorMapping[this.userProfile.errorHandling]
-    ) {
-      mapping.push(errorMapping[this.userProfile.errorHandling]);
+    /**
+     * 사용자 등록/로그인 API 호출
+     */
+    async loginOrRegisterUser() {
+        try {
+            const config = vscode.workspace.getConfiguration("hapa");
+            const baseURL = config.get("apiBaseURL", "http://localhost:8000/api/v1");
+            // 테스트 사용자 감지 및 특별 처리
+            const isTestUser = this.userProfile.email?.startsWith("real.db.user");
+            if (isTestUser) {
+                console.log("🧪 [테스트 모드] real.db.user 온보딩 테스트 진행");
+                console.log(`테스트 사용자: ${this.userProfile.email}`);
+            }
+            const response = await fetch(`${baseURL}/users/login`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(isTestUser && { "X-Test-Mode": "onboarding" }),
+                },
+                body: JSON.stringify({
+                    email: this.userProfile.email,
+                    username: this.userProfile.username || this.userProfile.email.split("@")[0],
+                }),
+            });
+            if (response.ok) {
+                const result = await response.json();
+                if (isTestUser) {
+                    console.log("🧪 [테스트 모드] 로그인/등록 성공:", {
+                        email: this.userProfile.email,
+                        tokenType: result.token_type,
+                        tokenLength: result.access_token?.length,
+                    });
+                }
+                return result;
+            }
+            else {
+                const errorText = await response.text();
+                console.error("로그인/등록 실패:", {
+                    status: response.status,
+                    statusText: response.statusText,
+                    error: errorText,
+                });
+                if (isTestUser) {
+                    console.error("🧪 [테스트 모드] 로그인/등록 실패 - 서버 상태를 확인하세요");
+                }
+                return null;
+            }
+        }
+        catch (error) {
+            console.error("로그인/등록 오류:", error);
+            if (this.userProfile.email?.startsWith("real.db.user")) {
+                console.error("🧪 [테스트 모드] 네트워크 오류 - Backend/DB Module이 실행 중인지 확인하세요");
+            }
+            return null;
+        }
     }
-
-    return mapping;
-  }
-
-  /**
-   * DB에 설정 저장
-   */
-  private async saveSettingsToDB(
-    accessToken: string,
-    optionIds: number[]
-  ): Promise<boolean> {
-    try {
-      const config = vscode.workspace.getConfiguration("hapa");
-      const baseURL = config.get("apiBaseURL", "http://localhost:8000/api/v1");
-
-      const response = await fetch(`${baseURL}/users/profile`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          profile_data: this.userProfile,
-          settings_mapping: optionIds,
-        }),
-      });
-
-      return response.ok;
-    } catch (error) {
-      console.error("설정 저장 오류:", error);
-      return false;
+    /**
+     * 온보딩 데이터를 DB 설정 옵션 ID로 매핑
+     */
+    mapOnboardingDataToSettings() {
+        const mapping = [];
+        // Python 스킬 수준 (ID: 1-4)
+        const skillMapping = {
+            beginner: 1,
+            intermediate: 2,
+            advanced: 3,
+            expert: 4,
+        };
+        if (this.userProfile.skillLevel &&
+            skillMapping[this.userProfile.skillLevel]) {
+            mapping.push(skillMapping[this.userProfile.skillLevel]);
+        }
+        // 코드 출력 구조 (ID: 5-8)
+        const outputMapping = {
+            minimal: 5,
+            standard: 6,
+            detailed: 7,
+            comprehensive: 8,
+        };
+        if (this.userProfile.outputStructure &&
+            outputMapping[this.userProfile.outputStructure]) {
+            mapping.push(outputMapping[this.userProfile.outputStructure]);
+        }
+        // 설명 스타일 (ID: 9-12)
+        const explanationMapping = {
+            brief: 9,
+            standard: 10,
+            detailed: 11,
+            educational: 12,
+        };
+        if (this.userProfile.explanationStyle &&
+            explanationMapping[this.userProfile.explanationStyle]) {
+            mapping.push(explanationMapping[this.userProfile.explanationStyle]);
+        }
+        // 프로젝트 컨텍스트 (ID: 13-16)
+        const contextMapping = {
+            web_development: 13,
+            data_science: 14,
+            automation: 15,
+            general_purpose: 16,
+        };
+        if (this.userProfile.projectContext &&
+            contextMapping[this.userProfile.projectContext]) {
+            mapping.push(contextMapping[this.userProfile.projectContext]);
+        }
+        // 주석 트리거 모드 (ID: 17-20)
+        const triggerMapping = {
+            immediate_insert: 17,
+            sidebar: 18,
+            confirm_insert: 19,
+            inline_preview: 20,
+        };
+        if (this.userProfile.commentTriggerMode &&
+            triggerMapping[this.userProfile.commentTriggerMode]) {
+            mapping.push(triggerMapping[this.userProfile.commentTriggerMode]);
+        }
+        // 선호 언어 기능 (ID: 21-24)
+        const featureMapping = {
+            type_hints: 21,
+            dataclasses: 22,
+            async_await: 23,
+            f_strings: 24,
+        };
+        if (this.userProfile.languageFeatures &&
+            Array.isArray(this.userProfile.languageFeatures)) {
+            this.userProfile.languageFeatures.forEach((feature) => {
+                if (featureMapping[feature]) {
+                    mapping.push(featureMapping[feature]);
+                }
+            });
+        }
+        // 에러 처리 선호도 (ID: 25-27)
+        const errorMapping = {
+            basic: 25,
+            detailed: 26,
+            robust: 27,
+        };
+        if (this.userProfile.errorHandling &&
+            errorMapping[this.userProfile.errorHandling]) {
+            mapping.push(errorMapping[this.userProfile.errorHandling]);
+        }
+        return mapping;
     }
-  }
-
-  /**
-   * 온보딩 건너뛰기
-   */
-  private async skipOnboarding() {
-    const config = vscode.workspace.getConfiguration("hapa");
-    await config.update(
-      "userProfile.isOnboardingCompleted",
-      true,
-      vscode.ConfigurationTarget.Global
-    );
-
-    vscode.window.showInformationMessage(
-      "온보딩을 건너뛰었습니다. 언제든 설정에서 변경할 수 있습니다."
-    );
-
-    if (this._view) {
-      this._view.webview.html = this.generateCompletionHtml();
+    /**
+     * DB에 설정 저장
+     */
+    async saveSettingsToDB(accessToken, optionIds) {
+        try {
+            const config = vscode.workspace.getConfiguration("hapa");
+            const baseURL = config.get("apiBaseURL", "http://localhost:8000/api/v1");
+            const response = await fetch(`${baseURL}/users/profile`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${accessToken}`,
+                },
+                body: JSON.stringify({
+                    profile_data: this.userProfile,
+                    settings_mapping: optionIds,
+                }),
+            });
+            return response.ok;
+        }
+        catch (error) {
+            console.error("설정 저장 오류:", error);
+            return false;
+        }
     }
-  }
-
-  /**
-   * 웹뷰 업데이트
-   */
-  private updateWebview() {
-    if (this._view) {
-      this._view.webview.html = this.generateOnboardingHtml();
+    /**
+     * 온보딩 건너뛰기
+     */
+    async skipOnboarding() {
+        const config = vscode.workspace.getConfiguration("hapa");
+        await config.update("userProfile.isOnboardingCompleted", true, vscode.ConfigurationTarget.Global);
+        vscode.window.showInformationMessage("온보딩을 건너뛰었습니다. 언제든 설정에서 변경할 수 있습니다.");
+        if (this._view) {
+            this._view.webview.html = this.generateCompletionHtml();
+        }
     }
-  }
-
-  /**
-   * 온보딩 HTML 생성
-   */
-  private generateOnboardingHtml(): string {
-    const stepContent = this.getStepContent(this.currentStep);
-
-    return `
+    /**
+     * 웹뷰 업데이트
+     */
+    updateWebview() {
+        if (this._view) {
+            this._view.webview.html = this.generateOnboardingHtml();
+        }
+    }
+    /**
+     * 온보딩 HTML 생성
+     */
+    generateOnboardingHtml() {
+        const stepContent = this.getStepContent(this.currentStep);
+        return `
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -917,16 +763,12 @@ export class OnboardingProvider extends BaseWebviewProvider {
       </div>
       
       <div class="button-group">
-        ${
-          this.currentStep > 0
+        ${this.currentStep > 0
             ? '<button class="btn btn-secondary" onclick="previousStep()">이전</button>'
-            : ""
-        }
-        ${
-          this.currentStep < this.totalSteps - 1
+            : ""}
+        ${this.currentStep < this.totalSteps - 1
             ? '<button class="btn btn-primary" onclick="nextStep()" id="nextBtn">다음</button>'
-            : '<button class="btn btn-primary" onclick="completeOnboarding()" id="completeBtn">완료</button>'
-        }
+            : '<button class="btn btn-primary" onclick="completeOnboarding()" id="completeBtn">완료</button>'}
       </div>
     </div>
     
@@ -1067,15 +909,14 @@ export class OnboardingProvider extends BaseWebviewProvider {
   </script>
 </body>
 </html>`;
-  }
-
-  /**
-   * 단계별 콘텐츠 생성
-   */
-  private getStepContent(step: number): string {
-    switch (step) {
-      case 0:
-        return `
+    }
+    /**
+     * 단계별 콘텐츠 생성
+     */
+    getStepContent(step) {
+        switch (step) {
+            case 0:
+                return `
           <h2 class="step-title">👋 환영합니다!</h2>
           <p class="step-description">HAPA 설정을 동기화하기 위해 이메일을 입력해주세요.</p>
           
@@ -1091,9 +932,8 @@ export class OnboardingProvider extends BaseWebviewProvider {
             <p class="form-help">비워두면 이메일 앞부분을 사용자명으로 사용합니다.</p>
           </div>
         `;
-
-      case 1:
-        return `
+            case 1:
+                return `
           <h2 class="step-title">🐍 Python 스킬 수준을 알려주세요</h2>
           <p class="step-description">당신의 Python 경험 수준에 맞는 코드와 설명을 제공하겠습니다.</p>
           
@@ -1126,9 +966,8 @@ export class OnboardingProvider extends BaseWebviewProvider {
             </div>
           </div>
         `;
-
-      case 2:
-        return `
+            case 2:
+                return `
           <h2 class="step-title">📝 코드 출력 스타일을 선택해주세요</h2>
           <p class="step-description">AI가 생성하는 코드의 구조와 상세도를 설정합니다.</p>
           
@@ -1161,9 +1000,8 @@ export class OnboardingProvider extends BaseWebviewProvider {
             </div>
           </div>
         `;
-
-      case 3:
-        return `
+            case 3:
+                return `
           <h2 class="step-title">💬 설명 스타일을 설정해주세요</h2>
           <p class="step-description">AI가 제공하는 설명의 상세도와 스타일을 선택합니다.</p>
           
@@ -1196,9 +1034,8 @@ export class OnboardingProvider extends BaseWebviewProvider {
             </div>
           </div>
         `;
-
-      case 4:
-        return `
+            case 4:
+                return `
           <h2 class="step-title">🛠️ 개발 환경을 설정해주세요</h2>
           <p class="step-description">주요 개발 분야와 선호하는 Python 기능을 선택합니다.</p>
           
@@ -1262,9 +1099,8 @@ export class OnboardingProvider extends BaseWebviewProvider {
             </div>
           </div>
         `;
-
-      case 5:
-        return `
+            case 5:
+                return `
           <h2 class="step-title">⚙️ 주석 트리거 워크플로우를 선택해주세요</h2>
           <p class="step-description">AI 코드 생성 후 어떤 방식으로 처리할지 설정합니다.</p>
           
@@ -1309,19 +1145,17 @@ export class OnboardingProvider extends BaseWebviewProvider {
             </div>
           </div>
         `;
-
-      default:
-        return "<p>알 수 없는 단계입니다.</p>";
+            default:
+                return "<p>알 수 없는 단계입니다.</p>";
+        }
     }
-  }
-
-  /**
-   * 단계별 JavaScript 스크립트 생성
-   */
-  private getStepScript(step: number): string {
-    switch (step) {
-      case 0:
-        return `
+    /**
+     * 단계별 JavaScript 스크립트 생성
+     */
+    getStepScript(step) {
+        switch (step) {
+            case 0:
+                return `
           var email = document.getElementById('email').value.trim();
           var username = document.getElementById('username').value.trim();
           
@@ -1342,9 +1176,8 @@ export class OnboardingProvider extends BaseWebviewProvider {
             username: username || email.split('@')[0] 
           };
         `;
-
-      case 1:
-        return `
+            case 1:
+                return `
           var selected = document.querySelector('[data-radio="skillLevel"].selected');
           if (!selected) {
             alert('Python 스킬 수준을 선택해주세요.');
@@ -1352,9 +1185,8 @@ export class OnboardingProvider extends BaseWebviewProvider {
           }
           return { skillLevel: selected.getAttribute('data-value') };
         `;
-
-      case 2:
-        return `
+            case 2:
+                return `
           var selected = document.querySelector('[data-radio="outputStructure"].selected');
           if (!selected) {
             alert('코드 출력 스타일을 선택해주세요.');
@@ -1362,9 +1194,8 @@ export class OnboardingProvider extends BaseWebviewProvider {
           }
           return { outputStructure: selected.getAttribute('data-value') };
         `;
-
-      case 3:
-        return `
+            case 3:
+                return `
           var selected = document.querySelector('[data-radio="explanationStyle"].selected');
           if (!selected) {
             alert('설명 스타일을 선택해주세요.');
@@ -1372,9 +1203,8 @@ export class OnboardingProvider extends BaseWebviewProvider {
           }
           return { explanationStyle: selected.getAttribute('data-value') };
         `;
-
-      case 4:
-        return `
+            case 4:
+                return `
           var projectContext = document.querySelector('[data-radio="projectContext"].selected');
           if (!projectContext) {
             alert('개발 분야를 선택해주세요.');
@@ -1395,9 +1225,8 @@ export class OnboardingProvider extends BaseWebviewProvider {
             errorHandling: 'basic'
           };
         `;
-
-      case 5:
-        return `
+            case 5:
+                return `
           var selected = document.querySelector('[data-radio="commentTriggerMode"].selected');
           if (!selected) {
             alert('주석 트리거 워크플로우를 선택해주세요.');
@@ -1405,17 +1234,15 @@ export class OnboardingProvider extends BaseWebviewProvider {
           }
           return { commentTriggerMode: selected.getAttribute('data-value') };
         `;
-
-      default:
-        return "return {};";
+            default:
+                return "return {};";
+        }
     }
-  }
-
-  /**
-   * 완료 HTML 생성
-   */
-  private generateCompletionHtml(): string {
-    return `
+    /**
+     * 완료 HTML 생성
+     */
+    generateCompletionHtml() {
+        return `
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -1472,5 +1299,7 @@ export class OnboardingProvider extends BaseWebviewProvider {
   </div>
 </body>
 </html>`;
-  }
+    }
 }
+exports.OnboardingProvider = OnboardingProvider;
+//# sourceMappingURL=OnboardingProvider.js.map

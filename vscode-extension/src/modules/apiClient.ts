@@ -575,6 +575,295 @@ class HAPAAPIClient {
 
     return { parsed: events, remaining };
   }
+
+  /**
+   * JWT 토큰 기반으로 DB에서 사용자 설정을 가져와 VSCode 로컬 설정과 동기화
+   */
+  async syncUserSettingsFromDB(): Promise<boolean> {
+    try {
+      const config = vscode.workspace.getConfiguration("hapa");
+      const accessToken = config.get<string>("auth.accessToken");
+
+      if (!accessToken) {
+        console.log("JWT 토큰이 없어 DB 동기화를 건너뜁니다.");
+        return false;
+      }
+
+      const response = await this.client.get("/users/me/settings", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+      if (response.status === 200 && response.data) {
+        await this.updateLocalSettingsFromDB(response.data);
+        console.log("DB 설정 동기화 완료");
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      console.error("DB 설정 동기화 실패:", error);
+      return false;
+    }
+  }
+
+  /**
+   * DB 설정을 VSCode 로컬 설정으로 변환 및 저장
+   */
+  private async updateLocalSettingsFromDB(dbSettings: any[]): Promise<void> {
+    const config = vscode.workspace.getConfiguration("hapa");
+
+    // DB 설정 옵션 ID를 VSCode 설정값으로 매핑
+    const settingsMapping = this.mapDBSettingsToLocal(dbSettings);
+
+    // 각 설정을 VSCode에 저장
+    for (const [key, value] of Object.entries(settingsMapping)) {
+      await config.update(key, value, vscode.ConfigurationTarget.Global);
+    }
+  }
+
+  /**
+   * DB 설정 옵션 ID를 VSCode 로컬 설정값으로 매핑
+   */
+  private mapDBSettingsToLocal(dbSettings: any[]): Record<string, any> {
+    const mapping: Record<string, any> = {};
+
+    for (const setting of dbSettings) {
+      const optionId = setting.option_id;
+      const settingType = setting.setting_type;
+      const optionValue = setting.option_value;
+
+      // Python 스킬 수준 (ID: 1-4)
+      if (optionId >= 1 && optionId <= 4) {
+        const skillMap: Record<number, string> = {
+          1: "beginner",
+          2: "intermediate",
+          3: "advanced",
+          4: "expert",
+        };
+        mapping["userProfile.pythonSkillLevel"] = skillMap[optionId];
+      }
+
+      // 코드 출력 구조 (ID: 5-8)
+      else if (optionId >= 5 && optionId <= 8) {
+        const outputMap: Record<number, string> = {
+          5: "minimal",
+          6: "standard",
+          7: "detailed",
+          8: "comprehensive",
+        };
+        mapping["userProfile.codeOutputStructure"] = outputMap[optionId];
+      }
+
+      // 설명 스타일 (ID: 9-12)
+      else if (optionId >= 9 && optionId <= 12) {
+        const explanationMap: Record<number, string> = {
+          9: "brief",
+          10: "standard",
+          11: "detailed",
+          12: "educational",
+        };
+        mapping["userProfile.explanationStyle"] = explanationMap[optionId];
+      }
+
+      // 프로젝트 컨텍스트 (ID: 13-16)
+      else if (optionId >= 13 && optionId <= 16) {
+        const contextMap: Record<number, string> = {
+          13: "web_development",
+          14: "data_science",
+          15: "automation",
+          16: "general_purpose",
+        };
+        mapping["userProfile.projectContext"] = contextMap[optionId];
+      }
+
+      // 주석 트리거 모드 (ID: 17-20)
+      else if (optionId >= 17 && optionId <= 20) {
+        const triggerMap: Record<number, string> = {
+          17: "immediate_insert",
+          18: "sidebar",
+          19: "confirm_insert",
+          20: "inline_preview",
+        };
+        mapping["commentTrigger.resultDisplayMode"] = triggerMap[optionId];
+      }
+
+      // 선호 언어 기능 (ID: 21-24) - 배열로 수집
+      else if (optionId >= 21 && optionId <= 24) {
+        if (!mapping["userProfile.preferredLanguageFeatures"]) {
+          mapping["userProfile.preferredLanguageFeatures"] = [];
+        }
+
+        const featureMap: Record<number, string> = {
+          21: "type_hints",
+          22: "dataclasses",
+          23: "async_await",
+          24: "f_strings",
+        };
+
+        if (featureMap[optionId]) {
+          mapping["userProfile.preferredLanguageFeatures"].push(
+            featureMap[optionId]
+          );
+        }
+      }
+
+      // 에러 처리 선호도 (ID: 25-27)
+      else if (optionId >= 25 && optionId <= 27) {
+        const errorMap: Record<number, string> = {
+          25: "basic",
+          26: "detailed",
+          27: "robust",
+        };
+        mapping["userProfile.errorHandlingPreference"] = errorMap[optionId];
+      }
+    }
+
+    return mapping;
+  }
+
+  /**
+   * 강화된 사용자 프로필 정보 가져오기 (DB 동기화 후)
+   */
+  async getEnhancedUserProfile() {
+    // 먼저 DB와 동기화 시도
+    await this.syncUserSettingsFromDB();
+
+    // 로컬 설정 반환 (이제 DB와 동기화된 상태)
+    return this.getUserProfile();
+  }
+
+  /**
+   * 개인화된 코드 생성 요청 (JWT 토큰 포함)
+   */
+  async generatePersonalizedCode(
+    request: CodeGenerationRequest
+  ): Promise<CodeGenerationResponse> {
+    try {
+      const config = vscode.workspace.getConfiguration("hapa");
+      const accessToken = config.get<string>("auth.accessToken");
+
+      // 강화된 사용자 프로필 정보 추가
+      const userProfile = await this.getEnhancedUserProfile();
+      const enhancedRequest = {
+        ...request,
+        userProfile: userProfile,
+      };
+
+      // JWT 토큰이 있으면 Authorization 헤더 추가
+      const headers: Record<string, string> = {};
+      if (accessToken) {
+        headers["Authorization"] = `Bearer ${accessToken}`;
+      }
+
+      const response = await this.client.post<CodeGenerationResponse>(
+        "/code/generate",
+        enhancedRequest,
+        { headers }
+      );
+
+      return response.data;
+    } catch (error) {
+      // 기존 에러 처리 로직과 동일
+      let errorMessage = "알 수 없는 오류가 발생했습니다.";
+
+      if (error instanceof Error) {
+        if (
+          error.message.includes("ECONNREFUSED") ||
+          error.message.includes("Network Error")
+        ) {
+          errorMessage =
+            "🔗 API 서버에 연결할 수 없습니다.\n설정에서 API 서버 주소를 확인해주세요.\n\n현재 설정: " +
+            this.baseURL;
+        } else if (error.message.includes("timeout")) {
+          errorMessage =
+            "⏱️ 요청 시간이 초과되었습니다.\n잠시 후 다시 시도하거나 더 간단한 질문을 해보세요.";
+        } else if (
+          error.message.includes("401") ||
+          error.message.includes("Unauthorized")
+        ) {
+          errorMessage =
+            "🔐 API 인증에 실패했습니다.\n설정에서 API 키를 확인해주세요.";
+        } else {
+          errorMessage = `❌ 오류 발생: ${error.message}\n\n문제가 지속되면 확장 프로그램을 재시작해보세요.`;
+        }
+      }
+
+      return {
+        generated_code: "",
+        status: "error",
+        error_message: errorMessage,
+      };
+    }
+  }
+
+  /**
+   * 스트리밍 방식으로 개인화된 코드 생성 요청
+   */
+  async generatePersonalizedCodeStreaming(
+    userQuestion: string,
+    codeContext?: string,
+    callbacks?: StreamingCallbacks
+  ): Promise<void> {
+    const config = vscode.workspace.getConfiguration("hapa");
+    const apiKey = config.get<string>("apiKey");
+    const accessToken = config.get<string>("auth.accessToken");
+    const baseURL = config.get<string>("apiBaseURL", "http://localhost:8000");
+
+    if (!apiKey) {
+      const error = new Error(
+        "API 키가 설정되지 않았습니다. 설정에서 API 키를 입력해주세요."
+      );
+      callbacks?.onError?.(error);
+      throw error;
+    }
+
+    const url = `${baseURL}/api/v1/code-generation/stream-generate`;
+
+    // 강화된 사용자 프로필 정보 추가
+    const userProfile = await this.getEnhancedUserProfile();
+    const requestBody = {
+      user_question: userQuestion,
+      code_context: codeContext,
+      language: "python",
+      stream: true,
+      userProfile: userProfile,
+    };
+
+    // JWT 토큰이 있으면 Authorization 헤더 추가
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "X-API-Key": apiKey,
+    };
+
+    if (accessToken) {
+      headers["Authorization"] = `Bearer ${accessToken}`;
+    }
+
+    try {
+      callbacks?.onStart?.();
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      if (!response.body) {
+        throw new Error("Response body is null");
+      }
+
+      await this.processSSEStream(response.body, callbacks);
+    } catch (error) {
+      const errorObj =
+        error instanceof Error ? error : new Error(String(error));
+      callbacks?.onError?.(errorObj);
+      throw errorObj;
+    }
+  }
 }
 
 // 싱글톤 인스턴스

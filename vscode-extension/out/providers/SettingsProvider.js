@@ -1,277 +1,204 @@
-import * as vscode from "vscode";
-import { BaseWebviewProvider } from "./BaseWebviewProvider";
-
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.SettingsProvider = void 0;
+const vscode = __importStar(require("vscode"));
+const BaseWebviewProvider_1 = require("./BaseWebviewProvider");
 /**
  * 사용자 설정 웹뷰 프로바이더
  */
-export class SettingsProvider extends BaseWebviewProvider {
-  constructor(extensionUri: vscode.Uri) {
-    super(extensionUri);
-  }
-
-  /**
-   * 웹뷰 패널용 public HTML 생성 메서드
-   */
-  public getPublicHtmlContent(webview: vscode.Webview): string {
-    return this.getHtmlContent(webview);
-  }
-
-  /**
-   * 웹뷰 패널용 public 메시지 핸들러 설정 메서드
-   */
-  public setupPublicHandlers(webview: vscode.Webview): void {
-    this.setupMessageHandlers(webview);
-  }
-
-  protected getHtmlContent(webview: vscode.Webview): string {
-    return this.generateSettingsHtml();
-  }
-
-  protected handleCustomMessage(message: any) {
-    switch (message.command) {
-      case "saveSettings":
-        this.saveSettings(message.settings);
-        break;
-      case "resetSettings":
-        this.resetSettings();
-        break;
-      case "loadSettings":
-        this.loadAndSendSettings();
-        break;
-      case "openVSCodeSettings":
-        this.openVSCodeSettings();
-        break;
+class SettingsProvider extends BaseWebviewProvider_1.BaseWebviewProvider {
+    constructor(extensionUri) {
+        super(extensionUri);
     }
-  }
-
-  /**
-   * 설정 저장
-   */
-  private async saveSettings(settings: any) {
-    try {
-      const config = vscode.workspace.getConfiguration("hapa");
-
-      // 사용자 프로필 설정 저장
-      if (settings.userProfile) {
-        for (const [key, value] of Object.entries(settings.userProfile)) {
-          await config.update(
-            `userProfile.${key}`,
-            value,
-            vscode.ConfigurationTarget.Global
-          );
-        }
-      }
-
-      // API 설정 저장
-      if (settings.api) {
-        for (const [key, value] of Object.entries(settings.api)) {
-          await config.update(key, value, vscode.ConfigurationTarget.Global);
-        }
-      }
-
-      // 주석 트리거 설정 저장
-      if (settings.commentTrigger) {
-        for (const [key, value] of Object.entries(settings.commentTrigger)) {
-          await config.update(
-            `commentTrigger.${key}`,
-            value,
-            vscode.ConfigurationTarget.Global
-          );
-        }
-      }
-
-      // 기능 설정 저장
-      if (settings.features) {
-        for (const [key, value] of Object.entries(settings.features)) {
-          await config.update(key, value, vscode.ConfigurationTarget.Global);
-        }
-      }
-
-      vscode.window.showInformationMessage(
-        "✅ 설정이 성공적으로 저장되었습니다!"
-      );
-
-      // 웹뷰에 저장 완료 신호 전송
-      if (this._view) {
-        this._view.webview.postMessage({
-          command: "settingsSaved",
-          success: true,
-        });
-      }
-    } catch (error) {
-      const errorMessage = `설정 저장 중 오류가 발생했습니다: ${
-        (error as Error).message
-      }`;
-      vscode.window.showErrorMessage(errorMessage);
-
-      if (this._view) {
-        this._view.webview.postMessage({
-          command: "settingsSaved",
-          success: false,
-          error: errorMessage,
-        });
-      }
+    /**
+     * 웹뷰 패널용 public HTML 생성 메서드
+     */
+    getPublicHtmlContent(webview) {
+        return this.getHtmlContent(webview);
     }
-  }
-
-  /**
-   * 설정 초기화
-   */
-  private async resetSettings() {
-    const result = await vscode.window.showWarningMessage(
-      "모든 설정을 기본값으로 초기화하시겠습니까?",
-      "초기화",
-      "취소"
-    );
-
-    if (result === "초기화") {
-      try {
+    /**
+     * 웹뷰 패널용 public 메시지 핸들러 설정 메서드
+     */
+    setupPublicHandlers(webview) {
+        this.setupMessageHandlers(webview);
+    }
+    getHtmlContent(webview) {
+        return this.generateSettingsHtml();
+    }
+    handleCustomMessage(message) {
+        switch (message.command) {
+            case "saveSettings":
+                this.saveSettings(message.settings);
+                break;
+            case "resetSettings":
+                this.resetSettings();
+                break;
+            case "loadSettings":
+                this.loadAndSendSettings();
+                break;
+            case "openVSCodeSettings":
+                this.openVSCodeSettings();
+                break;
+        }
+    }
+    /**
+     * 설정 저장
+     */
+    async saveSettings(settings) {
+        try {
+            const config = vscode.workspace.getConfiguration("hapa");
+            // 사용자 프로필 설정 저장
+            if (settings.userProfile) {
+                for (const [key, value] of Object.entries(settings.userProfile)) {
+                    await config.update(`userProfile.${key}`, value, vscode.ConfigurationTarget.Global);
+                }
+            }
+            // API 설정 저장
+            if (settings.api) {
+                for (const [key, value] of Object.entries(settings.api)) {
+                    await config.update(key, value, vscode.ConfigurationTarget.Global);
+                }
+            }
+            // 주석 트리거 설정 저장
+            if (settings.commentTrigger) {
+                for (const [key, value] of Object.entries(settings.commentTrigger)) {
+                    await config.update(`commentTrigger.${key}`, value, vscode.ConfigurationTarget.Global);
+                }
+            }
+            // 기능 설정 저장
+            if (settings.features) {
+                for (const [key, value] of Object.entries(settings.features)) {
+                    await config.update(key, value, vscode.ConfigurationTarget.Global);
+                }
+            }
+            vscode.window.showInformationMessage("✅ 설정이 성공적으로 저장되었습니다!");
+            // 웹뷰에 저장 완료 신호 전송
+            if (this._view) {
+                this._view.webview.postMessage({
+                    command: "settingsSaved",
+                    success: true,
+                });
+            }
+        }
+        catch (error) {
+            const errorMessage = `설정 저장 중 오류가 발생했습니다: ${error.message}`;
+            vscode.window.showErrorMessage(errorMessage);
+            if (this._view) {
+                this._view.webview.postMessage({
+                    command: "settingsSaved",
+                    success: false,
+                    error: errorMessage,
+                });
+            }
+        }
+    }
+    /**
+     * 설정 초기화
+     */
+    async resetSettings() {
+        const result = await vscode.window.showWarningMessage("모든 설정을 기본값으로 초기화하시겠습니까?", "초기화", "취소");
+        if (result === "초기화") {
+            try {
+                const config = vscode.workspace.getConfiguration("hapa");
+                // 사용자 프로필 기본값으로 초기화
+                await config.update("userProfile.pythonSkillLevel", "intermediate", vscode.ConfigurationTarget.Global);
+                await config.update("userProfile.codeOutputStructure", "standard", vscode.ConfigurationTarget.Global);
+                await config.update("userProfile.explanationStyle", "standard", vscode.ConfigurationTarget.Global);
+                await config.update("userProfile.projectContext", "general_purpose", vscode.ConfigurationTarget.Global);
+                await config.update("userProfile.errorHandlingPreference", "basic", vscode.ConfigurationTarget.Global);
+                await config.update("userProfile.preferredLanguageFeatures", ["type_hints", "f_strings"], vscode.ConfigurationTarget.Global);
+                // 기능 설정 기본값으로 초기화
+                await config.update("autoComplete", true, vscode.ConfigurationTarget.Global);
+                await config.update("maxSuggestions", 5, vscode.ConfigurationTarget.Global);
+                await config.update("enableLogging", false, vscode.ConfigurationTarget.Global);
+                await config.update("apiTimeout", 30000, vscode.ConfigurationTarget.Global);
+                // 주석 트리거 설정 기본값으로 초기화
+                await config.update("commentTrigger.resultDisplayMode", "sidebar", vscode.ConfigurationTarget.Global);
+                await config.update("commentTrigger.autoInsertDelay", 0, vscode.ConfigurationTarget.Global);
+                await config.update("commentTrigger.showNotification", true, vscode.ConfigurationTarget.Global);
+                vscode.window.showInformationMessage("🔄 설정이 기본값으로 초기화되었습니다.");
+                // 웹뷰 새로고침
+                this.loadAndSendSettings();
+            }
+            catch (error) {
+                vscode.window.showErrorMessage(`설정 초기화 중 오류가 발생했습니다: ${error.message}`);
+            }
+        }
+    }
+    /**
+     * 현재 설정 로드 및 웹뷰로 전송
+     */
+    loadAndSendSettings() {
         const config = vscode.workspace.getConfiguration("hapa");
-
-        // 사용자 프로필 기본값으로 초기화
-        await config.update(
-          "userProfile.pythonSkillLevel",
-          "intermediate",
-          vscode.ConfigurationTarget.Global
-        );
-        await config.update(
-          "userProfile.codeOutputStructure",
-          "standard",
-          vscode.ConfigurationTarget.Global
-        );
-        await config.update(
-          "userProfile.explanationStyle",
-          "standard",
-          vscode.ConfigurationTarget.Global
-        );
-        await config.update(
-          "userProfile.projectContext",
-          "general_purpose",
-          vscode.ConfigurationTarget.Global
-        );
-        await config.update(
-          "userProfile.errorHandlingPreference",
-          "basic",
-          vscode.ConfigurationTarget.Global
-        );
-        await config.update(
-          "userProfile.preferredLanguageFeatures",
-          ["type_hints", "f_strings"],
-          vscode.ConfigurationTarget.Global
-        );
-
-        // 기능 설정 기본값으로 초기화
-        await config.update(
-          "autoComplete",
-          true,
-          vscode.ConfigurationTarget.Global
-        );
-        await config.update(
-          "maxSuggestions",
-          5,
-          vscode.ConfigurationTarget.Global
-        );
-        await config.update(
-          "enableLogging",
-          false,
-          vscode.ConfigurationTarget.Global
-        );
-        await config.update(
-          "apiTimeout",
-          30000,
-          vscode.ConfigurationTarget.Global
-        );
-
-        // 주석 트리거 설정 기본값으로 초기화
-        await config.update(
-          "commentTrigger.resultDisplayMode",
-          "sidebar",
-          vscode.ConfigurationTarget.Global
-        );
-        await config.update(
-          "commentTrigger.autoInsertDelay",
-          0,
-          vscode.ConfigurationTarget.Global
-        );
-        await config.update(
-          "commentTrigger.showNotification",
-          true,
-          vscode.ConfigurationTarget.Global
-        );
-
-        vscode.window.showInformationMessage(
-          "🔄 설정이 기본값으로 초기화되었습니다."
-        );
-
-        // 웹뷰 새로고침
-        this.loadAndSendSettings();
-      } catch (error) {
-        vscode.window.showErrorMessage(
-          `설정 초기화 중 오류가 발생했습니다: ${(error as Error).message}`
-        );
-      }
+        const currentSettings = {
+            userProfile: {
+                email: config.get("userProfile.email"),
+                username: config.get("userProfile.username"),
+                pythonSkillLevel: config.get("userProfile.pythonSkillLevel"),
+                codeOutputStructure: config.get("userProfile.codeOutputStructure"),
+                explanationStyle: config.get("userProfile.explanationStyle"),
+                projectContext: config.get("userProfile.projectContext"),
+                errorHandlingPreference: config.get("userProfile.errorHandlingPreference"),
+                preferredLanguageFeatures: config.get("userProfile.preferredLanguageFeatures"),
+            },
+            api: {
+                apiBaseURL: config.get("apiBaseURL"),
+                apiKey: config.get("apiKey"),
+                apiTimeout: config.get("apiTimeout"),
+            },
+            commentTrigger: {
+                resultDisplayMode: config.get("commentTrigger.resultDisplayMode"),
+                autoInsertDelay: config.get("commentTrigger.autoInsertDelay"),
+                showNotification: config.get("commentTrigger.showNotification"),
+            },
+            features: {
+                autoComplete: config.get("autoComplete"),
+                maxSuggestions: config.get("maxSuggestions"),
+                enableLogging: config.get("enableLogging"),
+                enableCodeAnalysis: config.get("enableCodeAnalysis"),
+            },
+        };
+        if (this._view) {
+            this._view.webview.postMessage({
+                command: "settingsLoaded",
+                settings: currentSettings,
+            });
+        }
     }
-  }
-
-  /**
-   * 현재 설정 로드 및 웹뷰로 전송
-   */
-  private loadAndSendSettings() {
-    const config = vscode.workspace.getConfiguration("hapa");
-
-    const currentSettings = {
-      userProfile: {
-        email: config.get("userProfile.email"),
-        username: config.get("userProfile.username"),
-        pythonSkillLevel: config.get("userProfile.pythonSkillLevel"),
-        codeOutputStructure: config.get("userProfile.codeOutputStructure"),
-        explanationStyle: config.get("userProfile.explanationStyle"),
-        projectContext: config.get("userProfile.projectContext"),
-        errorHandlingPreference: config.get(
-          "userProfile.errorHandlingPreference"
-        ),
-        preferredLanguageFeatures: config.get(
-          "userProfile.preferredLanguageFeatures"
-        ),
-      },
-      api: {
-        apiBaseURL: config.get("apiBaseURL"),
-        apiKey: config.get("apiKey"),
-        apiTimeout: config.get("apiTimeout"),
-      },
-      commentTrigger: {
-        resultDisplayMode: config.get("commentTrigger.resultDisplayMode"),
-        autoInsertDelay: config.get("commentTrigger.autoInsertDelay"),
-        showNotification: config.get("commentTrigger.showNotification"),
-      },
-      features: {
-        autoComplete: config.get("autoComplete"),
-        maxSuggestions: config.get("maxSuggestions"),
-        enableLogging: config.get("enableLogging"),
-        enableCodeAnalysis: config.get("enableCodeAnalysis"),
-      },
-    };
-
-    if (this._view) {
-      this._view.webview.postMessage({
-        command: "settingsLoaded",
-        settings: currentSettings,
-      });
+    /**
+     * VSCode 설정 페이지 열기
+     */
+    openVSCodeSettings() {
+        vscode.commands.executeCommand("workbench.action.openSettings", "hapa");
     }
-  }
-
-  /**
-   * VSCode 설정 페이지 열기
-   */
-  private openVSCodeSettings() {
-    vscode.commands.executeCommand("workbench.action.openSettings", "hapa");
-  }
-
-  /**
-   * 설정 HTML 생성 (탭 기반 UI로 변경)
-   */
-  private generateSettingsHtml(): string {
-    return `
+    /**
+     * 설정 HTML 생성 (탭 기반 UI로 변경)
+     */
+    generateSettingsHtml() {
+        return `
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -1338,5 +1265,7 @@ export class SettingsProvider extends BaseWebviewProvider {
   </script>
 </body>
 </html>`;
-  }
+    }
 }
+exports.SettingsProvider = SettingsProvider;
+//# sourceMappingURL=SettingsProvider.js.map

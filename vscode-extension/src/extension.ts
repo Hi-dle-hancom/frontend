@@ -582,6 +582,10 @@ class CommandManager {
         this.showSettingsPanel();
       }),
 
+      vscode.commands.registerCommand("hapa.settings", () => {
+        this.showSettingsPanel();
+      }),
+
       vscode.commands.registerCommand("hapa.analyzeSelection", () => {
         this.handleCodeSelection("분석");
       }),
@@ -610,7 +614,7 @@ class CommandManager {
       }),
 
       vscode.commands.registerCommand("hapa.openUserSettings", () => {
-        vscode.commands.executeCommand("workbench.action.openSettings", "hapa");
+        this.showSettingsPanel();
       }),
 
       // 자동 완성 관련 명령어
@@ -846,12 +850,17 @@ ${stats.topFeatures
       this.memoryManager.registerWebviewPanel(panel);
 
       const provider = new SettingsProvider(this.extensionUri);
-      panel.webview.html = provider["getHtmlContent"](panel.webview);
-      provider["setupMessageHandlers"](panel.webview);
+      panel.webview.html = provider.getPublicHtmlContent(panel.webview);
+      provider.setupPublicHandlers(panel.webview);
     } catch (error) {
       this.errorService.logError(error as Error, ErrorSeverity.MEDIUM, {
         panel: "settings",
       });
+      vscode.window.showErrorMessage(
+        `설정 패널 로드 실패: ${
+          error instanceof Error ? error.message : "알 수 없는 오류"
+        }`
+      );
     }
   }
 
@@ -871,12 +880,17 @@ ${stats.topFeatures
       this.memoryManager.registerWebviewPanel(panel);
 
       const provider = new OnboardingProvider(this.extensionUri);
-      panel.webview.html = provider["getHtmlContent"](panel.webview);
-      provider["setupMessageHandlers"](panel.webview);
+      panel.webview.html = provider.getPublicHtmlContent(panel.webview);
+      provider.setupPublicHandlers(panel.webview);
     } catch (error) {
       this.errorService.logError(error as Error, ErrorSeverity.MEDIUM, {
         panel: "onboarding",
       });
+      vscode.window.showErrorMessage(
+        `온보딩 패널 로드 실패: ${
+          error instanceof Error ? error.message : "알 수 없는 오류"
+        }`
+      );
     }
   }
 

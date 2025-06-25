@@ -357,6 +357,31 @@ export class HAPACompletionProvider implements vscode.CompletionItemProvider {
     const char = line.text.charAt(position.character - 1);
     return this.triggerCharacters.includes(char);
   }
+
+  private async generateCodeResponse(
+    userQuestion: string,
+    codeContext?: string
+  ): Promise<{ code: string; explanation?: string }> {
+    try {
+      const response = await apiClient.generatePersonalizedCode({
+        user_question: userQuestion,
+        code_context: codeContext,
+        language: "python",
+      });
+
+      if (response.status === "success" && response.generated_code) {
+        return {
+          code: response.generated_code,
+          explanation: response.explanation,
+        };
+      }
+
+      throw new Error("Failed to generate personalized code");
+    } catch (error) {
+      console.error("HAPA 코드 생성 오류:", error);
+      throw error;
+    }
+  }
 }
 
 /**
