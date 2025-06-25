@@ -1,748 +1,478 @@
-# 🎨 HAPA Frontend
+# 🗄️ HAPA DB Module
 
-[![React](https://img.shields.io/badge/React-19.0+-blue.svg)](https://react.dev/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.7+-blue.svg)](https://www.typescriptlang.org/)
-[![VSCode](https://img.shields.io/badge/VSCode-Extension-green.svg)](https://code.visualstudio.com/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-green.svg)](https://fastapi.tiangolo.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-blue.svg)](https://www.postgresql.org/)
+[![JWT](https://img.shields.io/badge/JWT-Authentication-orange.svg)](https://jwt.io/)
 
-> **HAPA의 사용자 인터페이스 생태계**  
-> VSCode 확장 프로그램과 React 웹 애플리케이션으로 구성된 다중 플랫폼 프론트엔드
+> **HAPA 사용자 관리 및 인증 마이크로서비스**  
+> PostgreSQL 기반 사용자 데이터 관리, JWT 인증, 온보딩 설정 서비스
 
-## 🎯 **Frontend 개요**
+## 🎯 **서비스 개요**
 
-HAPA Frontend는 **두 가지 독립적인 인터페이스**로 구성되어 AI 코딩 어시스턴트 서비스를 제공합니다:
+HAPA DB Module은 사용자 인증, 개인화 설정, 온보딩 플로우를 담당하는 **독립적인 마이크로서비스**입니다. Backend API와 분리되어 확장성과 보안성을 향상시켰습니다.
 
-1. **VSCode Extension** - 개발자의 주요 작업 환경
-2. **React Landing Page** - 웹 기반 서비스 소개 및 가이드
+### ✨ **주요 기능**
 
-### ✨ **주요 특징**
-
-- 🔌 **VSCode 통합**: 개발 워크플로우에 직접 통합
-- 🌐 **웹 인터페이스**: 브라우저 기반 서비스 접근
-- 🎯 **타입 안전성**: TypeScript 기반 안정적 개발
-- 📱 **반응형 디자인**: 다양한 화면 크기 지원
-- ⚡ **실시간 스트리밍**: AI 응답 실시간 표시
-- 🎨 **모던 UI/UX**: 최신 디자인 패턴 적용
+- 👤 **사용자 인증**: JWT 토큰 기반 안전한 인증 시스템
+- ⚙️ **개인화 설정**: 27개 온보딩 옵션으로 맞춤형 AI 경험
+- 🚀 **온보딩 플로우**: 신규 사용자 설정 가이드
+- 🔒 **보안 관리**: 패스워드 해싱, 토큰 관리
+- 📊 **사용자 프로필**: 스킬 레벨, 선호도 관리
+- 🔄 **실시간 동기화**: Backend API와 실시간 데이터 연동
 
 ## 🏗️ **아키텍처**
 
 ```
-Frontend/
-├── 📁 vscode-extension/         # VSCode 확장 프로그램
-│   ├── 📁 src/
-│   │   ├── extension.ts         # 확장 진입점
-│   │   ├── 📁 providers/        # 웹뷰 및 기능 제공자
-│   │   ├── 📁 services/         # 외부 서비스 연동
-│   │   ├── 📁 modules/          # 핵심 기능 모듈
-│   │   └── 📁 templates/        # HTML 템플릿
-│   ├── package.json             # 확장 매니페스트
-│   └── README.md               # 확장 문서
-│
-└── 📁 landing-page/            # React 웹 애플리케이션
-    ├── 📁 src/
-    │   ├── App.tsx             # 메인 컴포넌트
-    │   ├── 📁 components/      # UI 컴포넌트
-    │   ├── 📁 pages/           # 페이지 컴포넌트
-    │   ├── 📁 hooks/           # 커스텀 훅
-    │   └── 📁 contexts/        # 상태 관리
-    ├── package.json            # 의존성 및 스크립트
-    └── README.md              # 웹앱 문서
+DB-Module/
+├── 📄 main.py              # FastAPI 애플리케이션 진입점
+├── 📄 database.py          # PostgreSQL 커넥션 풀 관리
+├── 📄 auth.py              # JWT 인증 로직
+├── 📄 models.py            # Pydantic 데이터 모델
+├── 📄 requirements.txt     # Python 의존성
+├── 📄 Dockerfile           # Docker 컨테이너 설정
+└── 📄 .env                 # 환경 변수 설정
+```
+
+### 🗃️ **데이터베이스 스키마**
+
+```sql
+-- 사용자 테이블
+users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    hashed_password VARCHAR(255) NOT NULL,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- 설정 옵션 마스터 테이블 (27개 옵션)
+setting_options (
+    id SERIAL PRIMARY KEY,
+    category VARCHAR(50) NOT NULL,     -- 'skill_level', 'output_structure' 등
+    option_key VARCHAR(100) NOT NULL,  -- 'beginner', 'standard' 등
+    option_value VARCHAR(255) NOT NULL, -- 표시명
+    description TEXT,
+    is_active BOOLEAN DEFAULT true
+);
+
+-- 사용자별 선택된 설정
+user_selected_options (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id),
+    setting_option_id INTEGER REFERENCES setting_options(id),
+    selected_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(user_id, setting_option_id)
+);
 ```
 
 ## 🚀 **빠른 시작**
 
 ### 전제 조건
 
-- **Node.js 18+**
-- **npm 9+ 또는 yarn 1.22+**
-- **VSCode 1.85+** (VSCode 확장용)
+- **Python 3.12+**
+- **PostgreSQL 15+**
 - **Git**
 
-### 1. VSCode Extension 개발
+### 로컬 개발 환경
 
 ```bash
-# 1. 프로젝트 클론
-cd Frontend/vscode-extension
+# 1. 저장소 클론 (프로젝트 루트에서)
+cd DB-Module
 
-# 2. 의존성 설치
-npm install
+# 2. 가상환경 생성 및 활성화
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
 
-# 3. 확장 빌드
-npm run compile
+# 3. 의존성 설치
+pip install -r requirements.txt
 
-# 4. VSCode에서 테스트
-# F5 키를 눌러 Extension Development Host 실행
+# 4. PostgreSQL 데이터베이스 설정
+createdb hapa_development
+
+# 5. 환경 변수 설정
+cp .env.example .env
+# .env 파일에서 DATABASE_URL 등 수정
+
+# 6. 개발 서버 시작
+uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 ```
 
-### 2. React Landing Page 개발
+### Docker 실행
 
 ```bash
-# 1. 프로젝트 디렉토리 이동
-cd Frontend/landing-page
+# 1. Docker 이미지 빌드
+docker build -t hapa-db-module .
 
-# 2. 의존성 설치
-npm install
-
-# 3. 개발 서버 시작
-npm start
-
-# 4. 브라우저에서 확인
-# http://localhost:3000 자동 열림
+# 2. 컨테이너 실행
+docker run -p 8001:8001 \
+  -e DATABASE_URL="postgresql://user:pass@host:5432/hapa" \
+  -e JWT_SECRET_KEY="your-jwt-secret" \
+  hapa-db-module
 ```
 
-### 3. 전체 Frontend 빌드
+### 서비스 확인
 
 ```bash
-# 프로젝트 루트에서
-npm run build:frontend
+# 헬스 체크
+curl http://localhost:8001/health
 
-# 또는 개별 빌드
-cd Frontend/vscode-extension && npm run package
-cd Frontend/landing-page && npm run build
+# API 문서 확인
+open http://localhost:8001/docs
 ```
 
-## 🔌 **VSCode Extension**
+## 🔧 **환경 설정**
 
-### 주요 기능
+### 필수 환경 변수
 
-#### 🤖 **AI 코딩 어시스턴트**
+```bash
+# 기본 설정
+ENVIRONMENT=development          # development/production
+HOST=0.0.0.0                    # 서버 호스트
+PORT=8001                       # 서버 포트
 
-- 자연어 질문을 Python 코드로 변환
-- 컨텍스트 기반 코드 자동완성
-- 실시간 스트리밍 응답
+# 데이터베이스 설정
+DATABASE_URL=postgresql://username:password@localhost:5432/hapa_development
 
-#### 📝 **스마트 코드 삽입**
+# JWT 인증 설정
+JWT_SECRET_KEY=your-super-secure-jwt-secret-key-32-characters-minimum
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_DAYS=365    # 토큰 만료 기간
 
-- 커서 위치에 코드 자동 삽입
-- 다양한 삽입 모드 (즉시/확인/사이드바)
-- 코드 포맷팅 자동 적용
+# CORS 설정 (개발환경)
+CORS_ORIGINS=["http://localhost:3000", "http://localhost:8000"]
 
-#### ⚙️ **개인화 설정**
+# 로깅 설정
+LOG_LEVEL=INFO
+```
 
-- 27개 온보딩 옵션으로 맞춤 설정
-- 실시간 설정 동기화
-- 사용자별 AI 모델 튜닝
+### 운영 환경 설정
 
-### 확장 명령어
+```bash
+# 운영 환경 전용
+ENVIRONMENT=production
+DEBUG=false
 
-| 명령어                | 설명               | 단축키         |
-| --------------------- | ------------------ | -------------- |
-| `hapa.askQuestion`    | AI에게 질문하기    | `Ctrl+Shift+H` |
-| `hapa.openSidebar`    | HAPA 사이드바 열기 | `Ctrl+Shift+P` |
-| `hapa.openSettings`   | 설정 패널 열기     | -              |
-| `hapa.showOnboarding` | 온보딩 가이드 보기 | -              |
+# 강화된 보안 설정
+ACCESS_TOKEN_EXPIRE_DAYS=7      # 짧은 토큰 만료 기간
+CORS_ORIGINS=["https://your-domain.com"]
 
-### 설정 옵션
+# 데이터베이스 풀링
+DATABASE_POOL_SIZE=10
+DATABASE_MAX_OVERFLOW=20
+```
+
+## 📡 **API 엔드포인트**
+
+### 🔐 **인증 API**
+
+#### **사용자 등록**
+
+```http
+POST /register
+Content-Type: application/json
+
+{
+  "username": "john_doe",
+  "email": "john@example.com",
+  "password": "secure_password123"
+}
+```
+
+**응답:**
 
 ```json
 {
-  "hapa.apiUrl": "http://localhost:8000",
-  "hapa.autoInsert": true,
-  "hapa.insertMode": "cursor",
-  "hapa.enableStreaming": true,
-  "hapa.maxTokens": 1500,
-  "hapa.temperature": 0.3
+  "message": "사용자가 성공적으로 등록되었습니다.",
+  "user_id": 1,
+  "username": "john_doe"
 }
 ```
 
-### 확장 개발 가이드
+#### **로그인**
 
-#### **개발 환경 설정**
+```http
+POST /login
+Content-Type: application/x-www-form-urlencoded
+
+username=john_doe&password=secure_password123
+```
+
+**응답:**
+
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "bearer",
+  "expires_in": 31536000
+}
+```
+
+### ⚙️ **설정 관리 API**
+
+#### **온보딩 옵션 조회**
+
+```http
+GET /setting-options
+```
+
+**응답:**
+
+```json
+{
+  "skill_level": [
+    {
+      "id": 1,
+      "option_key": "beginner",
+      "option_value": "초급자 (Python 기초 학습 중)",
+      "description": "Python 문법을 배우고 있는 단계"
+    },
+    {
+      "id": 2,
+      "option_key": "intermediate",
+      "option_value": "중급자 (기본 문법 숙지)",
+      "description": "기본적인 Python 개발 가능"
+    }
+  ],
+  "output_structure": [
+    {
+      "id": 5,
+      "option_key": "minimal",
+      "option_value": "간결한 코드",
+      "description": "핵심 로직만 포함된 간단한 코드"
+    }
+  ]
+}
+```
+
+#### **사용자 설정 업데이트**
+
+```http
+PUT /users/me/settings
+Authorization: Bearer your-jwt-token
+Content-Type: application/json
+
+{
+  "selected_options": [1, 5, 8, 12, 15]
+}
+```
+
+### 👤 **사용자 프로필 API**
+
+#### **현재 사용자 정보 조회**
+
+```http
+GET /users/me
+Authorization: Bearer your-jwt-token
+```
+
+**응답:**
+
+```json
+{
+  "id": 1,
+  "username": "john_doe",
+  "email": "john@example.com",
+  "is_active": true,
+  "created_at": "2024-01-15T10:30:00Z",
+  "selected_settings": {
+    "skill_level": "intermediate",
+    "output_structure": "standard",
+    "explanation_style": "detailed",
+    "project_context": "web_development",
+    "preferred_features": ["type_hints", "f_strings"]
+  }
+}
+```
+
+## 📊 **온보딩 설정 옵션**
+
+### 🎯 **27개 개인화 옵션 카테고리**
+
+1. **Python 스킬 레벨** (4개)
+
+   - 초급자, 중급자, 고급자, 전문가
+
+2. **코드 출력 구조** (4개)
+
+   - 간결, 표준, 상세, 포괄적
+
+3. **설명 스타일** (4개)
+
+   - 간단, 표준, 상세, 교육적
+
+4. **프로젝트 컨텍스트** (6개)
+
+   - 웹개발, 데이터사이언스, 자동화, 범용, 학술, 기업
+
+5. **주석 트리거 모드** (4개)
+
+   - 즉시삽입, 사이드바, 확인삽입, 인라인미리보기
+
+6. **선호 언어 기능** (8개)
+
+   - 타입힌트, 데이터클래스, 비동기, 컴프리헨션, 제너레이터, 데코레이터, 컨텍스트매니저, f-strings
+
+7. **에러 처리 선호도** (4개)
+   - 기본, 상세, 견고함, 프로덕션 준비
+
+## 🔒 **보안 고려사항**
+
+### 패스워드 보안
+
+```python
+# bcrypt 해싱 사용
+from passlib.context import CryptContext
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# 패스워드 해싱
+hashed = pwd_context.hash(plain_password)
+
+# 패스워드 검증
+is_valid = pwd_context.verify(plain_password, hashed)
+```
+
+### JWT 토큰 보안
+
+- **HS256 알고리즘** 사용
+- **32자 이상 시크릿 키** 필수
+- **토큰 만료시간** 설정
+- **리프레시 토큰** 미지원 (간단한 아키텍처)
+
+## 🚨 **에러 처리**
+
+### 표준 에러 응답
+
+```json
+{
+  "detail": "사용자를 찾을 수 없습니다.",
+  "error_code": "USER_NOT_FOUND",
+  "timestamp": "2024-01-15T10:30:00Z"
+}
+```
+
+### 주요 에러 코드
+
+- `USER_NOT_FOUND` (404): 사용자를 찾을 수 없음
+- `INVALID_CREDENTIALS` (401): 잘못된 인증 정보
+- `USER_ALREADY_EXISTS` (409): 사용자 이미 존재
+- `INVALID_TOKEN` (401): 유효하지 않은 JWT 토큰
+- `DATABASE_ERROR` (500): 데이터베이스 연결 오류
+
+## 📈 **모니터링**
+
+### 헬스 체크
 
 ```bash
-# 의존성 설치
-npm install
+# 기본 헬스 체크
+curl http://localhost:8001/health
 
-# TypeScript 컴파일 (watch 모드)
-npm run watch
-
-# 테스트 실행
-npm test
-
-# 확장 패키징
-npm run package
+# 데이터베이스 연결 상태 포함
+curl http://localhost:8001/health/detailed
 ```
 
-#### **확장 구조**
+### 로그 모니터링
 
-```typescript
-// src/extension.ts - 확장 진입점
-export function activate(context: vscode.ExtensionContext) {
-  // 확장 활성화 로직
-  const sidebarProvider = new SidebarProvider(context.extensionUri);
-  const completionProvider = new CompletionProvider();
+```bash
+# 애플리케이션 로그
+tail -f logs/db-module.log
 
-  // 명령어 등록
-  context.subscriptions.push(
-    vscode.commands.registerCommand("hapa.askQuestion", askQuestion),
-    vscode.window.registerWebviewViewProvider("hapa-sidebar", sidebarProvider)
-  );
-}
+# 데이터베이스 연결 로그
+grep "database" logs/db-module.log
 ```
 
-#### **웹뷰 Provider**
+## 🔄 **Backend API와의 연동**
 
-```typescript
-// src/providers/SidebarProvider.ts
-export class SidebarProvider implements vscode.WebviewViewProvider {
-  resolveWebviewView(webviewView: vscode.WebviewView) {
-    webviewView.webview.html = this.getHtmlForWebview();
+### 사용자 설정 조회 플로우
 
-    // 메시지 핸들링
-    webviewView.webview.onDidReceiveMessage((data) => {
-      switch (data.type) {
-        case "askQuestion":
-          this.handleQuestion(data.question);
-          break;
-      }
-    });
-  }
-}
-```
+```mermaid
+sequenceDiagram
+    participant VSCode as VSCode Extension
+    participant Backend as Backend API
+    participant DBModule as DB Module
 
-## 🌐 **React Landing Page**
-
-### 주요 페이지
-
-#### 🏠 **Home Page** (`/`)
-
-- HAPA 서비스 소개
-- 주요 기능 하이라이트
-- 시작하기 CTA
-
-#### 📚 **Guide Page** (`/guide`)
-
-- 설치 가이드
-- 사용법 튜토리얼
-- FAQ 및 문제해결
-
-#### ℹ️ **About Page** (`/about`)
-
-- 서비스 상세 정보
-- 기술 스택 소개
-- 팀 정보
-
-### 기술 스택
-
-- **React 19**: 최신 React 기능 활용
-- **TypeScript**: 타입 안전성 보장
-- **Tailwind CSS**: 유틸리티 우선 스타일링
-- **Zustand**: 경량 상태 관리
-- **React Router**: 클라이언트 라우팅
-
-### 컴포넌트 구조
-
-```typescript
-// src/App.tsx - 메인 애플리케이션
-function App() {
-  return (
-    <ErrorBoundary>
-      <Router>
-        <Layout>
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/guide" element={<GuidePage />} />
-            <Route path="/about" element={<AboutPage />} />
-          </Routes>
-        </Layout>
-      </Router>
-    </ErrorBoundary>
-  );
-}
-```
-
-#### **주요 컴포넌트**
-
-```typescript
-// 레이아웃 컴포넌트
-export const Layout = ({ children }: LayoutProps) => (
-  <div className="min-h-screen bg-gray-50">
-    <Header />
-    <main>{children}</main>
-    <Footer />
-  </div>
-);
-
-// Thunder 데모 컴포넌트
-export const ThunderDemo = () => {
-  const [code, setCode] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-
-  const generateCode = async (question: string) => {
-    setIsLoading(true);
-    // AI 코드 생성 로직
-  };
-
-  return (
-    <div className="demo-container">
-      <input onSubmit={generateCode} />
-      {isLoading ? <Spinner /> : <CodeDisplay code={code} />}
-    </div>
-  );
-};
-```
-
-### 반응형 디자인
-
-```css
-/* Tailwind CSS 유틸리티 */
-.responsive-grid {
-  @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6;
-}
-
-.mobile-first {
-  @apply text-sm md:text-base lg:text-lg;
-  @apply p-4 md:p-6 lg:p-8;
-}
-```
-
-### 성능 최적화
-
-#### **코드 분할**
-
-```typescript
-// 지연 로딩
-const GuidePage = lazy(() => import("./pages/GuidePage"));
-const AboutPage = lazy(() => import("./pages/AboutPage"));
-
-// 라우터에서 Suspense 사용
-<Suspense fallback={<LoadingSpinner />}>
-  <Routes>
-    <Route path="/guide" element={<GuidePage />} />
-  </Routes>
-</Suspense>;
-```
-
-#### **이미지 최적화**
-
-```typescript
-// LazyImage 컴포넌트
-export const LazyImage = ({ src, alt, ...props }: ImageProps) => {
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [isInView, setIsInView] = useState(false);
-
-  return (
-    <div ref={ref} className="relative">
-      {isInView && (
-        <img
-          src={src}
-          alt={alt}
-          onLoad={() => setIsLoaded(true)}
-          className={`transition-opacity ${
-            isLoaded ? "opacity-100" : "opacity-0"
-          }`}
-          {...props}
-        />
-      )}
-    </div>
-  );
-};
-```
-
-## 🔄 **Backend 연동**
-
-### API 클라이언트
-
-```typescript
-// VSCode Extension - API 클라이언트
-export class ApiClient {
-  private baseUrl = "http://localhost:8000";
-
-  async generateCode(
-    request: CodeGenerationRequest
-  ): Promise<CodeGenerationResponse> {
-    const response = await fetch(`${this.baseUrl}/api/v1/generate-code`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-Key": this.apiKey,
-      },
-      body: JSON.stringify(request),
-    });
-
-    return response.json();
-  }
-
-  // 스트리밍 응답 처리
-  async *streamCode(request: CodeGenerationRequest) {
-    const response = await fetch(
-      `${this.baseUrl}/api/v1/generate-code/stream`,
-      {
-        method: "POST",
-        headers: {
-          /* ... */
-        },
-        body: JSON.stringify(request),
-      }
-    );
-
-    const reader = response.body?.getReader();
-    if (!reader) return;
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      const chunk = new TextDecoder().decode(value);
-      yield JSON.parse(chunk);
-    }
-  }
-}
-```
-
-### 인증 관리
-
-```typescript
-// 사용자 인증 상태 관리
-export const useAuth = () => {
-  const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-
-  const login = async (email: string, password: string) => {
-    const response = await fetch("http://localhost:8001/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: `username=${email}&password=${password}`,
-    });
-
-    const data = await response.json();
-    setToken(data.access_token);
-    setUser(data.user);
-  };
-
-  return { user, token, login };
-};
+    VSCode->>Backend: 코드 생성 요청 (with JWT)
+    Backend->>DBModule: 사용자 설정 조회
+    DBModule-->>Backend: 개인화 설정 반환
+    Backend->>Backend: 설정 기반 AI 모델 조정
+    Backend-->>VSCode: 맞춤형 코드 응답
 ```
 
 ## 🧪 **테스트**
 
-### VSCode Extension 테스트
+### 단위 테스트 실행
 
 ```bash
-# 단위 테스트
-npm test
+# 전체 테스트 실행
+pytest
 
-# 통합 테스트 (VSCode Test Runner)
-npm run test:integration
-
-# 확장 로드 테스트
-npm run test:extension
-```
-
-### React App 테스트
-
-```bash
-# Jest 테스트 실행
-npm test
+# 특정 모듈 테스트
+pytest test_auth.py
 
 # 커버리지 포함
-npm test -- --coverage
-
-# E2E 테스트 (Playwright)
-npm run test:e2e
+pytest --cov=. --cov-report=html
 ```
 
-### 테스트 예시
-
-```typescript
-// VSCode Extension 테스트
-describe("HAPA Extension", () => {
-  test("should activate extension", async () => {
-    const extension = vscode.extensions.getExtension("hancom.hapa");
-    expect(extension).toBeDefined();
-
-    await extension?.activate();
-    expect(extension?.isActive).toBe(true);
-  });
-
-  test("should register commands", async () => {
-    const commands = await vscode.commands.getCommands();
-    expect(commands).toContain("hapa.askQuestion");
-  });
-});
-
-// React 컴포넌트 테스트
-describe("ThunderDemo Component", () => {
-  test("renders code generation interface", () => {
-    render(<ThunderDemo />);
-    expect(
-      screen.getByPlaceholderText("질문을 입력하세요")
-    ).toBeInTheDocument();
-  });
-
-  test("generates code on submit", async () => {
-    render(<ThunderDemo />);
-    const input = screen.getByRole("textbox");
-    const button = screen.getByRole("button", { name: /생성/i });
-
-    fireEvent.change(input, { target: { value: "리스트 정렬하기" } });
-    fireEvent.click(button);
-
-    await waitFor(() => {
-      expect(screen.getByText(/def sort_list/)).toBeInTheDocument();
-    });
-  });
-});
-```
-
-## 🚀 **빌드 및 배포**
-
-### VSCode Extension 빌드
+### API 테스트
 
 ```bash
-# 개발 빌드
-npm run compile
+# 사용자 등록 테스트
+curl -X POST http://localhost:8001/register \
+  -H "Content-Type: application/json" \
+  -d '{"username":"test","email":"test@example.com","password":"test123"}'
 
-# 프로덕션 빌드 (.vsix 패키지)
-npm run package
-
-# Marketplace 게시
-npx vsce publish
+# 로그인 테스트
+curl -X POST http://localhost:8001/login \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "username=test&password=test123"
 ```
 
-### React App 빌드
+## 🚀 **배포 가이드**
 
-```bash
-# 프로덕션 빌드
-npm run build
-
-# 빌드 결과물 미리보기
-npm run preview
-
-# Docker 이미지 빌드
-docker build -t hapa-landing-page .
-```
-
-### Docker 배포
-
-```dockerfile
-# Frontend/landing-page/Dockerfile
-FROM node:18-alpine AS builder
-
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-
-COPY . .
-RUN npm run build
-
-FROM nginx:alpine
-COPY --from=builder /app/build /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/nginx.conf
-
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
-```
-
-### CI/CD Pipeline
+### Docker Compose (권장)
 
 ```yaml
-# .github/workflows/frontend.yml
-name: Frontend CI/CD
-
-on:
-  push:
-    branches: [main, develop]
-    paths: ["Frontend/**"]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 18
-          cache: "npm"
-
-      - name: Install dependencies
-        run: npm ci
-        working-directory: Frontend/landing-page
-
-      - name: Run tests
-        run: npm test -- --coverage
-        working-directory: Frontend/landing-page
-
-      - name: Build application
-        run: npm run build
-        working-directory: Frontend/landing-page
-
-  extension:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 18
-
-      - name: Install dependencies
-        run: npm ci
-        working-directory: Frontend/vscode-extension
-
-      - name: Compile extension
-        run: npm run compile
-        working-directory: Frontend/vscode-extension
-
-      - name: Package extension
-        run: npm run package
-        working-directory: Frontend/vscode-extension
+# docker-compose.yml에서 확인
+services:
+  db-module:
+    build: ./DB-Module
+    ports:
+      - "8001:8001"
+    environment:
+      - DATABASE_URL=postgresql://user:pass@postgres:5432/hapa
+      - JWT_SECRET_KEY=production-secret-key
+    depends_on:
+      - postgres
 ```
 
-## 📱 **사용자 가이드**
-
-### VSCode Extension 사용법
-
-#### **1. 설치**
-
-1. VSCode Extensions 마켓플레이스에서 "HAPA" 검색
-2. "Install" 클릭
-3. VSCode 재시작
-
-#### **2. 기본 사용**
-
-1. `Ctrl+Shift+H`로 질문 창 열기
-2. 자연어로 원하는 코드 설명
-3. 생성된 코드 검토 후 삽입
-
-#### **3. 고급 설정**
-
-1. `Ctrl+Shift+P` → "HAPA: Open Settings"
-2. 개인화 옵션 27개 설정
-3. AI 모델 동작 방식 조정
-
-### 웹 인터페이스 사용법
-
-#### **1. 서비스 소개** (`http://localhost:3000`)
-
-- HAPA 주요 기능 탐색
-- 실시간 데모 체험
-- 설치 가이드 확인
-
-#### **2. 온라인 코드 생성**
-
-- 브라우저에서 직접 코드 생성
-- VSCode 없이도 HAPA 기능 사용
-- 생성된 코드 복사 및 다운로드
-
-## 🛠️ **개발 가이드**
-
-### 개발 환경 설정
+### 단독 배포
 
 ```bash
-# 1. 저장소 클론
-git clone https://github.com/hancom/hapa-frontend.git
-cd Frontend
+# 1. 운영 환경 변수 설정
+export ENVIRONMENT=production
+export DATABASE_URL="postgresql://..."
+export JWT_SECRET_KEY="production-secret-key"
 
-# 2. 의존성 설치 (모든 서브프로젝트)
-npm run install:all
-
-# 3. 개발 서버 시작
-npm run dev:all
-
-# 4. 테스트 실행
-npm run test:all
+# 2. 애플리케이션 시작
+uvicorn main:app --host 0.0.0.0 --port 8001 --workers 4
 ```
 
-### 코딩 규칙
+## 📚 **추가 문서**
 
-#### **TypeScript 스타일**
+- **API 문서**: http://localhost:8001/docs (FastAPI 자동 생성)
+- **데이터베이스 스키마**: `docs/database-schema.md`
+- **보안 가이드**: `docs/security-guide.md`
+- **배포 가이드**: `docs/deployment-guide.md`
 
-```typescript
-// 인터페이스 정의
-interface CodeGenerationRequest {
-  userQuestion: string;
-  codeContext?: string;
-  language: "python";
-  userProfile: UserProfile;
-}
+## 🤝 **기여 가이드**
 
-// 함수형 컴포넌트
-export const CodeEditor: React.FC<CodeEditorProps> = ({
-  initialCode,
-  onChange,
-}) => {
-  const [code, setCode] = useState(initialCode);
-
-  const handleChange = useCallback(
-    (newCode: string) => {
-      setCode(newCode);
-      onChange?.(newCode);
-    },
-    [onChange]
-  );
-
-  return (
-    <textarea
-      value={code}
-      onChange={(e) => handleChange(e.target.value)}
-      className="font-mono text-sm"
-    />
-  );
-};
-```
-
-#### **CSS/Tailwind 규칙**
-
-```css
-/* 컴포넌트별 스타일 모듈화 */
-.thunder-demo {
-  @apply flex flex-col space-y-4 p-6 bg-white rounded-lg shadow-lg;
-}
-
-.code-output {
-  @apply bg-gray-900 text-green-400 p-4 rounded font-mono text-sm overflow-x-auto;
-}
-
-/* 반응형 우선 설계 */
-.responsive-button {
-  @apply px-4 py-2 text-sm md:px-6 md:py-3 md:text-base;
-  @apply bg-blue-500 hover:bg-blue-600 text-white rounded;
-  @apply transition-colors duration-200;
-}
-```
-
-### 기여 가이드
-
-1. **Feature 브랜치** 생성: `git checkout -b feature/new-component`
-2. **변경사항 구현** 및 테스트 작성
-3. **Linting 통과**: `npm run lint:fix`
-4. **테스트 통과**: `npm test`
+1. **Fork** 프로젝트
+2. **Feature 브랜치** 생성: `git checkout -b feature/amazing-feature`
+3. **변경사항 커밋**: `git commit -m 'Add amazing feature'`
+4. **브랜치 푸시**: `git push origin feature/amazing-feature`
 5. **Pull Request** 생성
-
-## 📊 **성능 메트릭**
-
-### 웹앱 성능 목표
-
-- **First Contentful Paint**: < 1.5s
-- **Largest Contentful Paint**: < 2.5s
-- **Cumulative Layout Shift**: < 0.1
-- **Time to Interactive**: < 3.5s
-
-### VSCode Extension 성능
-
-- **확장 활성화 시간**: < 200ms
-- **코드 생성 응답 시간**: < 3s
-- **메모리 사용량**: < 50MB
-
-## 📚 **추가 리소스**
-
-### 문서
-
-- **[VSCode Extension API](https://code.visualstudio.com/api)**: 확장 개발 가이드
-- **[React 19 문서](https://react.dev/)**: React 최신 기능
-- **[Tailwind CSS](https://tailwindcss.com/)**: 스타일링 가이드
-- **[TypeScript 핸드북](https://www.typescriptlang.org/docs/)**: 타입 시스템
-
-### 코드 예시
-
-- **[Extension Development Samples](https://github.com/microsoft/vscode-extension-samples)**
-- **[React TypeScript Cheatsheet](https://react-typescript-cheatsheet.netlify.app/)**
-
-## 🤝 **기여자**
-
-- **Frontend Lead**: UI/UX 설계 및 구현
-- **Extension Developer**: VSCode 확장 개발
-- **Web Developer**: React 웹앱 개발
-- **QA Engineer**: 테스트 및 품질 보증
 
 ## 📄 **라이선스**
 
@@ -751,5 +481,4 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
 ---
 
 **개발팀**: 하이들 (Hi-dle) Team  
-**문의**: frontend@hapa.dev  
-**문서 버전**: v1.0.0
+**문의**: support@hapa.dev
