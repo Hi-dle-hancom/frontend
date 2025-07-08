@@ -1,0 +1,43 @@
+// A launch configuration that compiles the extension and then opens it inside a new window
+// Use IntelliSense to learn about possible attributes.
+// Hover to view descriptions of existing attributes.
+// For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "HAPA Extension 실행",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}"],
+      "outFiles": ["${workspaceFolder}/out/**/*.js"],
+      "preLaunchTask": "${workspaceFolder}/npm: compile"
+    },
+    {
+      "name": "HAPA Extension 테스트",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}",
+        "--extensionTestsPath=${workspaceFolder}/out/test"
+      ],
+      "outFiles": ["${workspaceFolder}/out/**/*.js"],
+      "preLaunchTask": "${workspaceFolder}/npm: compile"
+    },
+    {
+      "name": "온보딩 테스트 모드",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}",
+        "--disable-user-env-probe"
+      ],
+      "outFiles": ["${workspaceFolder}/out/**/*.js"],
+      "env": {
+        "HAPA_TEST_MODE": "onboarding",
+        "HAPA_FORCE_ONBOARDING": "true"
+      },
+      "preLaunchTask": "${workspaceFolder}/npm: compile"
+    }
+  ]
+}

@@ -1,0 +1,541 @@
+{
+  "name": "hapa",
+  "displayName": "HAPA",
+  "description": "Hancom AI Python Assistant - 맞춤형 AI 코딩 어시스턴트. 온보딩부터 개인화 설정까지, 당신만의 Python 개발 경험을 제공합니다.",
+  "version": "0.4.0",
+  "author": "하이들 (Hi-dle) Team",
+  "publisher": "hancom",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hancom/hapa-vscode-extension"
+  },
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other",
+    "Programming Languages",
+    "Snippets",
+    "Education"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "hapa.start",
+        "title": "HAPA: 시작하기"
+      },
+      {
+        "command": "hapa.settings",
+        "title": "HAPA: 설정"
+      },
+      {
+        "command": "hapa.analyze",
+        "title": "HAPA: 코드 분석"
+      },
+      {
+        "command": "hapa.generateTest",
+        "title": "HAPA: 테스트 생성"
+      },
+      {
+        "command": "hapa.explain",
+        "title": "HAPA: 코드 설명"
+      },
+      {
+        "command": "hapa.analyzeSelection",
+        "title": "HAPA: 선택 영역 분석"
+      },
+      {
+        "command": "hapa.testSelection",
+        "title": "HAPA: 선택 영역 테스트 생성"
+      },
+      {
+        "command": "hapa.explainSelection",
+        "title": "HAPA: 선택 영역 설명"
+      },
+      {
+        "command": "hapa.insertCode",
+        "title": "HAPA: 코드 삽입"
+      },
+      {
+        "command": "hapa.openWebsite",
+        "title": "HAPA: 웹사이트 방문"
+      },
+      {
+        "command": "hapa.openDocs",
+        "title": "HAPA: 문서 보기"
+      },
+      {
+        "command": "hapa.showGuide",
+        "title": "HAPA: 가이드 보기"
+      },
+      {
+        "command": "hapa.showSettings",
+        "title": "HAPA: 설정 보기"
+      },
+      {
+        "command": "hapa.showOnboarding",
+        "title": "HAPA: 온보딩 시작"
+      },
+      {
+        "command": "hapa.openUserSettings",
+        "title": "HAPA: 사용자 설정"
+      },
+      {
+        "command": "hapa.showUsageReport",
+        "title": "HAPA: 사용 통계 보고서"
+      },
+      {
+        "command": "hapa.showTelemetryStats",
+        "title": "HAPA: 텔레메트리 상태"
+      },
+      {
+        "command": "hapa.toggleTelemetry",
+        "title": "HAPA: 텔레메트리 토글"
+      },
+      {
+        "command": "hapa.showAccessibilityReport",
+        "title": "HAPA: 접근성 보고서"
+      },
+      {
+        "command": "hapa.announceStatus",
+        "title": "HAPA: 현재 상태 안내"
+      },
+      {
+        "command": "hapa.readSelection",
+        "title": "HAPA: 선택 텍스트 읽기"
+      },
+      {
+        "command": "hapa.increaseFontSize",
+        "title": "HAPA: 폰트 크기 증가"
+      },
+      {
+        "command": "hapa.decreaseFontSize",
+        "title": "HAPA: 폰트 크기 감소"
+      },
+      {
+        "command": "hapa.toggleHighContrast",
+        "title": "HAPA: 고대비 모드 토글"
+      },
+      {
+        "command": "hapa.toggleKeyboardNavigation",
+        "title": "HAPA: 키보드 네비게이션 토글"
+      },
+      {
+        "command": "hapa.toggleScreenReader",
+        "title": "HAPA: 스크린 리더 모드 토글"
+      },
+      {
+        "command": "hapa.showResponsiveReport",
+        "title": "HAPA: 반응형 디자인 보고서"
+      },
+      {
+        "command": "hapa.showResponsiveCSS",
+        "title": "HAPA: 반응형 CSS 보기"
+      },
+      {
+        "command": "hapa.toggleResponsive",
+        "title": "HAPA: 반응형 디자인 토글"
+      },
+      {
+        "command": "hapa.setBreakpointMobile",
+        "title": "HAPA: 모바일 브레이크포인트 설정"
+      },
+      {
+        "command": "hapa.setBreakpointTablet",
+        "title": "HAPA: 태블릿 브레이크포인트 설정"
+      },
+      {
+        "command": "hapa.setBreakpointDesktop",
+        "title": "HAPA: 데스크톱 브레이크포인트 설정"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "hapa-sidebar",
+          "title": "HAPA",
+          "icon": "$(robot)"
+        }
+      ]
+    },
+    "views": {
+      "hapa-sidebar": [
+        {
+          "id": "hapa-dashboard",
+          "name": "AI Assistant",
+          "type": "webview"
+        }
+      ]
+    },
+    "menus": {
+      "editor/context": [
+        {
+          "command": "hapa.analyzeSelection",
+          "group": "hapa",
+          "when": "editorTextFocus && editorHasSelection"
+        },
+        {
+          "command": "hapa.testSelection",
+          "group": "hapa",
+          "when": "editorTextFocus && editorHasSelection"
+        },
+        {
+          "command": "hapa.explainSelection",
+          "group": "hapa",
+          "when": "editorTextFocus && editorHasSelection"
+        },
+        {
+          "command": "hapa.analyze",
+          "group": "hapa",
+          "when": "editorTextFocus && !editorHasSelection"
+        },
+        {
+          "command": "hapa.generateTest",
+          "group": "hapa",
+          "when": "editorTextFocus && !editorHasSelection"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "HAPA",
+      "properties": {
+        "hapa.enableCodeAnalysis": {
+          "type": "boolean",
+          "default": true,
+          "description": "코드 분석 기능 활성화"
+        },
+        "hapa.theme": {
+          "type": "string",
+          "enum": [
+            "light",
+            "dark",
+            "system"
+          ],
+          "default": "system",
+          "description": "HAPA 테마 설정"
+        },
+        "hapa.apiBaseURL": {
+          "type": "string",
+          "default": "http://3.13.240.111:8000/api/v1",
+          "description": "HAPA API 서버 주소"
+        },
+        "hapa.apiKey": {
+          "type": "string",
+          "default": "hapa_demo_20241228_secure_key_for_testing",
+          "description": "HAPA API 인증 키"
+        },
+        "hapa.apiTimeout": {
+          "type": "number",
+          "default": 30000,
+          "description": "API 요청 타임아웃 (밀리초)"
+        },
+        "hapa.autoComplete": {
+          "type": "boolean",
+          "default": true,
+          "description": "자동 완성 기능 활성화"
+        },
+        "hapa.maxSuggestions": {
+          "type": "number",
+          "default": 5,
+          "minimum": 1,
+          "maximum": 10,
+          "description": "코드 완성 제안 최대 개수"
+        },
+        "hapa.enableLogging": {
+          "type": "boolean",
+          "default": false,
+          "description": "디버그 로깅 활성화"
+        },
+        "hapa.userProfile.isOnboardingCompleted": {
+          "type": "boolean",
+          "default": false,
+          "description": "온보딩 완료 여부"
+        },
+        "hapa.userProfile.pythonSkillLevel": {
+          "type": "string",
+          "enum": [
+            "beginner",
+            "intermediate",
+            "advanced",
+            "expert"
+          ],
+          "default": "intermediate",
+          "description": "Python 스킬 수준",
+          "enumDescriptions": [
+            "초급자 (기본 문법 학습 중)",
+            "중급자 (일반적인 프로그래밍 가능)",
+            "고급자 (복잡한 프로젝트 개발 가능)",
+            "전문가 (최적화 및 아키텍처 설계)"
+          ]
+        },
+        "hapa.userProfile.codeOutputStructure": {
+          "type": "string",
+          "enum": [
+            "minimal",
+            "standard",
+            "detailed",
+            "comprehensive"
+          ],
+          "default": "standard",
+          "description": "선호하는 코드 출력 구조",
+          "enumDescriptions": [
+            "최소한의 코드만 (핵심 로직만)",
+            "표준 구조 (일반적인 코드 + 기본 주석)",
+            "상세 구조 (자세한 주석 + 예외 처리)",
+            "포괄적 구조 (문서화 + 테스트 + 최적화)"
+          ]
+        },
+        "hapa.userProfile.explanationStyle": {
+          "type": "string",
+          "enum": [
+            "brief",
+            "standard",
+            "detailed",
+            "educational"
+          ],
+          "default": "standard",
+          "description": "설명 스타일",
+          "enumDescriptions": [
+            "간단한 설명 (핵심만)",
+            "표준 설명 (코드 + 간단한 설명)",
+            "상세 설명 (개념 + 이유 + 활용법)",
+            "교육적 설명 (단계별 + 예시 + 관련 개념)"
+          ]
+        },
+        "hapa.userProfile.preferredLanguageFeatures": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "type_hints",
+              "dataclasses",
+              "async_await",
+              "comprehensions",
+              "generators",
+              "decorators",
+              "context_managers",
+              "f_strings"
+            ]
+          },
+          "default": [
+            "type_hints",
+            "f_strings"
+          ],
+          "description": "선호하는 Python 언어 기능",
+          "uniqueItems": true
+        },
+        "hapa.userProfile.projectContext": {
+          "type": "string",
+          "enum": [
+            "web_development",
+            "data_science",
+            "automation",
+            "general_purpose",
+            "academic",
+            "enterprise"
+          ],
+          "default": "general_purpose",
+          "description": "주요 개발 분야",
+          "enumDescriptions": [
+            "웹 개발 (Django, Flask, FastAPI)",
+            "데이터 사이언스 (NumPy, Pandas, ML)",
+            "자동화 스크립팅 (시스템, 업무 자동화)",
+            "범용 개발 (다양한 목적)",
+            "학술/연구 (알고리즘, 연구 프로젝트)",
+            "기업용 개발 (대규모, 안정성 중시)"
+          ]
+        },
+        "hapa.userProfile.errorHandlingPreference": {
+          "type": "string",
+          "enum": [
+            "minimal",
+            "basic",
+            "comprehensive",
+            "production_ready"
+          ],
+          "default": "basic",
+          "description": "오류 처리 선호도",
+          "enumDescriptions": [
+            "최소한의 오류 처리",
+            "기본적인 try-catch",
+            "포괄적인 예외 처리",
+            "프로덕션 수준 오류 처리"
+          ]
+        },
+        "hapa.commentTrigger.resultDisplayMode": {
+          "type": "string",
+          "default": "sidebar",
+          "description": "주석 트리거 결과 표시 방식",
+          "enum": [
+            "immediate_insert",
+            "sidebar",
+            "confirm_insert",
+            "inline_preview"
+          ],
+          "enumDescriptions": [
+            "즉시 삽입: 코드를 커서 위치에 바로 삽입",
+            "사이드바 표시: 사이드바에 결과를 표시 (기본값)",
+            "확인 후 삽입: 결과를 확인한 후 삽입 여부 선택",
+            "인라인 미리보기: 에디터에서 미리보기 후 선택"
+          ]
+        },
+        "hapa.commentTrigger.autoInsertDelay": {
+          "type": "number",
+          "default": 0,
+          "description": "즉시 삽입 모드에서의 지연 시간 (밀리초, 0은 즉시)",
+          "minimum": 0,
+          "maximum": 5000
+        },
+        "hapa.commentTrigger.showNotification": {
+          "type": "boolean",
+          "default": true,
+          "description": "주석 트리거 실행 시 알림 표시 여부"
+        },
+        "hapa.autoComplete.maxSuggestions": {
+          "type": "number",
+          "default": 5,
+          "minimum": 1,
+          "maximum": 10,
+          "description": "자동 완성 제안 최대 개수"
+        },
+        "hapa.autoComplete.confidenceThreshold": {
+          "type": "number",
+          "default": 0.3,
+          "minimum": 0.1,
+          "maximum": 1,
+          "description": "자동 완성 제안 최소 신뢰도 (0.1-1.0)"
+        },
+        "hapa.autoComplete.enableInlineCompletion": {
+          "type": "boolean",
+          "default": true,
+          "description": "인라인 자동 완성 (GitHub Copilot 스타일) 활성화"
+        },
+        "hapa.autoComplete.debounceDelay": {
+          "type": "number",
+          "default": 300,
+          "minimum": 100,
+          "maximum": 1000,
+          "description": "자동 완성 디바운스 지연 시간 (ms)"
+        },
+        "hapa.autoComplete.showExplanations": {
+          "type": "boolean",
+          "default": true,
+          "description": "자동 완성 제안에 AI 설명 표시"
+        },
+        "hapa.autoComplete.enableContextAnalysis": {
+          "type": "boolean",
+          "default": true,
+          "description": "컨텍스트 분석을 통한 스마트 완성"
+        },
+        "hapa.telemetry.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "익명화된 사용 통계 수집 허용"
+        },
+        "hapa.telemetry.consented": {
+          "type": "boolean",
+          "default": false,
+          "description": "텔레메트리 수집 동의 여부"
+        },
+        "hapa.telemetryUserId": {
+          "type": "string",
+          "default": "",
+          "description": "텔레메트리 사용자 식별자"
+        },
+        "hapa.accessibility.highContrast": {
+          "type": "boolean",
+          "default": false,
+          "description": "고대비 모드 활성화"
+        },
+        "hapa.accessibility.largeText": {
+          "type": "boolean",
+          "default": false,
+          "description": "큰 텍스트 모드 활성화"
+        },
+        "hapa.accessibility.screenReaderOptimized": {
+          "type": "boolean",
+          "default": false,
+          "description": "스크린 리더 최적화"
+        },
+        "hapa.accessibility.keyboardNavigation": {
+          "type": "boolean",
+          "default": true,
+          "description": "키보드 네비게이션 활성화"
+        },
+        "hapa.accessibility.focusIndicators": {
+          "type": "boolean",
+          "default": true,
+          "description": "포커스 표시 강화"
+        },
+        "hapa.accessibility.announcements": {
+          "type": "boolean",
+          "default": false,
+          "description": "음성 안내 활성화"
+        },
+        "hapa.accessibility.fontSize": {
+          "type": "number",
+          "default": 14,
+          "minimum": 8,
+          "maximum": 72,
+          "description": "기본 폰트 크기"
+        },
+        "hapa.accessibility.colorTheme": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "light",
+            "dark",
+            "high-contrast"
+          ],
+          "default": "auto",
+          "description": "색상 테마 설정"
+        },
+        "hapa.responsive.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "반응형 디자인 활성화"
+        },
+        "hapa.responsive.adaptationThreshold": {
+          "type": "number",
+          "default": 50,
+          "minimum": 10,
+          "maximum": 200,
+          "description": "반응형 적응 임계값 (px)"
+        },
+        "hapa.responsive.debounceDelay": {
+          "type": "number",
+          "default": 150,
+          "minimum": 50,
+          "maximum": 500,
+          "description": "반응형 디바운스 지연시간 (ms)"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "20.x",
+    "@types/vscode": "^1.80.0",
+    "@typescript-eslint/eslint-plugin": "^8.31.1",
+    "@typescript-eslint/parser": "^8.31.1",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.5.2",
+    "eslint": "^9.25.1",
+    "typescript": "^4.9.5"
+  },
+  "dependencies": {
+    "axios": "^1.10.0"
+  }
+}
