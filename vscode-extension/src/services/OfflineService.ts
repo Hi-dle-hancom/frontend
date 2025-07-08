@@ -3,6 +3,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { EnhancedErrorService, ErrorSeverity } from "./EnhancedErrorService";
 import { MemoryManager } from "./MemoryManager";
+import { VLLMModelType } from "../modules/apiClient";
 
 export interface OfflineRequest {
   id: string;
@@ -346,7 +347,6 @@ export class OfflineService {
         cursor_position: request.payload.cursor_position || 0,
         file_path: request.payload.file_path || "",
         context: request.payload.context || "",
-        trigger_character: request.payload.trigger_character || "",
       });
 
       // 성공 시 응답 캐시
@@ -399,12 +399,12 @@ export class OfflineService {
 
       // 코드 분석을 위한 생성 요청으로 처리
       const analysisResponse = await apiClient.generateCode({
-        user_question: `다음 코드를 분석해주세요: ${
+        prompt: `다음 코드를 분석해주세요: ${
           request.payload.question || "코드 품질 분석"
         }`,
-        code_context: request.payload.code || "",
+        context: request.payload.code || "",
+        model_type: VLLMModelType.CODE_EXPLANATION,
         language: request.payload.language || "python",
-        file_path: request.payload.file_path || "",
       });
 
       // 성공 시 응답 캐시
@@ -458,10 +458,10 @@ export class OfflineService {
       const { apiClient } = await import("../modules/apiClient.js");
 
       const generationResponse = await apiClient.generateCode({
-        user_question: request.payload.user_question || "",
-        code_context: request.payload.code_context || "",
+        prompt: request.payload.user_question || "",
+        context: request.payload.code_context || "",
+        model_type: VLLMModelType.CODE_GENERATION,
         language: request.payload.language || "python",
-        file_path: request.payload.file_path || "",
       });
 
       // 성공 시 응답 캐시
@@ -667,7 +667,9 @@ export class OfflineService {
 
   private async restoreCache(): Promise<void> {
     try {
-      if (!fs.existsSync(this.cacheDir)) return;
+      if (!fs.existsSync(this.cacheDir)) {
+        return;
+      }
 
       const files = fs.readdirSync(this.cacheDir);
 
@@ -715,5 +717,236 @@ export class OfflineService {
         key,
       });
     }
+  }
+
+  /**
+   * Smart Retry 메커니즘 - 지수 백오프와 지터 적용
+   */
+  async smartRetry<T>(
+    operation: () => Promise<T>,
+    maxRetries: number = 3,
+    baseDelay: number = 1000,
+    operationName?: string
+  ): Promise<T> {
+    let attempt = 0;
+
+    while (attempt <= maxRetries) {
+      try {
+        if (attempt > 0) {
+          // 지수 백오프 + 지터 (25% 랜덤 편차)
+          const exponentialDelay = baseDelay * Math.pow(2, attempt - 1);
+          const jitter = exponentialDelay * 0.25 * Math.random();
+          const totalDelay = exponentialDelay + jitter;
+
+          await new Promise((resolve) => setTimeout(resolve, totalDelay));
+
+          // 재시도 전 온라인 상태 확인
+          const isOnline = await this.checkOnlineStatus();
+          if (!isOnline) {
+            throw new Error("Still offline, cannot retry");
+          }
+        }
+
+        const result = await operation();
+
+        // 성공시 통계 업데이트
+        if (attempt > 0 && operationName) {
+          this.updateRetryStats(operationName, attempt, true);
+        }
+
+        return result;
+      } catch (error) {
+        attempt++;
+
+        if (attempt > maxRetries) {
+          // 최종 실패시 통계 업데이트
+          if (operationName) {
+            this.updateRetryStats(operationName, attempt - 1, false);
+          }
+          throw error;
+        }
+
+        // 일시적 오류가 아닌 경우 즉시 실패
+        if (this.isPermanentError(error)) {
+          throw error;
+        }
+      }
+    }
+
+    throw new Error("Unexpected retry loop exit");
+  }
+
+  /**
+   * Progressive Cache Warming - 중요도 기반 캐시 예열
+   */
+  async progressiveCacheWarming(): Promise<void> {
+    const isOnline = await this.checkOnlineStatus();
+    if (!isOnline) {
+      return;
+    }
+
+    const warmupOperations = [
+      // 높은 우선순위: 기본 설정 및 에이전트 정보
+      {
+        name: "agent_list",
+        priority: 1,
+        operation: async () => {
+          // 에이전트 목록 미리 캐시
+          const defaultAgents = [
+            { id: "web_dev", name: "웹 개발자 AI", type: "web_development" },
+            {
+              id: "data_scientist",
+              name: "데이터 과학자 AI",
+              type: "data_science",
+            },
+            { id: "automation", name: "자동화 전문가 AI", type: "automation" },
+          ];
+          this.cacheResponse("agents:list", defaultAgents, 30); // 30분
+        },
+      },
+
+      // 중간 우선순위: 코드 템플릿
+      {
+        name: "code_templates",
+        priority: 2,
+        operation: async () => {
+          const templates = {
+            python: {
+              function:
+                'def {name}({params}):\n    """{docstring}"""\n    pass',
+              class:
+                'class {name}:\n    """{docstring}"""\n    \n    def __init__(self):\n        pass',
+              api_endpoint:
+                '@app.{method}("/{path}")\ndef {name}():\n    """{docstring}"""\n    return {"message": "success"}',
+            },
+          };
+          this.cacheResponse("templates:code", templates, 60); // 1시간
+        },
+      },
+
+      // 낮은 우선순위: 사용 통계 및 기타
+      {
+        name: "usage_stats",
+        priority: 3,
+        operation: async () => {
+          const stats = {
+            lastUpdated: new Date().toISOString(),
+            features: [],
+            performance: {},
+          };
+          this.cacheResponse("stats:usage", stats, 10); // 10분
+        },
+      },
+    ];
+
+    // 우선순위 순으로 실행
+    const sortedOperations = warmupOperations.sort(
+      (a, b) => a.priority - b.priority
+    );
+
+    for (const op of sortedOperations) {
+      try {
+        await this.smartRetry(
+          op.operation,
+          2, // 캐시 워밍은 실패해도 치명적이지 않으므로 재시도 횟수 제한
+          500,
+          `cache_warmup_${op.name}`
+        );
+
+        await new Promise((resolve) => setTimeout(resolve, 100)); // 부하 분산
+      } catch (error) {
+        console.warn(`Cache warming failed for ${op.name}:`, error);
+        // 캐시 워밍 실패는 치명적이지 않으므로 계속 진행
+      }
+    }
+  }
+
+  /**
+   * Intelligent Cache Invalidation - 스마트 캐시 무효화
+   */
+  intelligentCacheInvalidation(): void {
+    const now = Date.now();
+    const invalidatedKeys: string[] = [];
+
+    for (const [key, item] of this.responseCache.entries()) {
+      const age = now - item.timestamp.getTime();
+      const dynamicTtl = this.calculateDynamicTTL(key, item);
+
+      if (age > dynamicTtl) {
+        this.responseCache.delete(key);
+        invalidatedKeys.push(key);
+      }
+    }
+
+    if (invalidatedKeys.length > 0) {
+      console.log(
+        `Invalidated ${invalidatedKeys.length} cache entries:`,
+        invalidatedKeys
+      );
+    }
+  }
+
+  /**
+   * 동적 TTL 계산 - 사용 빈도와 데이터 유형에 따라 조정
+   */
+  private calculateDynamicTTL(key: string, item: any): number {
+    const baseHours = 1;
+    let multiplier = 1;
+
+    // 데이터 타입별 가중치
+    if (key.includes("agent")) {
+      multiplier = 2; // 에이전트 정보는 더 오래 보관
+    } else if (key.includes("template")) {
+      multiplier = 3; // 템플릿은 가장 오래 보관
+    } else if (key.includes("stats")) {
+      multiplier = 0.5; // 통계는 빠르게 갱신
+    }
+
+    // 접근 빈도 고려 (미래 확장용)
+    // const accessFrequency = this.getAccessFrequency(key);
+    // multiplier *= Math.max(0.5, Math.min(2.0, accessFrequency));
+
+    return baseHours * 3600000 * multiplier; // 밀리초로 변환
+  }
+
+  /**
+   * 영구적 오류 판별
+   */
+  private isPermanentError(error: any): boolean {
+    if (error?.status) {
+      // 4xx 오류는 대부분 영구적 (401, 403, 404 등)
+      return (
+        error.status >= 400 &&
+        error.status < 500 &&
+        error.status !== 408 &&
+        error.status !== 429
+      );
+    }
+
+    if (error?.code) {
+      const permanentCodes = [
+        "UNAUTHORIZED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "INVALID_REQUEST",
+      ];
+      return permanentCodes.includes(error.code);
+    }
+
+    return false;
+  }
+
+  /**
+   * 재시도 통계 업데이트
+   */
+  private updateRetryStats(
+    operationName: string,
+    attempts: number,
+    successful: boolean
+  ): void {
+    // 재시도 통계 로그 (향후 확장 가능)
+    console.log(
+      `Retry stats for ${operationName}: ${attempts} attempts, successful: ${successful}`
+    );
   }
 }

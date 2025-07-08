@@ -344,7 +344,7 @@ export class ResponsiveDesignService {
    * 반응형 레이아웃 적용
    */
   private async applyResponsiveLayout(): Promise<void> {
-    if (!this.isResponsiveEnabled) return;
+    if (!this.isResponsiveEnabled) {return;}
 
     try {
       // 현재 뷰포트에 맞는 브레이크포인트 찾기
@@ -400,7 +400,7 @@ export class ResponsiveDesignService {
     current: string
   ): Promise<void> {
     const currentConfig = this.breakpoints.get(current);
-    if (!currentConfig) return;
+    if (!currentConfig) {return;}
 
     // VS Code 설정 업데이트 제안
     if (currentConfig.fontSize !== 14) {
@@ -435,7 +435,7 @@ export class ResponsiveDesignService {
    */
   private async adaptComponents(): Promise<void> {
     const currentConfig = this.breakpoints.get(this.currentBreakpoint);
-    if (!currentConfig) return;
+    if (!currentConfig) {return;}
 
     const availableWidth = this.currentViewport.width;
     const components = Array.from(this.adaptiveComponents.values()).sort(
@@ -542,7 +542,7 @@ export class ResponsiveDesignService {
    */
   generateResponsiveCSS(): string {
     const currentConfig = this.breakpoints.get(this.currentBreakpoint);
-    if (!currentConfig) return "";
+    if (!currentConfig) {return "";}
 
     return `
 /* HAPA 반응형 스타일 - ${this.currentBreakpoint} */

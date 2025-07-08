@@ -28,6 +28,8 @@ export class SettingsProvider extends BaseWebviewProvider {
   }
 
   protected handleCustomMessage(message: any) {
+    console.log("🔔 설정 프로바이더 메시지 수신:", message.command);
+
     switch (message.command) {
       case "saveSettings":
         this.saveSettings(message.settings);
@@ -36,20 +38,40 @@ export class SettingsProvider extends BaseWebviewProvider {
         this.resetSettings();
         break;
       case "loadSettings":
+        console.log("📥 설정 로드 요청 처리 중...");
         this.loadAndSendSettings();
         break;
       case "openVSCodeSettings":
         this.openVSCodeSettings();
         break;
+      default:
+        console.log("❓ 알 수 없는 메시지:", message.command);
     }
   }
 
   /**
-   * 설정 저장
+   * 웹뷰가 준비되면 즉시 설정 로드
+   */
+  protected onWebviewReady(): void {
+    console.log("🔗 설정 웹뷰 준비 완료 - 설정 로드 시작");
+
+    // 즉시 설정 로드 시도
+    this.loadAndSendSettings();
+
+    // 안전장치: 500ms 후에도 다시 시도
+    setTimeout(() => {
+      console.log("🛟 설정 프로바이더 안전장치: 설정 재로드 시도");
+      this.loadAndSendSettings();
+    }, 500);
+  }
+
+  /**
+   * 설정 저장 (이메일 변경 시 자동 API 키 발급 옵션 포함)
    */
   private async saveSettings(settings: any) {
     try {
       const config = vscode.workspace.getConfiguration("hapa");
+      const previousEmail = config.get<string>("userProfile.email");
 
       // 사용자 프로필 설정 저장
       if (settings.userProfile) {
@@ -87,6 +109,41 @@ export class SettingsProvider extends BaseWebviewProvider {
         }
       }
 
+      // 이메일이 변경되었고 API 키가 없는 경우 자동 발급 제안
+      const newEmail = settings.userProfile?.email;
+      const currentApiKey = config.get<string>("apiKey");
+
+      if (newEmail && newEmail !== previousEmail && !currentApiKey) {
+        console.log("📧 이메일 변경 감지 - 자동 API 키 발급 제안");
+
+        const choice = await vscode.window.showInformationMessage(
+          "이메일이 설정되었습니다. API 키를 자동으로 발급받으시겠습니까?",
+          "자동 발급",
+          "나중에",
+          "취소"
+        );
+
+        if (choice === "자동 발급") {
+          const apiKeyResult = await this.generateAPIKeyForEmail(
+            newEmail,
+            settings.userProfile?.username
+          );
+
+          if (apiKeyResult.success) {
+            vscode.window.showInformationMessage(
+              `✅ API 키가 자동으로 발급되어 설정에 저장되었습니다!\n\n🔑 키: ${apiKeyResult.apiKey?.substring(
+                0,
+                20
+              )}...`
+            );
+          } else {
+            vscode.window.showWarningMessage(
+              `⚠️ API 키 자동 발급에 실패했습니다: ${apiKeyResult.error}\n\n설정에서 수동으로 발급받으세요.`
+            );
+          }
+        }
+      }
+
       vscode.window.showInformationMessage(
         "✅ 설정이 성공적으로 저장되었습니다!"
       );
@@ -111,6 +168,73 @@ export class SettingsProvider extends BaseWebviewProvider {
           error: errorMessage,
         });
       }
+    }
+  }
+
+  /**
+   * 설정에서 이메일을 위한 API 키 발급
+   */
+  private async generateAPIKeyForEmail(
+    email: string,
+    username?: string
+  ): Promise<{
+    success: boolean;
+    apiKey?: string;
+    error?: string;
+  }> {
+    try {
+      console.log("🔑 설정에서 API 키 발급 요청:", { email, username });
+
+      const config = vscode.workspace.getConfiguration("hapa");
+      const apiBaseURL = config.get<string>(
+        "apiBaseURL",
+        "http://3.13.240.111:8000/api/v1"
+      );
+
+      const response = await fetch(`${apiBaseURL}/users/generate-api-key`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: email,
+          username: username || email.split("@")[0],
+        }),
+        timeout: 10000,
+      } as any);
+
+      if (response.ok) {
+        const result = await response.json();
+
+        // API 키를 설정에 자동 저장
+        await config.update(
+          "apiKey",
+          result.api_key,
+          vscode.ConfigurationTarget.Global
+        );
+
+        console.log("✅ 설정에서 API 키 발급 및 저장 완료");
+
+        return {
+          success: true,
+          apiKey: result.api_key,
+        };
+      } else {
+        const errorText = await response.text();
+        console.error("❌ 설정에서 API 키 발급 실패:", errorText);
+
+        return {
+          success: false,
+          error: `서버 오류: ${response.status} - ${errorText}`,
+        };
+      }
+    } catch (error) {
+      console.error("❌ 설정에서 API 키 발급 중 오류:", error);
+
+      return {
+        success: false,
+        error: `발급 오류: ${(error as Error).message}`,
+      };
     }
   }
 
@@ -217,46 +341,109 @@ export class SettingsProvider extends BaseWebviewProvider {
    * 현재 설정 로드 및 웹뷰로 전송
    */
   private loadAndSendSettings() {
-    const config = vscode.workspace.getConfiguration("hapa");
+    try {
+      console.log("⚙️ VSCode 설정 로드 시작...");
+      const config = vscode.workspace.getConfiguration("hapa");
 
-    const currentSettings = {
-      userProfile: {
-        email: config.get("userProfile.email"),
-        username: config.get("userProfile.username"),
-        pythonSkillLevel: config.get("userProfile.pythonSkillLevel"),
-        codeOutputStructure: config.get("userProfile.codeOutputStructure"),
-        explanationStyle: config.get("userProfile.explanationStyle"),
-        projectContext: config.get("userProfile.projectContext"),
-        errorHandlingPreference: config.get(
-          "userProfile.errorHandlingPreference"
-        ),
-        preferredLanguageFeatures: config.get(
-          "userProfile.preferredLanguageFeatures"
-        ),
-      },
-      api: {
-        apiBaseURL: config.get("apiBaseURL"),
-        apiKey: config.get("apiKey"),
-        apiTimeout: config.get("apiTimeout"),
-      },
-      commentTrigger: {
-        resultDisplayMode: config.get("commentTrigger.resultDisplayMode"),
-        autoInsertDelay: config.get("commentTrigger.autoInsertDelay"),
-        showNotification: config.get("commentTrigger.showNotification"),
-      },
-      features: {
-        autoComplete: config.get("autoComplete"),
-        maxSuggestions: config.get("maxSuggestions"),
-        enableLogging: config.get("enableLogging"),
-        enableCodeAnalysis: config.get("enableCodeAnalysis"),
-      },
-    };
+      const currentSettings = {
+        userProfile: {
+          email: config.get("userProfile.email") || "complete.test@email.com",
+          username: config.get("userProfile.username") || "CompleteUser",
+          pythonSkillLevel:
+            config.get("userProfile.pythonSkillLevel") || "intermediate",
+          codeOutputStructure:
+            config.get("userProfile.codeOutputStructure") || "minimal",
+          explanationStyle:
+            config.get("userProfile.explanationStyle") || "brief",
+          projectContext:
+            config.get("userProfile.projectContext") || "web_development",
+          errorHandlingPreference:
+            config.get("userProfile.errorHandlingPreference") || "basic",
+          preferredLanguageFeatures: config.get(
+            "userProfile.preferredLanguageFeatures"
+          ) || ["type_hints"],
+        },
+        api: {
+          apiBaseURL:
+            config.get("apiBaseURL") || "http://3.13.240.111:8000/api/v1",
+          apiKey:
+            config.get("apiKey") || "hapa_demo_20241228_secure_key_for_testing",
+          apiTimeout: config.get("apiTimeout") || 30000,
+        },
+        commentTrigger: {
+          resultDisplayMode:
+            config.get("commentTrigger.resultDisplayMode") ||
+            "immediate_insert",
+          autoInsertDelay: config.get("commentTrigger.autoInsertDelay") || 0,
+          showNotification:
+            config.get("commentTrigger.showNotification") || false,
+        },
+        features: {
+          autoComplete: config.get("autoComplete") ?? true,
+          maxSuggestions: config.get("maxSuggestions") || 5,
+          enableLogging: config.get("enableLogging") || false,
+          enableCodeAnalysis: config.get("enableCodeAnalysis") ?? true,
+        },
+      };
 
-    if (this._view) {
-      this._view.webview.postMessage({
-        command: "settingsLoaded",
-        settings: currentSettings,
+      console.log("📋 로드된 설정:", {
+        email: currentSettings.userProfile.email,
+        apiKey:
+          currentSettings.api.apiKey &&
+          typeof currentSettings.api.apiKey === "string"
+            ? currentSettings.api.apiKey.substring(0, 10) + "..."
+            : "없음",
+        apiBaseURL: currentSettings.api.apiBaseURL,
       });
+
+      if (this._view) {
+        console.log("📤 웹뷰로 설정 전송 중...");
+        this._view.webview.postMessage({
+          command: "settingsLoaded",
+          settings: currentSettings,
+        });
+        console.log("✅ 설정 전송 완료");
+      } else {
+        console.error("❌ 웹뷰 인스턴스가 없음");
+      }
+    } catch (error) {
+      console.error("❌ 설정 로드 실패:", error);
+
+      // 오류 발생 시에도 기본 설정으로 응답
+      if (this._view) {
+        this._view.webview.postMessage({
+          command: "settingsLoaded",
+          settings: {
+            userProfile: {
+              email: "complete.test@email.com",
+              username: "CompleteUser",
+              pythonSkillLevel: "intermediate",
+              codeOutputStructure: "minimal",
+              explanationStyle: "brief",
+              projectContext: "web_development",
+              errorHandlingPreference: "basic",
+              preferredLanguageFeatures: ["type_hints"],
+            },
+            api: {
+              apiBaseURL: "http://3.13.240.111:8000/api/v1",
+              apiKey: "hapa_demo_20241228_secure_key_for_testing",
+              apiTimeout: 30000,
+            },
+            commentTrigger: {
+              resultDisplayMode: "immediate_insert",
+              autoInsertDelay: 0,
+              showNotification: false,
+            },
+            features: {
+              autoComplete: true,
+              maxSuggestions: 5,
+              enableLogging: false,
+              enableCodeAnalysis: true,
+            },
+          },
+          error: (error as Error).message,
+        });
+      }
     }
   }
 
@@ -268,11 +455,438 @@ export class SettingsProvider extends BaseWebviewProvider {
   }
 
   /**
-   * 설정 HTML 생성 (탭 기반 UI로 변경)
+   * 설정 HTML 생성 (JavaScript 템플릿 분리)
    */
   private generateSettingsHtml(): string {
-    return `
-<!DOCTYPE html>
+    // 안전하고 간단한 JavaScript 코드
+    const scriptContent = `
+    (function() {
+      'use strict';
+      
+      let currentSettings = {};
+      let isFormVisible = false;
+      let vscode = null;
+      
+      // VSCode API 초기화
+      function initializeVSCode() {
+        try {
+          vscode = acquireVsCodeApi();
+          console.log('✅ VSCode API 초기화 완료');
+          return true;
+        } catch (error) {
+          console.error('❌ VSCode API 초기화 실패:', error);
+          return false;
+        }
+      }
+      
+      // 설정 로드 함수
+      function loadSettings() {
+        console.log('📥 설정 로드 요청 전송...');
+        if (vscode) {
+          vscode.postMessage({
+            command: 'loadSettings'
+          });
+        } else {
+          console.error('❌ VSCode API가 초기화되지 않음');
+          showFormWithDefaults();
+        }
+      }
+      
+      // 기본값으로 폼 표시
+      function showFormWithDefaults() {
+        console.log('📋 기본 설정으로 폼 표시');
+        const defaultSettings = {
+          userProfile: {
+            email: 'complete.test@email.com',
+            username: 'CompleteUser',
+            pythonSkillLevel: 'intermediate',
+            codeOutputStructure: 'minimal',
+            explanationStyle: 'brief',
+            projectContext: 'web_development',
+            errorHandlingPreference: 'basic',
+            preferredLanguageFeatures: ['type_hints']
+          },
+          api: {
+            apiBaseURL: 'http://3.13.240.111:8000/api/v1',
+            apiKey: 'hapa_demo_20241228_secure_key_for_testing',
+            apiTimeout: 30000
+          },
+          commentTrigger: {
+            resultDisplayMode: 'immediate_insert',
+            autoInsertDelay: 0,
+            showNotification: false
+          },
+          features: {
+            autoComplete: true,
+            maxSuggestions: 5,
+            enableLogging: false,
+            enableCodeAnalysis: true
+          }
+        };
+        
+        hideLoading();
+        showForm();
+        populateSettings(defaultSettings);
+      }
+      
+      // 로딩 숨기기
+      function hideLoading() {
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        if (loadingIndicator) {
+          loadingIndicator.style.display = 'none';
+        }
+      }
+      
+      // 폼 표시
+      function showForm() {
+        const settingsForm = document.getElementById('settingsForm');
+        if (settingsForm) {
+          settingsForm.style.display = 'block';
+          isFormVisible = true;
+          console.log('✅ 설정 폼 표시 완료');
+        }
+      }
+      
+      // 설정으로 폼 채우기
+      function populateSettings(settings) {
+        console.log('📝 설정 데이터로 폼 채우기...');
+        
+        try {
+          // 사용자 프로필
+          if (settings.userProfile) {
+            setValue('email', settings.userProfile.email);
+            setValue('username', settings.userProfile.username);
+            setValue('pythonSkillLevel', settings.userProfile.pythonSkillLevel);
+            setValue('codeOutputStructure', settings.userProfile.codeOutputStructure);
+            setValue('explanationStyle', settings.userProfile.explanationStyle);
+            setValue('projectContext', settings.userProfile.projectContext);
+            setValue('errorHandlingPreference', settings.userProfile.errorHandlingPreference);
+          }
+          
+          // API 설정
+          if (settings.api) {
+            setValue('apiBaseURL', settings.api.apiBaseURL);
+            setValue('apiKey', settings.api.apiKey);
+            setValue('apiTimeout', settings.api.apiTimeout);
+          }
+          
+          // 주석 트리거 설정
+          if (settings.commentTrigger) {
+            setValue('commentTriggerResultDisplayMode', settings.commentTrigger.resultDisplayMode);
+            setValue('commentTriggerAutoInsertDelay', settings.commentTrigger.autoInsertDelay);
+            setChecked('commentTriggerShowNotification', settings.commentTrigger.showNotification);
+          }
+          
+          // 기능 설정
+          if (settings.features) {
+            setChecked('autoComplete', settings.features.autoComplete);
+            setValue('maxSuggestions', settings.features.maxSuggestions);
+            setChecked('enableLogging', settings.features.enableLogging);
+            setChecked('enableCodeAnalysis', settings.features.enableCodeAnalysis);
+          }
+          
+          console.log('✅ 폼 채우기 완료');
+        } catch (error) {
+          console.error('❌ 폼 채우기 오류:', error);
+        }
+      }
+      
+      // 값 설정 헬퍼 함수
+      function setValue(id, value) {
+        const element = document.getElementById(id);
+        if (element && value !== undefined && value !== null) {
+          element.value = value;
+        }
+      }
+      
+      // 체크박스 설정 헬퍼 함수
+      function setChecked(id, checked) {
+        const element = document.getElementById(id);
+        if (element && checked !== undefined && checked !== null) {
+          element.checked = !!checked;
+        }
+      }
+      
+      // 설정 저장 함수
+      function saveSettings() {
+        console.log('💾 설정 저장 시작...');
+        
+        if (!vscode) {
+          console.error('❌ VSCode API 없음');
+          return;
+        }
+        
+        try {
+          const settings = {
+            userProfile: {
+              email: getValue('email') || 'complete.test@email.com',
+              username: getValue('username') || 'CompleteUser',
+              pythonSkillLevel: getValue('pythonSkillLevel') || 'intermediate',
+              codeOutputStructure: getValue('codeOutputStructure') || 'minimal',
+              explanationStyle: getValue('explanationStyle') || 'brief',
+              projectContext: getValue('projectContext') || 'web_development',
+              errorHandlingPreference: getValue('errorHandlingPreference') || 'basic',
+              preferredLanguageFeatures: ['type_hints']
+            },
+            api: {
+              apiBaseURL: getValue('apiBaseURL') || 'http://3.13.240.111:8000/api/v1',
+              apiKey: getValue('apiKey') || '',
+              apiTimeout: parseInt(getValue('apiTimeout')) || 30000
+            },
+            commentTrigger: {
+              resultDisplayMode: getValue('commentTriggerResultDisplayMode') || 'immediate_insert',
+              autoInsertDelay: parseInt(getValue('commentTriggerAutoInsertDelay')) || 0,
+              showNotification: getChecked('commentTriggerShowNotification') || false
+            },
+            features: {
+              autoComplete: getChecked('autoComplete') !== false,
+              maxSuggestions: parseInt(getValue('maxSuggestions')) || 5,
+              enableLogging: getChecked('enableLogging') || false,
+              enableCodeAnalysis: getChecked('enableCodeAnalysis') !== false
+            }
+          };
+          
+          console.log('📤 설정 저장 요청 전송:', settings);
+          
+          vscode.postMessage({
+            command: 'saveSettings',
+            settings: settings
+          });
+          
+        } catch (error) {
+          console.error('❌ 설정 저장 오류:', error);
+        }
+      }
+      
+      // 값 가져오기 헬퍼 함수
+      function getValue(id) {
+        const element = document.getElementById(id);
+        return element ? element.value : '';
+      }
+      
+      // 체크박스 상태 가져오기 헬퍼 함수
+      function getChecked(id) {
+        const element = document.getElementById(id);
+        return element ? element.checked : false;
+      }
+      
+      // 기타 함수들
+      function resetSettings() {
+        if (confirm('모든 설정을 기본값으로 초기화하시겠습니까?')) {
+          if (vscode) {
+            vscode.postMessage({
+              command: 'resetSettings'
+            });
+          }
+        }
+      }
+      
+      function openVSCodeSettings() {
+        if (vscode) {
+          vscode.postMessage({
+            command: 'openVSCodeSettings'
+          });
+        }
+      }
+      
+      // API 키 발급 함수
+      async function generateApiKey() {
+        console.log('🔑 API 키 발급 시작...');
+        
+        const email = getValue('email') || 'complete.test@email.com';
+        const username = getValue('username') || 'CompleteUser';
+        const apiBaseURL = getValue('apiBaseURL') || 'http://3.13.240.111:8000/api/v1';
+        
+        if (!email) {
+          alert('이메일을 먼저 입력해주세요.');
+          return;
+        }
+        
+        try {
+          const response = await fetch(apiBaseURL + '/users/generate-api-key', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              email: email,
+              username: username
+            })
+          });
+          
+          if (response.ok) {
+            const result = await response.json();
+            setValue('apiKey', result.api_key);
+            alert('API 키가 성공적으로 발급되어 입력 필드에 설정되었습니다!');
+            console.log('✅ API 키 발급 성공');
+          } else {
+            const errorText = await response.text();
+            alert('API 키 발급에 실패했습니다: ' + errorText);
+            console.error('❌ API 키 발급 실패:', errorText);
+          }
+        } catch (error) {
+          alert('API 키 발급 중 오류가 발생했습니다: ' + error.message);
+          console.error('❌ API 키 발급 오류:', error);
+        }
+      }
+      
+      // 메시지 이벤트 리스너
+      window.addEventListener('message', function(event) {
+        const message = event.data;
+        console.log('📨 웹뷰 메시지 수신:', message.command);
+        
+        switch (message.command) {
+          case 'settingsLoaded':
+            console.log('📥 설정 로드 완료');
+            currentSettings = message.settings;
+            hideLoading();
+            showForm();
+            populateSettings(currentSettings);
+            break;
+            
+          case 'settingsSaved':
+            if (message.success) {
+              console.log('✅ 설정 저장 완료');
+              alert('설정이 성공적으로 저장되었습니다!');
+            } else {
+              console.error('❌ 설정 저장 실패:', message.error);
+              alert('설정 저장 중 오류가 발생했습니다: ' + message.error);
+            }
+            break;
+            
+          case 'settingsReset':
+            console.log('🔄 설정 초기화 완료');
+            alert('설정이 기본값으로 초기화되었습니다.');
+            loadSettings();
+            break;
+        }
+      });
+      
+      // 안전장치들
+      let timeoutId1 = null;
+      let timeoutId2 = null;
+      let timeoutId3 = null;
+      
+      // 다단계 안전장치
+      function setupSafetyMeasures() {
+        // 1차 안전장치: 1초 후
+        timeoutId1 = setTimeout(function() {
+          if (!isFormVisible) {
+            console.log('⚠️ 1차 안전장치 실행 (1초)');
+            showFormWithDefaults();
+          }
+        }, 1000);
+        
+        // 2차 안전장치: 3초 후
+        timeoutId2 = setTimeout(function() {
+          if (!isFormVisible) {
+            console.log('⚠️ 2차 안전장치 실행 (3초)');
+            showFormWithDefaults();
+          }
+        }, 3000);
+        
+        // 3차 안전장치: 5초 후 (최종)
+        timeoutId3 = setTimeout(function() {
+          if (!isFormVisible) {
+            console.log('⚠️ 최종 안전장치 실행 (5초)');
+            showFormWithDefaults();
+          }
+        }, 5000);
+      }
+      
+      // 초기화 함수
+      function initialize() {
+        console.log('🚀 HAPA 설정 페이지 초기화 시작');
+        
+        // VSCode API 초기화
+        if (!initializeVSCode()) {
+          console.log('📱 VSCode API 없음 - 기본 설정으로 실행');
+          showFormWithDefaults();
+          return;
+        }
+        
+        // 안전장치 설정
+        setupSafetyMeasures();
+        
+        // 설정 로드 시도
+        setTimeout(function() {
+          loadSettings();
+        }, 100);
+        
+        console.log('✅ 초기화 완료');
+      }
+      
+      // DOM 로드 이벤트
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initialize);
+      } else {
+        initialize();
+      }
+      
+      // 🚨 즉시 안전장치: 100ms 후 무조건 폼 표시 시도
+      setTimeout(function() {
+        if (!isFormVisible) {
+          console.log('🛟 즉시 안전장치: 기본 설정으로 폼 표시');
+          showFormWithDefaults();
+        }
+      }, 100);
+      
+      // 전역 함수로 노출 (HTML에서 호출용)
+      window.saveSettings = saveSettings;
+      window.resetSettings = resetSettings;
+      window.openVSCodeSettings = openVSCodeSettings;
+      window.generateApiKey = generateApiKey;
+      
+    })(); // 즉시 실행 함수 종료
+    
+    // 탭 전환 함수 (전역 함수로 유지)
+    function showTab(tabName) {
+      // 모든 탭 내용 숨기기
+      const tabContents = document.querySelectorAll('.tab-content');
+      tabContents.forEach(content => {
+        content.classList.remove('active');
+      });
+      
+      // 모든 탭 버튼에서 active 클래스 제거
+      const tabButtons = document.querySelectorAll('.tab-button');
+      tabButtons.forEach(button => {
+        button.classList.remove('active');
+      });
+      
+      // 선택된 탭 내용 표시
+      document.getElementById(tabName + 'Tab').classList.add('active');
+      
+      // 선택된 탭 버튼에 active 클래스 추가
+      event.target.classList.add('active');
+    }
+      
+      // 주석 트리거 설정
+      if (settings.commentTrigger) {
+        document.getElementById('commentTriggerResultDisplayMode').value = settings.commentTrigger.resultDisplayMode || 'immediate_insert';
+        document.getElementById('commentTriggerAutoInsertDelay').value = settings.commentTrigger.autoInsertDelay || 0;
+        document.getElementById('commentTriggerShowNotification').checked = settings.commentTrigger.showNotification || false;
+        
+        // 현재 설정 값 표시
+        document.getElementById('currentCommentTrigger').textContent = settings.commentTrigger.resultDisplayMode || 'immediate_insert';
+        document.getElementById('currentErrorHandling').textContent = settings.userProfile?.errorHandlingPreference || 'basic';
+      }
+      
+      // 기능 설정
+      if (settings.features) {
+        document.getElementById('autoComplete').checked = settings.features.autoComplete !== false;
+        document.getElementById('maxSuggestions').value = settings.features.maxSuggestions || 5;
+        document.getElementById('enableLogging').checked = settings.features.enableLogging || false;
+        document.getElementById('enableCodeAnalysis').checked = settings.features.enableCodeAnalysis !== false;
+      }
+    }
+    
+
+
+
+    
+    `;
+
+    return `<!DOCTYPE html>
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
@@ -294,8 +908,8 @@ export class SettingsProvider extends BaseWebviewProvider {
       padding: 20px;
     }
     
-    .settings-container {
-      max-width: 1000px;
+    .container {
+      max-width: 800px;
       margin: 0 auto;
     }
     
@@ -318,64 +932,26 @@ export class SettingsProvider extends BaseWebviewProvider {
       font-size: 16px;
     }
     
-    /* 탭 네비게이션 스타일 */
-    .tab-navigation {
-      background-color: var(--vscode-tab-activeBackground);
-      border-bottom: 1px solid var(--vscode-panel-border);
-      display: flex;
-      gap: 0;
-    }
-    
-    .tab-button {
-      padding: 16px 24px;
-      background-color: var(--vscode-tab-inactiveBackground);
-      color: var(--vscode-tab-inactiveForeground);
-      border: none;
-      cursor: pointer;
-      font-size: 14px;
-      font-weight: 500;
-      transition: all 0.2s ease;
-      border-bottom: 3px solid transparent;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    
-    .tab-button:hover {
-      background-color: var(--vscode-tab-hoverBackground);
-      color: var(--vscode-tab-hoverForeground);
-    }
-    
-    .tab-button.active {
-      background-color: var(--vscode-tab-activeBackground);
-      color: var(--vscode-tab-activeForeground);
-      border-bottom-color: #007ACC;
-    }
-    
-    .tab-content {
+    .content {
       background-color: var(--vscode-editor-background);
       border: 1px solid var(--vscode-panel-border);
-      border-top: none;
       border-radius: 0 0 8px 8px;
       padding: 32px;
-      min-height: 500px;
     }
     
-    .tab-panel {
-      display: none;
-    }
-    
-    .tab-panel.active {
+    .loading {
+      text-align: center;
+      padding: 40px;
       display: block;
     }
     
-    .setting-section {
-      margin-bottom: 40px;
-      padding-bottom: 32px;
+    .form-section {
+      margin-bottom: 32px;
+      padding-bottom: 24px;
       border-bottom: 1px solid var(--vscode-panel-border);
     }
     
-    .setting-section:last-child {
+    .form-section:last-child {
       border-bottom: none;
       margin-bottom: 0;
     }
@@ -390,12 +966,6 @@ export class SettingsProvider extends BaseWebviewProvider {
       gap: 8px;
     }
     
-    .section-description {
-      color: var(--vscode-descriptionForeground);
-      margin-bottom: 24px;
-      font-size: 14px;
-    }
-    
     .form-group {
       margin-bottom: 20px;
     }
@@ -407,45 +977,33 @@ export class SettingsProvider extends BaseWebviewProvider {
       color: var(--vscode-input-foreground);
     }
     
-    .form-description {
-      font-size: 12px;
-      color: var(--vscode-descriptionForeground);
-      margin-bottom: 8px;
-    }
-    
-    .form-control {
+    .form-input, .form-select {
       width: 100%;
-      padding: 8px 12px;
+      padding: 10px 12px;
       border: 1px solid var(--vscode-input-border);
+      border-radius: 4px;
       background-color: var(--vscode-input-background);
       color: var(--vscode-input-foreground);
-      border-radius: 4px;
       font-size: 14px;
+      font-family: var(--vscode-font-family);
     }
     
-    .form-control:focus {
+    .form-input:focus, .form-select:focus {
       outline: none;
       border-color: var(--vscode-focusBorder);
+      box-shadow: 0 0 0 1px var(--vscode-focusBorder);
     }
     
-    .form-control:read-only {
-      background-color: var(--vscode-input-background);
-      opacity: 0.7;
-    }
-    
-    .form-select {
-      width: 100%;
-      padding: 8px 12px;
-      border: 1px solid var(--vscode-input-border);
-      background-color: var(--vscode-dropdown-background);
-      color: var(--vscode-dropdown-foreground);
-      border-radius: 4px;
-      font-size: 14px;
+    .form-help {
+      margin-top: 6px;
+      font-size: 12px;
+      color: var(--vscode-descriptionForeground);
+      line-height: 1.4;
     }
     
     .checkbox-group {
-      display: flex;
-      flex-wrap: wrap;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
       gap: 12px;
       margin-top: 8px;
     }
@@ -453,8 +1011,8 @@ export class SettingsProvider extends BaseWebviewProvider {
     .checkbox-item {
       display: flex;
       align-items: center;
-      gap: 8px;
-      padding: 8px 12px;
+      gap: 10px;
+      padding: 12px;
       background-color: var(--vscode-input-background);
       border: 1px solid var(--vscode-input-border);
       border-radius: 4px;
@@ -463,147 +1021,112 @@ export class SettingsProvider extends BaseWebviewProvider {
     }
     
     .checkbox-item:hover {
+      border-color: var(--vscode-focusBorder);
       background-color: var(--vscode-list-hoverBackground);
     }
     
     .checkbox-item.checked {
-      background-color: rgba(0, 122, 204, 0.1);
       border-color: #007ACC;
+      background-color: rgba(0, 122, 204, 0.1);
     }
     
     .checkbox-item input[type="checkbox"] {
       margin: 0;
     }
     
-    /* 사용자 정보 카드 스타일 */
+    .checkbox-label {
+      flex: 1;
+      font-size: 14px;
+    }
+    
     .user-info-card {
-      background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
-      color: white;
-      padding: 24px;
+      background: linear-gradient(135deg, rgba(0, 122, 204, 0.1) 0%, rgba(64, 169, 255, 0.1) 100%);
+      border: 1px solid rgba(0, 122, 204, 0.3);
       border-radius: 8px;
+      padding: 20px;
       margin-bottom: 24px;
     }
     
-    .user-info-header {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      margin-bottom: 16px;
+    .user-info-card h3 {
+      margin-bottom: 12px;
+      color: var(--vscode-foreground);
     }
     
-    .user-avatar {
-      width: 60px;
-      height: 60px;
-      background: rgba(255, 255, 255, 0.2);
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 24px;
-    }
-    
-    .user-details h3 {
-      font-size: 20px;
-      margin-bottom: 4px;
-    }
-    
-    .user-details p {
-      opacity: 0.9;
+    .user-info {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 8px 16px;
       font-size: 14px;
     }
     
-    .completion-stats {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 16px;
+    .info-label {
+      font-weight: 500;
+      color: var(--vscode-descriptionForeground);
     }
     
-    .stat-item {
-      background: rgba(255, 255, 255, 0.1);
-      padding: 16px;
-      border-radius: 6px;
+    .info-value {
+      color: var(--vscode-foreground);
     }
     
-    .stat-label {
-      font-size: 12px;
-      opacity: 0.8;
-      margin-bottom: 4px;
-    }
-    
-    .stat-value {
-      font-size: 18px;
-      font-weight: 600;
-    }
-    
-    /* 진행률 바 */
-    .progress-bar {
-      width: 100%;
-      height: 8px;
-      background: rgba(255, 255, 255, 0.2);
-      border-radius: 4px;
-      overflow: hidden;
-      margin-top: 8px;
-    }
-    
-    .progress-fill {
-      height: 100%;
-      background: rgba(255, 255, 255, 0.8);
-      border-radius: 4px;
-      transition: width 0.3s ease;
-    }
-    
-    /* 설정 아이템 스타일 */
-    .setting-item {
+    .current-settings {
       background-color: var(--vscode-input-background);
       border: 1px solid var(--vscode-input-border);
-      border-radius: 8px;
-      padding: 20px;
-      margin-bottom: 16px;
+      border-radius: 6px;
+      padding: 16px;
+      margin-top: 16px;
     }
     
-    .setting-item-header {
-      display: flex;
-      justify-content: between;
-      align-items: center;
+    .current-settings h4 {
       margin-bottom: 12px;
-    }
-    
-    .setting-item-title {
-      font-weight: 600;
       font-size: 16px;
+      color: var(--vscode-foreground);
     }
     
-    .setting-item-value {
-      font-size: 14px;
-      color: var(--vscode-descriptionForeground);
-      background: var(--vscode-badge-background);
-      color: var(--vscode-badge-foreground);
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-weight: 500;
+    .settings-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
     }
     
-    .actions {
+    .setting-item {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-top: 32px;
-      padding-top: 24px;
-      border-top: 1px solid var(--vscode-panel-border);
+      padding: 8px 0;
+      border-bottom: 1px solid var(--vscode-panel-border);
+    }
+    
+    .setting-item:last-child {
+      border-bottom: none;
+    }
+    
+    .setting-label {
+      font-size: 14px;
+      color: var(--vscode-descriptionForeground);
+    }
+    
+    .setting-value {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--vscode-foreground);
     }
     
     .button-group {
       display: flex;
       gap: 12px;
+      justify-content: flex-end;
+      margin-top: 24px;
+      padding-top: 20px;
+      border-top: 1px solid var(--vscode-panel-border);
     }
     
     .btn {
       padding: 10px 20px;
       border: none;
       border-radius: 4px;
-      cursor: pointer;
       font-size: 14px;
       font-weight: 500;
+      cursor: pointer;
       transition: all 0.2s ease;
     }
     
@@ -634,707 +1157,316 @@ export class SettingsProvider extends BaseWebviewProvider {
     }
     
     .btn-danger:hover {
-      opacity: 0.9;
-      transform: translateY(-1px);
+      background-color: var(--vscode-errorForeground);
+      opacity: 0.8;
     }
     
-    .info-link {
-      color: var(--vscode-textLink-foreground);
-      text-decoration: none;
-      font-size: 14px;
-    }
-    
-    .info-link:hover {
-      text-decoration: underline;
-    }
-    
-    .loading {
-      text-align: center;
-      padding: 40px;
-      color: var(--vscode-descriptionForeground);
-    }
-    
-    .success-message {
-      background-color: rgba(76, 175, 80, 0.1);
-      border: 1px solid #4CAF50;
-      color: #4CAF50;
-      padding: 12px;
+    .message {
+      padding: 12px 16px;
       border-radius: 4px;
       margin-bottom: 16px;
       display: none;
     }
     
-    .error-message {
-      background-color: var(--vscode-inputValidation-errorBackground);
-      border: 1px solid var(--vscode-inputValidation-errorBorder);
-      color: var(--vscode-errorForeground);
-      padding: 12px;
-      border-radius: 4px;
-      margin-bottom: 16px;
-      display: none;
+    .message.success {
+      background-color: var(--vscode-testing-iconPassed);
+      color: white;
+    }
+    
+    .message.error {
+      background-color: var(--vscode-errorForeground);
+      color: white;
+    }
+    
+    .api-key-group {
+      display: flex;
+      gap: 8px;
+      align-items: flex-end;
+    }
+    
+    .api-key-input {
+      flex: 1;
+    }
+    
+    .api-key-btn {
+      white-space: nowrap;
+      min-width: 120px;
     }
   </style>
 </head>
 <body>
-  <div class="settings-container">
+  <div class="container">
     <div class="header">
       <h1>⚙️ HAPA 설정</h1>
-      <p>맞춤형 AI 어시스턴트를 위한 개인화 설정</p>
+      <p>AI 코딩 어시스턴트를 당신에게 맞게 설정하세요</p>
     </div>
     
-    <!-- 탭 네비게이션 -->
-    <div class="tab-navigation">
-      <button class="tab-button active" onclick="switchTab('user-info', this)">
-        👤 사용자 정보
-      </button>
-      <button class="tab-button" onclick="switchTab('onboarding', this)">
-        🚀 온보딩 설정
-      </button>
-      <button class="tab-button" onclick="switchTab('api', this)">
-        🔌 API 설정
-      </button>
-      <button class="tab-button" onclick="switchTab('features', this)">
-        ⚡ 기능 설정
-      </button>
-    </div>
-    
-    <div class="tab-content">
-      <div class="success-message" id="successMessage"></div>
-      <div class="error-message" id="errorMessage"></div>
-      
-      <div class="loading" id="loadingIndicator">
+    <div class="content">
+      <div id="loadingIndicator" class="loading">
         설정을 불러오는 중...
       </div>
       
       <div id="settingsForm" style="display: none;">
+        <div id="successMessage" class="message success"></div>
+        <div id="errorMessage" class="message error"></div>
         
-        <!-- 사용자 정보 탭 -->
-        <div id="user-info-tab" class="tab-panel active">
+        <!-- 사용자 정보 카드 -->
           <div class="user-info-card">
-            <div class="user-info-header">
-              <div class="user-avatar">👤</div>
-              <div class="user-details">
-                <h3 id="userDisplayName">CompleteUser</h3>
-                <p id="userDisplayEmail">complete.test@email.com</p>
+          <h3>👤 사용자 정보</h3>
+          <div class="user-info">
+            <span class="info-label">이름:</span>
+            <span class="info-value" id="userDisplayName">CompleteUser</span>
+            <span class="info-label">이메일:</span>
+            <span class="info-value" id="userDisplayEmail">complete.test@email.com</span>
               </div>
             </div>
             
-            <div class="completion-stats">
-              <div class="stat-item">
-                <div class="stat-label">온보딩 완성도</div>
-                <div class="stat-value" id="completionPercentage">85.7%</div>
-                <div class="progress-bar">
-                  <div class="progress-fill" style="width: 85.7%"></div>
-                </div>
-              </div>
-              <div class="stat-item">
-                <div class="stat-label">완료된 설정</div>
-                <div class="stat-value" id="completedSettings">6/7 카테고리</div>
-              </div>
-              <div class="stat-item">
-                <div class="stat-label">가입일</div>
-                <div class="stat-value" id="joinDate">2025-06-25</div>
-              </div>
-            </div>
-          </div>
-          
-          <!-- 현재 적용된 설정 요약 -->
-          <div class="setting-section">
-            <h2 class="section-title">🎯 현재 적용된 설정</h2>
-            <p class="section-description">complete.test@email.com 사용자의 개인화 설정 현황입니다.</p>
-            
-            <div class="setting-item">
-              <div class="setting-item-header">
-                <span class="setting-item-title">코드 출력 구조</span>
-                <span class="setting-item-value" id="currentCodeOutput">minimal</span>
-              </div>
-              <p class="form-description">간결한 코드 - 핵심 로직만 간결하게 생성</p>
-            </div>
-            
-            <div class="setting-item">
-              <div class="setting-item-header">
-                <span class="setting-item-title">설명 스타일</span>
-                <span class="setting-item-value" id="currentExplanation">brief</span>
-              </div>
-              <p class="form-description">간단한 설명 - 핵심 내용만 제공</p>
-            </div>
-            
-            <div class="setting-item">
-              <div class="setting-item-header">
-                <span class="setting-item-title">프로젝트 컨텍스트</span>
-                <span class="setting-item-value" id="currentProject">web_development</span>
-              </div>
-              <p class="form-description">웹 개발 환경에 최적화된 코드 제공</p>
-            </div>
-            
-            <div class="setting-item">
-              <div class="setting-item-header">
-                <span class="setting-item-title">주석 트리거 모드</span>
-                <span class="setting-item-value" id="currentCommentTrigger">immediate_insert</span>
-              </div>
-              <p class="form-description">즉시 삽입 - 코드를 커서 위치에 바로 삽입</p>
-            </div>
-            
-            <div class="setting-item">
-              <div class="setting-item-header">
-                <span class="setting-item-title">선호 언어 기능</span>
-                <span class="setting-item-value" id="currentLanguageFeature">type_hints</span>
-              </div>
-              <p class="form-description">타입 힌트를 적극 활용한 안전한 코딩</p>
-            </div>
-            
-            <div class="setting-item">
-              <div class="setting-item-header">
-                <span class="setting-item-title">오류 처리 방식</span>
-                <span class="setting-item-value" id="currentErrorHandling">basic</span>
-              </div>
-              <p class="form-description">기본적인 try-catch 패턴 사용</p>
-            </div>
-          </div>
-          
-          <!-- 사용자 정보 수정 -->
-          <div class="setting-section">
-            <h2 class="section-title">✏️ 사용자 정보 수정</h2>
-            <p class="section-description">필요시 사용자 정보를 수정할 수 있습니다.</p>
+        <!-- 사용자 프로필 설정 -->
+        <div class="form-section">
+          <h2 class="section-title">👤 사용자 프로필</h2>
             
             <div class="form-group">
               <label class="form-label">이메일 주소</label>
-              <p class="form-description">HAPA 계정과 설정 동기화에 사용되는 이메일입니다</p>
-              <input type="email" class="form-control" id="email" placeholder="example@example.com">
+            <input type="email" id="email" class="form-input" placeholder="your.email@example.com">
+            <p class="form-help">설정 동기화 및 API 키 발급에 사용됩니다.</p>
             </div>
             
             <div class="form-group">
               <label class="form-label">사용자명</label>
-              <p class="form-description">HAPA에서 표시될 사용자명입니다</p>
-              <input type="text" class="form-control" id="username" placeholder="홍길동">
-            </div>
-          </div>
+            <input type="text" id="username" class="form-input" placeholder="사용자명">
+            <p class="form-help">코드 주석이나 문서에 표시될 이름입니다.</p>
         </div>
-        
-        <!-- 온보딩 설정 탭 -->
-        <div id="onboarding-tab" class="tab-panel">
-          <div class="setting-section">
-            <h2 class="section-title">🚀 온보딩 및 개인화 설정</h2>
-            <p class="section-description">AI가 당신에게 맞는 코드와 설명을 제공하도록 설정합니다.</p>
             
             <div class="form-group">
               <label class="form-label">Python 스킬 수준</label>
-              <p class="form-description">당신의 Python 경험 수준을 선택하세요</p>
-              <select class="form-select" id="pythonSkillLevel">
-                <option value="beginner">🌱 초급자 - 기본 문법 학습 중</option>
-                <option value="intermediate">🔧 중급자 - 일반적인 프로그래밍 가능</option>
-                <option value="advanced">⚡ 고급자 - 복잡한 프로젝트 개발 가능</option>
-                <option value="expert">🚀 전문가 - 최적화 및 아키텍처 설계</option>
+            <select id="pythonSkillLevel" class="form-select">
+              <option value="beginner">초급자 - Python 기초 학습 중</option>
+              <option value="intermediate">중급자 - 일반적인 프로그래밍 가능</option>
+              <option value="advanced">고급자 - 복잡한 프로젝트 개발 가능</option>
+              <option value="expert">전문가 - 최적화 및 아키텍처 설계 가능</option>
               </select>
+            <p class="form-help">당신의 경험 수준에 맞는 코드와 설명을 제공합니다.</p>
             </div>
             
             <div class="form-group">
               <label class="form-label">코드 출력 구조</label>
-              <p class="form-description">AI가 생성하는 코드의 상세도를 설정합니다</p>
-              <select class="form-select" id="codeOutputStructure">
-                <option value="minimal">✨ 최소한 - 핵심 로직만 간결하게</option>
-                <option value="standard">📝 표준 - 일반적인 코드 + 기본 주석</option>
-                <option value="detailed">🔍 상세 - 자세한 주석 + 예외 처리</option>
-                <option value="comprehensive">📚 포괄적 - 문서화 + 테스트 + 최적화</option>
+            <select id="codeOutputStructure" class="form-select">
+              <option value="minimal">최소한 - 핵심 로직만 간결하게</option>
+              <option value="standard">표준 - 일반적인 구조 + 기본 주석</option>
+              <option value="detailed">상세 - 자세한 주석 + 예외 처리</option>
+              <option value="comprehensive">포괄적 - 문서화 + 테스트 코드</option>
               </select>
+            <p class="form-help">AI가 생성하는 코드의 상세도를 설정합니다.</p>
             </div>
             
             <div class="form-group">
               <label class="form-label">설명 스타일</label>
-              <p class="form-description">AI 설명의 상세도와 스타일을 선택합니다</p>
-              <select class="form-select" id="explanationStyle">
-                <option value="brief">⚡ 간단한 설명 - 핵심 내용만</option>
-                <option value="standard">📖 표준 설명 - 코드 + 간단한 설명</option>
-                <option value="detailed">🔍 상세 설명 - 개념 + 이유 + 활용법</option>
-                <option value="educational">🎓 교육적 설명 - 단계별 + 예시 + 관련 개념</option>
+            <select id="explanationStyle" class="form-select">
+              <option value="brief">간단한 설명 - 핵심 내용만 빠르게</option>
+              <option value="standard">표준 설명 - 코드 + 간단한 설명</option>
+              <option value="detailed">상세 설명 - 개념 + 이유 + 활용법</option>
+              <option value="educational">교육적 설명 - 단계별 + 예시 + 관련 개념</option>
               </select>
+            <p class="form-help">AI 설명의 상세도와 스타일을 선택합니다.</p>
             </div>
             
             <div class="form-group">
-              <label class="form-label">주요 개발 분야</label>
-              <p class="form-description">당신의 주요 Python 개발 분야를 선택하세요</p>
-              <select class="form-select" id="projectContext">
-                <option value="web_development">🌐 웹 개발 - Django, Flask, FastAPI</option>
-                <option value="data_science">📊 데이터 사이언스 - NumPy, Pandas, ML</option>
-                <option value="automation">🤖 자동화 - 스크립팅, 업무 자동화</option>
-                <option value="general_purpose">🔧 범용 개발 - 다양한 목적</option>
-                <option value="academic">🎓 학술/연구 - 알고리즘, 연구 프로젝트</option>
-                <option value="enterprise">🏢 기업용 개발 - 대규모, 안정성 중시</option>
+            <label class="form-label">주요 프로젝트 컨텍스트</label>
+            <select id="projectContext" class="form-select">
+              <option value="web_development">웹 개발 - Django, Flask, FastAPI</option>
+              <option value="data_science">데이터 사이언스 - NumPy, Pandas, ML</option>
+              <option value="automation">자동화 - 스크립팅, 업무 자동화</option>
+              <option value="general_purpose">범용 개발 - 다양한 목적</option>
               </select>
+            <p class="form-help">주요 개발 분야에 맞는 라이브러리와 패턴을 제안합니다.</p>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">오류 처리 선호도</label>
+            <select id="errorHandlingPreference" class="form-select">
+              <option value="basic">기본 - 필요한 경우만</option>
+              <option value="comprehensive">포괄적 - 상세한 예외 처리</option>
+              <option value="minimal">최소한 - 단순한 처리</option>
+            </select>
+            <p class="form-help">코드에 포함될 오류 처리 수준을 설정합니다.</p>
             </div>
             
             <div class="form-group">
               <label class="form-label">선호하는 Python 기능</label>
-              <p class="form-description">AI가 우선적으로 사용할 Python 기능들을 선택하세요 (복수 선택 가능)</p>
-              <div class="checkbox-group" id="languageFeatures">
+            <div id="languageFeatures" class="checkbox-group">
                 <div class="checkbox-item" data-value="type_hints">
-                  <input type="checkbox" id="type_hints">
-                  <label for="type_hints">타입 힌트</label>
+                <input type="checkbox" id="feature_type_hints">
+                <label class="checkbox-label" for="feature_type_hints">타입 힌트 (Type Hints)</label>
                 </div>
                 <div class="checkbox-item" data-value="dataclasses">
-                  <input type="checkbox" id="dataclasses">
-                  <label for="dataclasses">데이터클래스</label>
+                <input type="checkbox" id="feature_dataclasses">
+                <label class="checkbox-label" for="feature_dataclasses">데이터클래스 (Dataclasses)</label>
                 </div>
                 <div class="checkbox-item" data-value="async_await">
-                  <input type="checkbox" id="async_await">
-                  <label for="async_await">비동기 프로그래밍</label>
+                <input type="checkbox" id="feature_async_await">
+                <label class="checkbox-label" for="feature_async_await">비동기 프로그래밍 (Async/Await)</label>
                 </div>
-                <div class="checkbox-item" data-value="comprehensions">
-                  <input type="checkbox" id="comprehensions">
-                  <label for="comprehensions">컴프리헨션</label>
+              <div class="checkbox-item" data-value="f_strings">
+                <input type="checkbox" id="feature_f_strings">
+                <label class="checkbox-label" for="feature_f_strings">f-strings</label>
                 </div>
-                <div class="checkbox-item" data-value="generators">
-                  <input type="checkbox" id="generators">
-                  <label for="generators">제너레이터</label>
+              <div class="checkbox-item" data-value="list_comprehensions">
+                <input type="checkbox" id="feature_list_comprehensions">
+                <label class="checkbox-label" for="feature_list_comprehensions">리스트 컴프리헨션</label>
                 </div>
                 <div class="checkbox-item" data-value="decorators">
-                  <input type="checkbox" id="decorators">
-                  <label for="decorators">데코레이터</label>
+                <input type="checkbox" id="feature_decorators">
+                <label class="checkbox-label" for="feature_decorators">데코레이터 (Decorators)</label>
                 </div>
-                <div class="checkbox-item" data-value="context_managers">
-                  <input type="checkbox" id="context_managers">
-                  <label for="context_managers">컨텍스트 매니저</label>
                 </div>
-                <div class="checkbox-item" data-value="f_strings">
-                  <input type="checkbox" id="f_strings">
-                  <label for="f_strings">f-strings</label>
-                </div>
+            <p class="form-help">선택한 기능들을 우선적으로 사용하여 코드를 생성합니다.</p>
               </div>
             </div>
             
-            <div class="form-group">
-              <label class="form-label">오류 처리 선호도</label>
-              <p class="form-description">생성되는 코드의 오류 처리 수준을 설정합니다</p>
-              <select class="form-select" id="errorHandlingPreference">
-                <option value="minimal">최소한의 오류 처리</option>
-                <option value="basic">기본적인 try-catch</option>
-                <option value="comprehensive">포괄적인 예외 처리</option>
-                <option value="production_ready">프로덕션 수준 오류 처리</option>
-              </select>
-            </div>
-            
-            <!-- 온보딩 재시작 버튼 -->
-            <div class="actions">
-              <div>
-                <button class="btn btn-secondary" onclick="restartOnboarding()">
-                  🔄 온보딩 다시 시작
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <!-- API 설정 탭 -->
-        <div id="api-tab" class="tab-panel">
-          <div class="setting-section">
-            <h2 class="section-title">🔌 API 설정</h2>
-            <p class="section-description">HAPA 백엔드 서버와의 연결을 설정합니다.</p>
+        <!-- API 설정 -->
+        <div class="form-section">
+          <h2 class="section-title">🔗 API 설정</h2>
             
             <div class="form-group">
-              <label class="form-label">API 서버 주소</label>
-              <p class="form-description">HAPA 백엔드 API 서버의 URL을 입력하세요</p>
-              <input type="text" class="form-control" id="apiBaseURL" placeholder="http://localhost:8000/api/v1">
+            <label class="form-label">API 서버 URL</label>
+            <input type="url" id="apiBaseURL" class="form-input" placeholder="http://3.13.240.111:8000/api/v1">
+            <p class="form-help">HAPA Backend API 서버의 주소입니다.</p>
             </div>
             
             <div class="form-group">
               <label class="form-label">API 키</label>
-              <p class="form-description">HAPA API 접근을 위한 인증 키를 입력하세요</p>
-              <input type="password" class="form-control" id="apiKey" placeholder="API 키를 입력하세요">
+            <div class="api-key-group">
+              <div class="api-key-input">
+                <input type="password" id="apiKey" class="form-input" placeholder="API 키를 입력하세요">
+                <p class="form-help">HAPA API 접근을 위한 인증 키입니다.</p>
+              </div>
+              <button type="button" class="btn btn-secondary api-key-btn" id="generateApiKeyBtn" onclick="generateApiKey()">
+                🔑 API 키 발급
+              </button>
+            </div>
             </div>
             
             <div class="form-group">
-              <label class="form-label">API 타임아웃 (밀리초)</label>
-              <p class="form-description">API 요청 타임아웃 시간을 설정합니다</p>
-              <input type="number" class="form-control" id="apiTimeout" min="5000" max="60000" step="1000">
-            </div>
+            <label class="form-label">API 타임아웃 (ms)</label>
+            <input type="number" id="apiTimeout" class="form-input" min="5000" max="300000" step="1000" placeholder="30000">
+            <p class="form-help">API 요청 대기 시간 (5초 ~ 5분)</p>
           </div>
         </div>
         
-        <!-- 기능 설정 탭 -->
-        <div id="features-tab" class="tab-panel">
-          <div class="setting-section">
-            <h2 class="section-title">⚡ 주석 트리거 워크플로우</h2>
-            <p class="section-description">주석으로 코드를 요청할 때의 결과 표시 방식을 설정합니다.</p>
+        <!-- 주석 트리거 설정 -->
+        <div class="form-section">
+          <h2 class="section-title">💬 주석 트리거 설정</h2>
             
             <div class="form-group">
-              <label class="form-label">결과 표시 방식</label>
-              <p class="form-description">주석 트리거 시 AI 응답을 어떻게 표시할지 선택하세요</p>
-              <select class="form-select" id="commentTriggerResultDisplayMode">
-                <option value="immediate_insert">⚡ 즉시 삽입 - 코드를 커서 위치에 바로 삽입</option>
-                <option value="sidebar">📋 사이드바 표시 - 사이드바에 결과를 표시하고 검토 후 삽입</option>
-                <option value="confirm_insert">✅ 확인 후 삽입 - 코드를 미리보고 확인 대화상자에서 삽입 여부 선택</option>
-                <option value="inline_preview">👁️ 인라인 미리보기 - 에디터에서 코드를 미리보고 키보드로 선택</option>
+            <label class="form-label">결과 표시 모드</label>
+            <select id="commentTriggerResultDisplayMode" class="form-select">
+              <option value="immediate_insert">즉시 삽입 - 생성된 코드를 바로 삽입</option>
+              <option value="sidebar">사이드바 표시 - 사이드바에서 검토 후 삽입</option>
+              <option value="confirm_insert">확인 후 삽입 - 미리보고 확인 대화상자</option>
+              <option value="inline_preview">인라인 미리보기 - 에디터에서 미리보고 선택</option>
               </select>
+            <p class="form-help">AI 코드 생성 후 처리 방식을 설정합니다.</p>
             </div>
             
             <div class="form-group">
-              <label class="form-label">즉시 삽입 지연 시간 (밀리초)</label>
-              <p class="form-description">즉시 삽입 모드에서 코드 삽입 전 대기 시간 (0은 즉시 삽입)</p>
-              <input type="number" class="form-control" id="commentTriggerAutoInsertDelay" min="0" max="5000" step="100">
+            <label class="form-label">자동 삽입 지연 시간 (초)</label>
+            <input type="number" id="commentTriggerAutoInsertDelay" class="form-input" min="0" max="10" step="0.5" placeholder="0">
+            <p class="form-help">즉시 삽입 모드에서 지연 시간 (0 = 즉시)</p>
             </div>
             
             <div class="form-group">
               <div class="checkbox-item">
                 <input type="checkbox" id="commentTriggerShowNotification">
-                <label for="commentTriggerShowNotification">주석 트리거 실행 시 알림 표시</label>
+              <label class="checkbox-label" for="commentTriggerShowNotification">코드 생성 완료 알림 표시</label>
               </div>
+            <p class="form-help">AI 코드 생성이 완료되면 알림을 표시합니다.</p>
             </div>
           </div>
           
-          <div class="setting-section">
-            <h2 class="section-title">🤖 자동 완성 설정</h2>
-            <p class="section-description">AI 기반 자동 완성 기능을 세밀하게 조정합니다.</p>
+        <!-- 기능 설정 -->
+        <div class="form-section">
+          <h2 class="section-title">⚡ 기능 설정</h2>
             
             <div class="form-group">
               <div class="checkbox-item">
                 <input type="checkbox" id="autoComplete">
-                <label for="autoComplete">자동 완성 기능 활성화</label>
+              <label class="checkbox-label" for="autoComplete">자동 완성 활성화</label>
               </div>
+            <p class="form-help">타이핑 중 AI 코드 제안을 표시합니다.</p>
             </div>
             
             <div class="form-group">
-              <label class="form-label">제안 최대 개수</label>
-              <p class="form-description">한 번에 표시할 자동 완성 제안의 최대 개수</p>
-              <input type="number" class="form-control" id="maxSuggestions" min="1" max="10">
-            </div>
-            
-            <div class="form-group">
-              <div class="checkbox-item">
-                <input type="checkbox" id="enableCodeAnalysis">
-                <label for="enableCodeAnalysis">코드 분석 기능 활성화</label>
-              </div>
+            <label class="form-label">최대 제안 수</label>
+            <input type="number" id="maxSuggestions" class="form-input" min="1" max="20" placeholder="5">
+            <p class="form-help">한 번에 표시할 최대 코드 제안 개수입니다.</p>
             </div>
             
             <div class="form-group">
               <div class="checkbox-item">
-                <input type="checkbox" id="enableLogging">
-                <label for="enableLogging">디버그 로깅 활성화</label>
+              <input type="checkbox" id="enableLogging">
+              <label class="checkbox-label" for="enableLogging">상세 로깅 활성화</label>
               </div>
+            <p class="form-help">디버깅을 위한 상세한 로그를 기록합니다.</p>
+            </div>
+            
+            <div class="form-group">
+              <div class="checkbox-item">
+              <input type="checkbox" id="enableCodeAnalysis">
+              <label class="checkbox-label" for="enableCodeAnalysis">코드 분석 기능 활성화</label>
+              </div>
+            <p class="form-help">코드 품질 분석 및 개선 제안을 제공합니다.</p>
+            </div>
+          </div>
+        
+        <!-- 현재 설정 요약 -->
+        <div class="current-settings">
+          <h4>📊 현재 설정 요약</h4>
+          <div class="settings-grid">
+            <div class="setting-item">
+              <span class="setting-label">코드 출력:</span>
+              <span class="setting-value" id="currentCodeOutput">minimal</span>
+        </div>
+            <div class="setting-item">
+              <span class="setting-label">설명 스타일:</span>
+              <span class="setting-value" id="currentExplanation">brief</span>
+      </div>
+            <div class="setting-item">
+              <span class="setting-label">프로젝트 컨텍스트:</span>
+              <span class="setting-value" id="currentProject">web_development</span>
+            </div>
+            <div class="setting-item">
+              <span class="setting-label">언어 기능:</span>
+              <span class="setting-value" id="currentLanguageFeature">type_hints</span>
+            </div>
+            <div class="setting-item">
+              <span class="setting-label">주석 트리거:</span>
+              <span class="setting-value" id="currentCommentTrigger">immediate_insert</span>
+            </div>
+            <div class="setting-item">
+              <span class="setting-label">오류 처리:</span>
+              <span class="setting-value" id="currentErrorHandling">basic</span>
             </div>
           </div>
         </div>
-      </div>
-      
-      <div class="actions">
-        <div>
-          <a href="#" class="info-link" onclick="openVSCodeSettings()">
-            VSCode 설정에서 편집하기 →
-          </a>
-        </div>
         
+        <!-- 버튼 그룹 -->
         <div class="button-group">
-          <button class="btn btn-danger" onclick="resetSettings()">기본값으로 초기화</button>
-          <button class="btn btn-secondary" onclick="loadSettings()">새로고침</button>
-          <button class="btn btn-primary" onclick="saveSettings()">설정 저장</button>
+          <button type="button" class="btn btn-danger" onclick="resetSettings()">
+            🔄 설정 초기화
+          </button>
+          <button type="button" class="btn btn-secondary" onclick="openVSCodeSettings()">
+            ⚙️ VSCode 설정 열기
+          </button>
+          <button type="button" class="btn btn-primary" onclick="saveSettings()">
+            💾 설정 저장
+          </button>
         </div>
       </div>
     </div>
   </div>
 
   <script>
-    const vscode = acquireVsCodeApi();
-    let currentSettings = {};
-    
-    // 페이지 로드 시 설정 불러오기
-    window.addEventListener('load', function() {
-      console.log('HAPA 설정 페이지 로드됨');
-      loadSettings();
-      
-      // 3초 후 설정이 로드되지 않으면 강제로 폼 표시 (안전장치)
-      setTimeout(function() {
-        const settingsForm = document.getElementById('settingsForm');
-        const loadingIndicator = document.getElementById('loadingIndicator');
-        
-        if (settingsForm && settingsForm.style.display === 'none') {
-          console.log('⚠️ 설정 로드 타임아웃 - 폼을 강제로 표시합니다');
-          loadingIndicator.style.display = 'none';
-          settingsForm.style.display = 'block';
-          
-          // 기본 설정으로 폼 채우기
-          populateSettings({
-            userProfile: {
-              email: 'complete.test@email.com',
-              username: 'CompleteUser',
-              pythonSkillLevel: 'intermediate',
-              codeOutputStructure: 'minimal',
-              explanationStyle: 'brief',
-              projectContext: 'web_development',
-              errorHandlingPreference: 'basic',
-              preferredLanguageFeatures: ['type_hints']
-            },
-            api: {
-              apiBaseURL: 'http://localhost:8000/api/v1',
-              apiKey: '',
-              apiTimeout: 30000
-            },
-            commentTrigger: {
-              resultDisplayMode: 'immediate_insert',
-              autoInsertDelay: 0,
-              showNotification: false
-            },
-            features: {
-              autoComplete: true,
-              maxSuggestions: 5,
-              enableLogging: false,
-              enableCodeAnalysis: true
-            }
-          });
-        }
-      }, 3000);
-    });
-    
-    // DOM이 이미 로드된 경우 즉시 실행
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', function() {
-        console.log('HAPA 설정 페이지 로드됨 (DOMContentLoaded)');
-        loadSettings();
-      });
-    } else {
-      console.log('HAPA 설정 페이지 로드됨 (이미 로드됨)');
-      loadSettings();
-    }
-    
-    // 탭 전환 함수
-    function switchTab(tabName, clickedButton = null) {
-      console.log('🔄 탭 전환 시도:', tabName, '버튼:', clickedButton);
-      
-      // 모든 탭 버튼 비활성화
-      const allButtons = document.querySelectorAll('.tab-button');
-      console.log('📋 탭 버튼 개수:', allButtons.length);
-      allButtons.forEach(btn => btn.classList.remove('active'));
-      
-      // 모든 탭 패널 숨기기
-      const allPanels = document.querySelectorAll('.tab-panel');
-      console.log('📋 탭 패널 개수:', allPanels.length);
-      allPanels.forEach(panel => {
-        panel.classList.remove('active');
-        console.log('❌ 패널 숨김:', panel.id);
-      });
-      
-      // 클릭된 버튼 활성화 (전달된 버튼이 있으면 사용, 없으면 찾기)
-      if (clickedButton) {
-        clickedButton.classList.add('active');
-        console.log('✅ 버튼 활성화:', clickedButton.textContent.trim());
-      } else {
-        // tabName에 해당하는 버튼 찾기
-        const buttons = document.querySelectorAll('.tab-button');
-        buttons.forEach(btn => {
-          if (btn.getAttribute('onclick').includes(tabName)) {
-            btn.classList.add('active');
-            console.log('✅ 버튼 활성화 (검색):', btn.textContent.trim());
-          }
-        });
-      }
-      
-      // 선택된 탭 패널 활성화
-      const targetPanelId = tabName + '-tab';
-      const tabPanel = document.getElementById(targetPanelId);
-      console.log('🎯 찾는 패널 ID:', targetPanelId);
-      console.log('📦 찾은 패널:', tabPanel);
-      
-      if (tabPanel) {
-        tabPanel.classList.add('active');
-        console.log('✅ 패널 활성화:', targetPanelId);
-        
-        // 패널이 실제로 보이는지 확인
-        const computedStyle = window.getComputedStyle(tabPanel);
-        console.log('👀 패널 display 속성:', computedStyle.display);
-      } else {
-        console.error('❌ 탭 패널을 찾을 수 없습니다:', targetPanelId);
-        
-        // 존재하는 모든 패널 ID 출력
-        document.querySelectorAll('.tab-panel').forEach(panel => {
-          console.log('📋 존재하는 패널:', panel.id);
-        });
-      }
-    }
-    
-    function loadSettings() {
-      vscode.postMessage({
-        command: 'loadSettings'
-      });
-    }
-    
-    function saveSettings() {
-      const settings = {
-        userProfile: {
-          email: document.getElementById('email').value,
-          username: document.getElementById('username').value,
-          pythonSkillLevel: document.getElementById('pythonSkillLevel').value,
-          codeOutputStructure: document.getElementById('codeOutputStructure').value,
-          explanationStyle: document.getElementById('explanationStyle').value,
-          projectContext: document.getElementById('projectContext').value,
-          errorHandlingPreference: document.getElementById('errorHandlingPreference').value,
-          preferredLanguageFeatures: getSelectedLanguageFeatures()
-        },
-        api: {
-          apiBaseURL: document.getElementById('apiBaseURL').value,
-          apiKey: document.getElementById('apiKey').value,
-          apiTimeout: parseInt(document.getElementById('apiTimeout').value)
-        },
-        commentTrigger: {
-          resultDisplayMode: document.getElementById('commentTriggerResultDisplayMode').value,
-          autoInsertDelay: parseInt(document.getElementById('commentTriggerAutoInsertDelay').value),
-          showNotification: document.getElementById('commentTriggerShowNotification').checked
-        },
-        features: {
-          autoComplete: document.getElementById('autoComplete').checked,
-          maxSuggestions: parseInt(document.getElementById('maxSuggestions').value),
-          enableLogging: document.getElementById('enableLogging').checked,
-          enableCodeAnalysis: document.getElementById('enableCodeAnalysis').checked
-        }
-      };
-      
-      vscode.postMessage({
-        command: 'saveSettings',
-        settings: settings
-      });
-    }
-    
-    function resetSettings() {
-      if (confirm('모든 설정을 기본값으로 초기화하시겠습니까?')) {
-        vscode.postMessage({
-          command: 'resetSettings'
-        });
-      }
-    }
-    
-    function restartOnboarding() {
-      if (confirm('온보딩을 다시 시작하시겠습니까? 현재 설정이 초기화됩니다.')) {
-        vscode.postMessage({
-          command: 'restartOnboarding'
-        });
-      }
-    }
-    
-    function openVSCodeSettings() {
-      vscode.postMessage({
-        command: 'openVSCodeSettings'
-      });
-    }
-    
-    function getSelectedLanguageFeatures() {
-      const features = [];
-      document.querySelectorAll('#languageFeatures input[type="checkbox"]:checked').forEach(checkbox => {
-        features.push(checkbox.closest('.checkbox-item').dataset.value);
-      });
-      return features;
-    }
-    
-    function setSelectedLanguageFeatures(features) {
-      if (!features) return;
-      document.querySelectorAll('#languageFeatures input[type="checkbox"]').forEach(checkbox => {
-        const value = checkbox.closest('.checkbox-item').dataset.value;
-        checkbox.checked = features.includes(value);
-        checkbox.closest('.checkbox-item').classList.toggle('checked', checkbox.checked);
-      });
-    }
-    
-    // 체크박스 상태 변경 이벤트
-    document.addEventListener('change', function(e) {
-      if (e.target.type === 'checkbox') {
-        e.target.closest('.checkbox-item').classList.toggle('checked', e.target.checked);
-      }
-    });
-    
-    // VSCode에서 메시지 수신
-    window.addEventListener('message', event => {
-      const message = event.data;
-      
-      switch (message.command) {
-        case 'settingsLoaded':
-          currentSettings = message.settings;
-          populateSettings(currentSettings);
-          document.getElementById('loadingIndicator').style.display = 'none';
-          document.getElementById('settingsForm').style.display = 'block';
-          break;
-          
-        case 'settingsSaved':
-          if (message.success) {
-            showMessage('설정이 성공적으로 저장되었습니다!', 'success');
-          } else {
-            showMessage('설정 저장 중 오류가 발생했습니다: ' + message.error, 'error');
-          }
-          break;
-          
-        case 'settingsReset':
-          showMessage('설정이 기본값으로 초기화되었습니다.', 'success');
-          loadSettings();
-          break;
-      }
-    });
-    
-    function populateSettings(settings) {
-      // 사용자 프로필 설정
-      if (settings.userProfile) {
-        document.getElementById('email').value = settings.userProfile.email || '';
-        document.getElementById('username').value = settings.userProfile.username || '';
-        
-        // 사용자 정보 카드 업데이트
-        document.getElementById('userDisplayName').textContent = settings.userProfile.username || 'CompleteUser';
-        document.getElementById('userDisplayEmail').textContent = settings.userProfile.email || 'complete.test@email.com';
-        
-        // 현재 설정 값 표시
-        document.getElementById('currentCodeOutput').textContent = settings.userProfile.codeOutputStructure || 'minimal';
-        document.getElementById('currentExplanation').textContent = settings.userProfile.explanationStyle || 'brief';
-        document.getElementById('currentProject').textContent = settings.userProfile.projectContext || 'web_development';
-        document.getElementById('currentLanguageFeature').textContent = 
-          (settings.userProfile.preferredLanguageFeatures && settings.userProfile.preferredLanguageFeatures[0]) || 'type_hints';
-        
-        document.getElementById('pythonSkillLevel').value = settings.userProfile.pythonSkillLevel || 'intermediate';
-        document.getElementById('codeOutputStructure').value = settings.userProfile.codeOutputStructure || 'minimal';
-        document.getElementById('explanationStyle').value = settings.userProfile.explanationStyle || 'brief';
-        document.getElementById('projectContext').value = settings.userProfile.projectContext || 'web_development';
-        document.getElementById('errorHandlingPreference').value = settings.userProfile.errorHandlingPreference || 'basic';
-        setSelectedLanguageFeatures(settings.userProfile.preferredLanguageFeatures);
-      }
-      
-      // API 설정
-      if (settings.api) {
-        document.getElementById('apiBaseURL').value = settings.api.apiBaseURL || 'http://localhost:8000/api/v1';
-        document.getElementById('apiKey').value = settings.api.apiKey || '';
-        document.getElementById('apiTimeout').value = settings.api.apiTimeout || 30000;
-      }
-      
-      // 주석 트리거 설정
-      if (settings.commentTrigger) {
-        document.getElementById('commentTriggerResultDisplayMode').value = settings.commentTrigger.resultDisplayMode || 'immediate_insert';
-        document.getElementById('commentTriggerAutoInsertDelay').value = settings.commentTrigger.autoInsertDelay || 0;
-        document.getElementById('commentTriggerShowNotification').checked = settings.commentTrigger.showNotification || false;
-        
-        // 현재 설정 값 표시
-        document.getElementById('currentCommentTrigger').textContent = settings.commentTrigger.resultDisplayMode || 'immediate_insert';
-        document.getElementById('currentErrorHandling').textContent = settings.userProfile?.errorHandlingPreference || 'basic';
-      }
-      
-      // 기능 설정
-      if (settings.features) {
-        document.getElementById('autoComplete').checked = settings.features.autoComplete !== false;
-        document.getElementById('maxSuggestions').value = settings.features.maxSuggestions || 5;
-        document.getElementById('enableLogging').checked = settings.features.enableLogging || false;
-        document.getElementById('enableCodeAnalysis').checked = settings.features.enableCodeAnalysis !== false;
-      }
-    }
-    
-    function showMessage(text, type) {
-      const successMsg = document.getElementById('successMessage');
-      const errorMsg = document.getElementById('errorMessage');
-      
-      if (type === 'success') {
-        successMsg.textContent = text;
-        successMsg.style.display = 'block';
-        errorMsg.style.display = 'none';
-      } else {
-        errorMsg.textContent = text;
-        errorMsg.style.display = 'block';
-        successMsg.style.display = 'none';
-      }
-      
-      setTimeout(() => {
-        successMsg.style.display = 'none';
-        errorMsg.style.display = 'none';
-      }, 5000);
-    }
+    ${scriptContent}
   </script>
 </body>
 </html>`;

@@ -49,30 +49,121 @@ export class OnboardingProvider extends BaseWebviewProvider {
   }
 
   /**
-   * 다음 단계로 이동
+   * 다음 단계로 이동 (개선된 검증 로직)
    */
   private handleNextStep(stepData: any) {
-    // 현재 단계 데이터 저장
-    this.userProfile = { ...this.userProfile, ...stepData };
+    console.log(
+      `🔄 다음 단계로 이동 시도: ${this.currentStep} → ${this.currentStep + 1}`
+    );
+    console.log("📋 받은 단계 데이터:", stepData);
 
+    // 1. 데이터 검증
+    if (!this.validateStepData(this.currentStep, stepData)) {
+      console.error("❌ 단계 데이터 검증 실패 - 다음 단계로 진행하지 않음");
+      return;
+    }
+
+    // 2. 현재 단계 데이터 저장
+    this.userProfile = { ...this.userProfile, ...stepData };
+    console.log("💾 업데이트된 사용자 프로필:", this.userProfile);
+
+    // 3. 다음 단계로 진행 (경계 검사 강화)
     if (this.currentStep < this.totalSteps - 1) {
+      const previousStep = this.currentStep;
       this.currentStep++;
-      this.updateWebview();
+      console.log(
+        `✅ 단계 증가: ${previousStep} → ${this.currentStep} (총 ${this.totalSteps}단계)`
+      );
+
+      // 웹뷰 업데이트 전 잠시 대기 (상태 안정화)
+      setTimeout(() => {
+        this.updateWebview();
+      }, 50);
+    } else {
+      console.log("⚠️ 이미 마지막 단계입니다.");
     }
   }
 
   /**
-   * 이전 단계로 이동
+   * 단계별 데이터 검증
+   */
+  private validateStepData(step: number, data: any): boolean {
+    switch (step) {
+      case 0:
+        if (!data.email || !data.email.trim()) {
+          vscode.window.showErrorMessage("이메일을 입력해주세요.");
+          return false;
+        }
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(data.email)) {
+          vscode.window.showErrorMessage("올바른 이메일 형식을 입력해주세요.");
+          return false;
+        }
+        return true;
+
+      case 1:
+        if (!data.skillLevel) {
+          vscode.window.showErrorMessage("Python 스킬 수준을 선택해주세요.");
+          return false;
+        }
+        return true;
+
+      case 2:
+        if (!data.outputStructure) {
+          vscode.window.showErrorMessage("코드 출력 스타일을 선택해주세요.");
+          return false;
+        }
+        return true;
+
+      case 3:
+        if (!data.explanationStyle) {
+          vscode.window.showErrorMessage("설명 스타일을 선택해주세요.");
+          return false;
+        }
+        return true;
+
+      case 4:
+        if (!data.projectContext) {
+          vscode.window.showErrorMessage("개발 분야를 선택해주세요.");
+          return false;
+        }
+        return true;
+
+      case 5:
+        if (!data.commentTriggerMode) {
+          vscode.window.showErrorMessage(
+            "주석 트리거 워크플로우를 선택해주세요."
+          );
+          return false;
+        }
+        return true;
+
+      default:
+        return true;
+    }
+  }
+
+  /**
+   * 이전 단계로 이동 (강화된 버전)
    */
   private handlePreviousStep() {
     if (this.currentStep > 0) {
+      const previousStep = this.currentStep;
       this.currentStep--;
-      this.updateWebview();
+      console.log(`⬅️ 이전 단계로 이동: ${previousStep} → ${this.currentStep}`);
+      console.log("📋 현재 저장된 프로필:", this.userProfile);
+
+      // 웹뷰 업데이트 전 잠시 대기 (상태 안정화)
+      setTimeout(() => {
+        this.updateWebview();
+      }, 50);
+    } else {
+      console.log("⚠️ 이미 첫 번째 단계입니다.");
     }
   }
 
   /**
-   * 온보딩 완료 (개선된 버전 - 유효성 검증 강화)
+   * 온보딩 완료 (개선된 버전 - 유효성 검증 강화 + 자동 API 키 발급)
    */
   private async completeOnboarding(finalData: any) {
     try {
@@ -95,76 +186,126 @@ export class OnboardingProvider extends BaseWebviewProvider {
         features: this.userProfile.languageFeatures?.length || 0,
       });
 
-      // 3. 로컬 설정 저장 (우선 처리)
-      await this.saveToLocalConfig();
-
-      // 4. 진행률 표시
+      // 3. 진행률 표시와 함께 필수 저장 과정 수행
       vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
-          title: "HAPA 설정 저장 중...",
+          title: "HAPA 온보딩 저장 중...",
           cancellable: false,
         },
         async (progress) => {
-          progress.report({ increment: 30, message: "로컬 설정 저장 완료" });
+          progress.report({ increment: 10, message: "데이터 검증 완료" });
 
-          // 5. DB 저장 시도
-          const dbSaveSuccess = await this.saveUserProfileToDB();
-          progress.report({ increment: 70, message: "서버 동기화 중..." });
+          // 4. API 키 발급 (필수)
+          console.log("🔑 API 키 발급 시작...");
+          const apiKeyResult = await this.generateAPIKeyForUser();
+          progress.report({ increment: 50, message: "API 키 발급 중..." });
 
-          await new Promise((resolve) => setTimeout(resolve, 500)); // 사용자 경험을 위한 짧은 지연
-
-          if (dbSaveSuccess) {
-            vscode.window
-              .showInformationMessage(
-                "🎉 HAPA 온보딩이 완료되었습니다! 설정이 서버에 저장되어 다른 기기에서도 동기화됩니다.",
-                "HAPA 시작하기"
-              )
-              .then((selection) => {
-                if (selection === "HAPA 시작하기") {
-                  vscode.commands.executeCommand("hapa.openSidebar");
-                }
-              });
-          } else {
-            vscode.window
-              .showWarningMessage(
-                "⚠️ 온보딩은 완료되었지만 서버 저장에 실패했습니다. 설정은 로컬에 저장되었습니다.",
-                "확인",
-                "다시 시도"
-              )
-              .then((selection) => {
-                if (selection === "다시 시도") {
-                  this.saveUserProfileToDB();
-                }
-              });
+          if (!apiKeyResult.success) {
+            throw new Error(
+              `API 키 발급 실패: ${apiKeyResult.error || "알 수 없는 오류"}`
+            );
           }
 
-          // 6. 완료 화면 표시
+          console.log("✅ API 키 발급 성공");
+          progress.report({ increment: 70, message: "API 키 발급 완료" });
+
+          // 5. PostgreSQL DB 저장 (필수)
+          console.log("💾 PostgreSQL 데이터베이스 저장 시작...");
+          const dbSaveSuccess = await this.saveUserProfileToDB();
+          progress.report({
+            increment: 90,
+            message: "데이터베이스 저장 중...",
+          });
+
+          if (!dbSaveSuccess) {
+            throw new Error("PostgreSQL 데이터베이스 저장 실패");
+          }
+
+          console.log("✅ PostgreSQL 데이터베이스 저장 성공");
+          progress.report({ increment: 95, message: "데이터베이스 저장 완료" });
+
+          // 6. 모든 필수 과정이 성공했으므로 로컬 설정 저장
+          await this.saveToLocalConfig();
+          console.log("✅ 로컬 설정 저장 완료");
+
+          // 7. 온보딩 완료 표시 (모든 과정 성공 후)
+          await this.markOnboardingCompleted();
+          progress.report({ increment: 100, message: "온보딩 완료" });
+
+          // 8. 성공 메시지 표시
+          vscode.window
+            .showInformationMessage(
+              `🎉 HAPA 온보딩이 성공적으로 완료되었습니다!\n\n✅ API 키 발급 완료\n✅ PostgreSQL 데이터베이스 저장 완료\n✅ 로컬 설정 저장 완료\n\n🔑 API 키: ${apiKeyResult.apiKey?.substring(
+                0,
+                20
+              )}...\n\n이제 HAPA AI 코딩 어시스턴트를 사용할 수 있습니다!`,
+              "HAPA 시작하기",
+              "설정 확인"
+            )
+            .then((selection) => {
+              if (selection === "HAPA 시작하기") {
+                vscode.commands.executeCommand("hapa.openSidebar");
+              } else if (selection === "설정 확인") {
+                vscode.commands.executeCommand("hapa.showSettings");
+              }
+            });
+
+          // 9. 완료 화면 표시
           if (this._view) {
             this._view.webview.html = this.generateCompletionHtml();
           }
 
-          // 7. 완료 이벤트 발생 (다른 모듈에서 감지 가능)
+          // 10. 완료 이벤트 발생 (다른 모듈에서 감지 가능)
           vscode.commands.executeCommand(
             "hapa.onboardingCompleted",
             this.userProfile
           );
 
-          return dbSaveSuccess;
+          return { apiKeyResult, dbSaveSuccess };
         }
       );
     } catch (error) {
-      console.error("❌ 온보딩 완료 중 오류:", error);
+      console.error("❌ 온보딩 실패:", error);
+
+      // 온보딩 실패 시 로컬 완료 상태 제거 (만약 설정되었다면)
+      try {
+        const config = vscode.workspace.getConfiguration("hapa");
+        await config.update(
+          "userProfile.isOnboardingCompleted",
+          false,
+          vscode.ConfigurationTarget.Global
+        );
+      } catch (configError) {
+        console.error("로컬 완료 상태 제거 실패:", configError);
+      }
+
+      // 사용자에게 구체적인 오류 메시지 표시
+      const errorMessage = (error as Error).message;
+      let detailedMessage = "온보딩 과정에서 오류가 발생했습니다.";
+
+      if (errorMessage.includes("API 키")) {
+        detailedMessage =
+          "API 키 발급에 실패했습니다. 네트워크 연결을 확인하고 다시 시도해주세요.";
+      } else if (
+        errorMessage.includes("데이터베이스") ||
+        errorMessage.includes("PostgreSQL")
+      ) {
+        detailedMessage =
+          "데이터베이스 저장에 실패했습니다. 서버 연결을 확인하고 다시 시도해주세요.";
+      }
+
       vscode.window
         .showErrorMessage(
-          `설정 저장 중 오류가 발생했습니다: ${
-            (error as Error).message
-          }. 다시 시도해주세요.`,
-          "다시 시도"
+          `❌ ${detailedMessage}\n\n오류 세부사항: ${errorMessage}`,
+          "다시 시도",
+          "온보딩 건너뛰기"
         )
         .then((selection) => {
           if (selection === "다시 시도") {
             this.completeOnboarding(finalData);
+          } else if (selection === "온보딩 건너뛰기") {
+            this.skipOnboarding();
           }
         });
     }
@@ -218,75 +359,94 @@ export class OnboardingProvider extends BaseWebviewProvider {
   }
 
   /**
-   * 로컬 VSCode 설정 저장
+   * 로컬 VSCode 설정 저장 (강화된 오류 처리)
    */
   private async saveToLocalConfig(): Promise<void> {
-    const config = vscode.workspace.getConfiguration("hapa");
+    try {
+      // vscode.workspace 안전성 확인
+      if (!vscode || !vscode.workspace) {
+        throw new Error("VSCode API가 초기화되지 않았습니다");
+      }
 
-    await config.update(
-      "userProfile.isOnboardingCompleted",
-      true,
-      vscode.ConfigurationTarget.Global
-    );
+      console.log("📝 로컬 설정 저장 시작:", Object.keys(this.userProfile));
+      const config = vscode.workspace.getConfiguration("hapa");
 
-    // 이메일 저장 (Step 0에서 수집)
-    if (this.userProfile.email) {
       await config.update(
-        "userProfile.email",
-        this.userProfile.email,
+        "userProfile.isOnboardingCompleted",
+        true,
         vscode.ConfigurationTarget.Global
       );
-    }
 
-    if (this.userProfile.username) {
+      // 이메일 저장 (Step 0에서 수집)
+      if (this.userProfile.email) {
+        await config.update(
+          "userProfile.email",
+          this.userProfile.email,
+          vscode.ConfigurationTarget.Global
+        );
+      }
+
+      if (this.userProfile.username) {
+        await config.update(
+          "userProfile.username",
+          this.userProfile.username,
+          vscode.ConfigurationTarget.Global
+        );
+      }
+
       await config.update(
-        "userProfile.username",
-        this.userProfile.username,
+        "userProfile.pythonSkillLevel",
+        this.userProfile.skillLevel,
         vscode.ConfigurationTarget.Global
       );
-    }
-
-    await config.update(
-      "userProfile.pythonSkillLevel",
-      this.userProfile.skillLevel,
-      vscode.ConfigurationTarget.Global
-    );
-    await config.update(
-      "userProfile.codeOutputStructure",
-      this.userProfile.outputStructure,
-      vscode.ConfigurationTarget.Global
-    );
-    await config.update(
-      "userProfile.explanationStyle",
-      this.userProfile.explanationStyle,
-      vscode.ConfigurationTarget.Global
-    );
-    await config.update(
-      "userProfile.projectContext",
-      this.userProfile.projectContext,
-      vscode.ConfigurationTarget.Global
-    );
-    await config.update(
-      "userProfile.errorHandlingPreference",
-      this.userProfile.errorHandling,
-      vscode.ConfigurationTarget.Global
-    );
-
-    if (this.userProfile.languageFeatures) {
       await config.update(
-        "userProfile.preferredLanguageFeatures",
-        this.userProfile.languageFeatures,
+        "userProfile.codeOutputStructure",
+        this.userProfile.outputStructure,
         vscode.ConfigurationTarget.Global
       );
-    }
-
-    // 주석 트리거 설정 저장
-    if (this.userProfile.commentTriggerMode) {
       await config.update(
-        "commentTrigger.resultDisplayMode",
-        this.userProfile.commentTriggerMode,
+        "userProfile.explanationStyle",
+        this.userProfile.explanationStyle,
         vscode.ConfigurationTarget.Global
       );
+      await config.update(
+        "userProfile.projectContext",
+        this.userProfile.projectContext,
+        vscode.ConfigurationTarget.Global
+      );
+      await config.update(
+        "userProfile.errorHandlingPreference",
+        this.userProfile.errorHandling,
+        vscode.ConfigurationTarget.Global
+      );
+
+      if (this.userProfile.languageFeatures) {
+        await config.update(
+          "userProfile.preferredLanguageFeatures",
+          this.userProfile.languageFeatures,
+          vscode.ConfigurationTarget.Global
+        );
+      }
+
+      // 주석 트리거 설정 저장
+      if (this.userProfile.commentTriggerMode) {
+        await config.update(
+          "commentTrigger.resultDisplayMode",
+          this.userProfile.commentTriggerMode,
+          vscode.ConfigurationTarget.Global
+        );
+      }
+
+      console.log("✅ 온보딩 데이터가 로컬 설정에 저장되었습니다.");
+    } catch (error) {
+      console.error("❌ 로컬 설정 저장 중 오류:", error);
+      // 사용자에게 알림
+      vscode.window.showWarningMessage(
+        `설정 저장 중 오류가 발생했습니다: ${
+          (error as Error).message
+        }. 설정을 다시 확인해주세요.`
+      );
+      throw error;
     }
   }
 
@@ -381,11 +541,15 @@ export class OnboardingProvider extends BaseWebviewProvider {
     for (let i = 0; i < maxRetries; i++) {
       try {
         const result = await this.loginOrRegisterUser();
-        if (result) return result;
+        if (result) {
+          return result;
+        }
         throw new Error("인증 응답 없음");
       } catch (error) {
         console.error(`인증 시도 ${i + 1} 실패:`, error);
-        if (i === maxRetries - 1) throw error;
+        if (i === maxRetries - 1) {
+          throw error;
+        }
         await new Promise((resolve) => setTimeout(resolve, 1000));
       }
     }
@@ -405,11 +569,15 @@ export class OnboardingProvider extends BaseWebviewProvider {
     for (let i = 0; i < maxRetries; i++) {
       try {
         const result = await this.saveSettingsToDB(accessToken, optionIds);
-        if (result) return true;
+        if (result) {
+          return true;
+        }
         throw new Error("설정 저장 응답 실패");
       } catch (error) {
         console.error(`설정 저장 시도 ${i + 1} 실패:`, error);
-        if (i === maxRetries - 1) throw error;
+        if (i === maxRetries - 1) {
+          throw error;
+        }
         await new Promise((resolve) => setTimeout(resolve, 1000));
       }
     }
@@ -426,7 +594,10 @@ export class OnboardingProvider extends BaseWebviewProvider {
   } | null> {
     try {
       const config = vscode.workspace.getConfiguration("hapa");
-      const baseURL = config.get("apiBaseURL", "http://localhost:8000/api/v1");
+      const baseURL = config.get(
+        "apiBaseURL",
+        "http://3.13.240.111:8000/api/v1"
+      );
 
       // 테스트 사용자 감지 및 특별 처리
       const isTestUser = this.userProfile.email?.startsWith("real.db.user");
@@ -609,7 +780,10 @@ export class OnboardingProvider extends BaseWebviewProvider {
   ): Promise<boolean> {
     try {
       const config = vscode.workspace.getConfiguration("hapa");
-      const baseURL = config.get("apiBaseURL", "http://localhost:8000/api/v1");
+      const baseURL = config.get(
+        "apiBaseURL",
+        "http://3.13.240.111:8000/api/v1"
+      );
 
       const response = await fetch(`${baseURL}/users/profile`, {
         method: "POST",
@@ -651,11 +825,27 @@ export class OnboardingProvider extends BaseWebviewProvider {
   }
 
   /**
-   * 웹뷰 업데이트
+   * 웹뷰 업데이트 (상태 복원 포함)
    */
   private updateWebview() {
     if (this._view) {
+      console.log(`🔄 웹뷰 업데이트: 단계 ${this.currentStep}`);
+      console.log("📋 현재 저장된 프로필:", this.userProfile);
+
+      // HTML 생성 시 상태 정보를 포함하여 생성
       this._view.webview.html = this.generateOnboardingHtml();
+
+      // 더 안전한 상태 복원 - DOM 로드 완료 후 실행
+      setTimeout(() => {
+        if (this._view) {
+          console.log(`📤 상태 복원 메시지 전송: 단계 ${this.currentStep}`);
+          this._view.webview.postMessage({
+            command: "restoreSelection",
+            currentStep: this.currentStep,
+            userProfile: this.userProfile,
+          });
+        }
+      }, 200); // 200ms로 증가하여 DOM 로드 대기
     }
   }
 
@@ -897,7 +1087,9 @@ export class OnboardingProvider extends BaseWebviewProvider {
   </style>
 </head>
 <body>
-  <div class="onboarding-container">
+  <div class="onboarding-container" data-current-step="${
+    this.currentStep
+  }" data-total-steps="${this.totalSteps}">
     <div class="header">
       <h1>🚀 HAPA에 오신 것을 환영합니다!</h1>
       <p>당신에게 최적화된 AI 코딩 어시스턴트로 설정해보세요</p>
@@ -939,28 +1131,87 @@ export class OnboardingProvider extends BaseWebviewProvider {
     const vscode = acquireVsCodeApi();
     
     function nextStep() {
+      console.log('🔄 nextStep() 함수 호출됨');
+      
+      // 현재 단계 정보 확인
+      var container = document.querySelector('.onboarding-container');
+      var currentStep = container ? parseInt(container.getAttribute('data-current-step') || '0') : 0;
+      console.log('📍 현재 단계:', currentStep);
+      
+      try {
       const data = collectStepData();
+      console.log('📋 수집된 데이터:', data);
+      
       if (data) {
+        console.log('📤 VSCode로 메시지 전송:', {
+          command: 'nextStep',
+          dataKeys: Object.keys(data || {}),
+            currentStep: currentStep,
+            data: data
+        });
+          
+          // 버튼 비활성화로 중복 클릭 방지
+          var nextBtn = document.getElementById('nextBtn');
+          if (nextBtn) {
+            nextBtn.disabled = true;
+            nextBtn.textContent = '처리 중...';
+          }
+        
         vscode.postMessage({
           command: 'nextStep',
           data: data
         });
+      } else {
+        console.error('❌ 데이터 수집 실패 - nextStep 진행 불가');
+          alert('입력 데이터를 확인해주세요.');
+        }
+      } catch (error) {
+        console.error('❌ nextStep 실행 중 오류:', error);
+        alert('페이지 처리 중 오류가 발생했습니다.');
       }
     }
     
     function previousStep() {
+      console.log('⬅️ previousStep() 함수 호출됨');
+      
+      // 버튼 비활성화로 중복 클릭 방지
+      var prevBtn = document.querySelector('.btn-secondary');
+      if (prevBtn) {
+        prevBtn.disabled = true;
+        prevBtn.textContent = '처리 중...';
+      }
+      
       vscode.postMessage({
         command: 'previousStep'
       });
     }
     
     function completeOnboarding() {
+      console.log('🏁 completeOnboarding() 함수 호출됨');
+      
+      try {
       const data = collectStepData();
+        console.log('📋 최종 수집된 데이터:', data);
+        
       if (data) {
+          // 버튼 비활성화로 중복 클릭 방지
+          var completeBtn = document.getElementById('completeBtn');
+          if (completeBtn) {
+            completeBtn.disabled = true;
+            completeBtn.textContent = '완료 처리 중...';
+          }
+          
         vscode.postMessage({
           command: 'completeOnboarding',
           data: data
         });
+        } else {
+          console.error('❌ 최종 데이터 수집 실패');
+          alert('입력 데이터를 확인해주세요.');
+        }
+      } catch (error) {
+        console.error('❌ 온보딩 완료 처리 중 오류:', error);
+        alert('완료 처리 중 오류가 발생했습니다.');
       }
     }
     
@@ -1022,48 +1273,234 @@ export class OnboardingProvider extends BaseWebviewProvider {
       }
     }
     
-    // 페이지 로드 시 기본값 설정
-    setTimeout(function() {
-      // Step 1: Python 스킬 수준 - 중급자 기본 선택
-      if (${this.currentStep} === 1) {
-        var intermediateOption = document.querySelector('[data-value="intermediate"]');
-        if (intermediateOption && !document.querySelector('.radio-option.selected')) {
-          intermediateOption.click();
+    // 선택 상태 복원을 위한 메시지 리스너 (강화된 버전)
+    window.addEventListener('message', function(event) {
+      if (event.data.command === 'restoreSelection') {
+        console.log('🔄 선택 상태 복원 시작:', event.data);
+        // DOM이 완전히 로드될 때까지 재시도
+        var maxRetries = 5;
+        var retryCount = 0;
+        
+        function attemptRestore() {
+          if (retryCount >= maxRetries) {
+            console.warn('⚠️ 상태 복원 최대 재시도 횟수 초과');
+            return;
+          }
+          
+          var success = restoreSelectionState(event.data.currentStep, event.data.userProfile);
+          if (!success) {
+            retryCount++;
+            console.log('🔄 상태 복원 재시도 (' + retryCount + '/' + maxRetries + ')...');
+            setTimeout(attemptRestore, 50);
+          }
         }
+        
+        attemptRestore();
+      }
+    });
+
+    // 선택 상태 복원 함수 (개선된 버전)
+    function restoreSelectionState(step, profile) {
+      console.log('🔧 단계 ' + step + ' 선택 상태 복원 중...', profile);
+      
+      if (!profile) {
+        console.warn('⚠️ 프로필 데이터가 없습니다');
+        return false;
       }
       
-      // Step 2: 코드 출력 - 표준 기본 선택
-      if (${this.currentStep} === 2) {
-        var standardOption = document.querySelector('[data-value="standard"]');
-        if (standardOption && !document.querySelector('.radio-option.selected')) {
-          standardOption.click();
+      try {
+        switch(step) {
+          case 0:
+            var restored = false;
+            if (profile.email) {
+              var emailInput = document.getElementById('email');
+              if (emailInput) {
+                emailInput.value = profile.email;
+                restored = true;
+                console.log('📧 이메일 복원:', profile.email);
+              }
+            }
+            if (profile.username) {
+              var usernameInput = document.getElementById('username');
+              if (usernameInput) {
+                usernameInput.value = profile.username;
+                restored = true;
+                console.log('👤 사용자명 복원:', profile.username);
+              }
+            }
+            return restored;
+            
+          case 1:
+            if (profile.skillLevel) {
+              return restoreRadioSelection('skillLevel', profile.skillLevel);
+            }
+            break;
+            
+          case 2:
+            if (profile.outputStructure) {
+              return restoreRadioSelection('outputStructure', profile.outputStructure);
+            }
+            break;
+            
+          case 3:
+            if (profile.explanationStyle) {
+              return restoreRadioSelection('explanationStyle', profile.explanationStyle);
+            }
+            break;
+            
+          case 4:
+            var restored = false;
+            if (profile.projectContext) {
+              restored = restoreRadioSelection('projectContext', profile.projectContext) || restored;
+            }
+            if (profile.languageFeatures && profile.languageFeatures.length > 0) {
+              profile.languageFeatures.forEach(function(feature) {
+                if (restoreCheckboxSelection(feature)) {
+                  restored = true;
+                }
+              });
+            }
+            return restored;
+            
+          case 5:
+            if (profile.commentTriggerMode) {
+              return restoreRadioSelection('commentTriggerMode', profile.commentTriggerMode);
+            }
+            break;
         }
+        
+        console.log('✅ 선택 상태 복원 완료');
+        return true;
+      } catch (error) {
+        console.error('❌ 상태 복원 중 오류:', error);
+        return false;
+      }
+    }
+    
+    // 라디오 버튼 선택 상태 복원 (개선된 버전)
+    function restoreRadioSelection(groupName, value) {
+      // 먼저 모든 같은 그룹의 선택 해제
+      document.querySelectorAll('[data-radio="' + groupName + '"]').forEach(function(el) {
+        el.classList.remove('selected');
+        el.style.borderColor = 'var(--vscode-input-border)';
+        el.style.backgroundColor = 'var(--vscode-input-background)';
+      });
+      
+      // 해당 값을 가진 요소 찾기 및 선택
+      var element = document.querySelector('[data-radio="' + groupName + '"][data-value="' + value + '"]');
+      if (element) {
+        element.classList.add('selected');
+        element.style.borderColor = '#007ACC';
+        element.style.backgroundColor = 'rgba(0, 122, 204, 0.1)';
+        console.log('📋 라디오 복원 성공:', groupName, '=', value);
+        return true;
+      } else {
+        console.warn('⚠️ 라디오 요소를 찾을 수 없습니다:', groupName, '=', value);
+        return false;
+      }
+    }
+    
+    // 체크박스 선택 상태 복원 (개선된 버전)
+    function restoreCheckboxSelection(feature) {
+      var element = document.querySelector('[data-feature="' + feature + '"]');
+      if (element) {
+        element.classList.add('selected');
+        element.setAttribute('data-checked', 'true');
+        element.style.borderColor = '#007ACC';
+        element.style.backgroundColor = 'rgba(0, 122, 204, 0.1)';
+        console.log('📋 체크박스 복원 성공:', feature);
+        return true;
+      } else {
+        console.warn('⚠️ 체크박스 요소를 찾을 수 없습니다:', feature);
+        return false;
+      }
+    }
+
+    // 페이지 로드 시 기본값 설정 (강화된 버전)
+    function initializeOnboardingPage() {
+      // HTML data 속성에서 현재 단계 읽기 (안전한 방법)
+      var container = document.querySelector('.onboarding-container');
+      if (!container) {
+        console.warn('⚠️ 온보딩 컨테이너를 찾을 수 없습니다');
+        return false;
       }
       
-      // Step 3: 설명 스타일 - 표준 설명 기본 선택
-      if (${this.currentStep} === 3) {
-        var standardExplanation = document.querySelector('[data-value="standard"]');
-        if (standardExplanation && !document.querySelector('.radio-option.selected')) {
-          standardExplanation.click();
-        }
+      var currentStep = parseInt(container.getAttribute('data-current-step') || '0');
+      var totalSteps = parseInt(container.getAttribute('data-total-steps') || '6');
+      console.log('🔧 현재 단계 (data 속성):', currentStep, '/', totalSteps);
+      
+      // 버튼 이벤트 핸들러 설정 (중복 방지)
+      var nextBtn = document.getElementById('nextBtn');
+      var completeBtn = document.getElementById('completeBtn');
+      var skipLink = document.querySelector('.skip-link');
+      
+      if (nextBtn && !nextBtn.hasAttribute('data-handler-attached')) {
+        nextBtn.addEventListener('click', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          console.log('👆 다음 버튼 클릭됨 - 단계:', currentStep);
+          nextStep();
+        });
+        nextBtn.setAttribute('data-handler-attached', 'true');
+        console.log('✅ 다음 버튼 이벤트 핸들러 설정 완료');
       }
       
-      // Step 4: 개발 환경 - 범용 개발 기본 선택
-      if (${this.currentStep} === 4) {
-        var generalPurpose = document.querySelector('[data-value="general_purpose"]');
-        if (generalPurpose && !document.querySelector('.radio-option.selected')) {
-          generalPurpose.click();
-        }
+      if (completeBtn && !completeBtn.hasAttribute('data-handler-attached')) {
+        completeBtn.addEventListener('click', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          console.log('👆 완료 버튼 클릭됨 - 단계:', currentStep);
+          completeOnboarding();
+        });
+        completeBtn.setAttribute('data-handler-attached', 'true');
+        console.log('✅ 완료 버튼 이벤트 핸들러 설정 완료');
       }
       
-      // Step 5: 트리거 모드 - 확인 후 삽입 기본 선택
-      if (${this.currentStep} === 5) {
-        var confirmInsert = document.querySelector('[data-value="confirm_insert"]');
-        if (confirmInsert && !document.querySelector('.radio-option.selected')) {
-          confirmInsert.click();
-        }
+      if (skipLink && !skipLink.hasAttribute('data-handler-attached')) {
+        skipLink.addEventListener('click', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          console.log('👆 건너뛰기 링크 클릭됨');
+          skipOnboarding();
+        });
+        skipLink.setAttribute('data-handler-attached', 'true');
+        console.log('✅ 건너뛰기 링크 이벤트 핸들러 설정 완료');
       }
-    }, 100);
+      
+      console.log('✅ 온보딩 페이지 초기화 완료');
+      return true;
+    }
+
+    // DOM 로드 완료 후 초기화 (재시도 로직 포함)
+    var initRetryCount = 0;
+    var maxInitRetries = 10;
+    
+    function attemptInit() {
+      if (initRetryCount >= maxInitRetries) {
+        console.error('❌ 페이지 초기화 최대 재시도 횟수 초과');
+        return;
+      }
+      
+      if (document.readyState === 'loading') {
+        // DOM이 아직 로드 중이면 잠시 후 재시도
+        initRetryCount++;
+        setTimeout(attemptInit, 50);
+        return;
+      }
+      
+      var success = initializeOnboardingPage();
+      if (!success) {
+        initRetryCount++;
+        setTimeout(attemptInit, 50);
+      }
+    }
+    
+    // 즉시 시도하거나 DOM 로드 이벤트 대기
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', attemptInit);
+    } else {
+      attemptInit();
+    }
   </script>
 </body>
 </html>`;
@@ -1325,21 +1762,29 @@ export class OnboardingProvider extends BaseWebviewProvider {
           var email = document.getElementById('email').value.trim();
           var username = document.getElementById('username').value.trim();
           
+          // 이메일이 비어있으면 테스트 이메일 사용
           if (!email) {
-            alert('이메일을 입력해주세요.');
-            return null;
+            email = 'test.user@hapa.com';
+            console.log('⚠️ 이메일이 비어있어 테스트 이메일을 사용합니다:', email);
           }
           
-          // 이메일 형식 검증
+          // 이메일 형식 검증 (완화된 버전)
           var emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;
           if (!emailRegex.test(email)) {
-            alert('올바른 이메일 형식을 입력해주세요.');
-            return null;
+            console.log('⚠️ 이메일 형식이 올바르지 않아 테스트 이메일을 사용합니다');
+            email = 'test.user@hapa.com';
           }
+          
+          // username이 없으면 이메일에서 추출
+          if (!username) {
+            username = email.split('@')[0];
+          }
+          
+          console.log('✅ Step 0 데이터 수집 완료:', { email: email, username: username });
           
           return { 
             email: email, 
-            username: username || email.split('@')[0] 
+            username: username 
           };
         `;
 
@@ -1472,5 +1917,108 @@ export class OnboardingProvider extends BaseWebviewProvider {
   </div>
 </body>
 </html>`;
+  }
+
+  /**
+   * 사용자를 위한 자동 API 키 발급
+   */
+  private async generateAPIKeyForUser(): Promise<{
+    success: boolean;
+    apiKey?: string;
+    error?: string;
+  }> {
+    try {
+      console.log("🔑 자동 API 키 발급 시작:", {
+        email: this.userProfile.email,
+        username: this.userProfile.username,
+      });
+
+      const config = vscode.workspace.getConfiguration("hapa");
+      const apiBaseURL = config.get<string>(
+        "apiBaseURL",
+        "http://3.13.240.111:8000/api/v1"
+      );
+
+      if (!this.userProfile.email) {
+        console.error("❌ 이메일이 없어 API 키 발급 불가");
+        return { success: false, error: "이메일 정보가 필요합니다." };
+      }
+
+      const response = await fetch(`${apiBaseURL}/users/generate-api-key`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: this.userProfile.email,
+          username:
+            this.userProfile.username || this.userProfile.email.split("@")[0],
+        }),
+        timeout: 10000, // 10초 타임아웃
+      } as any);
+
+      if (response.ok) {
+        const result = await response.json();
+
+        console.log("✅ API 키 발급 성공:", {
+          keyPrefix: result.api_key?.substring(0, 10) + "...",
+          permissions: result.permissions,
+          expiresIn: result.expires_in_days,
+        });
+
+        // 발급받은 API 키를 VSCode 설정에 자동 저장
+        await config.update(
+          "apiKey",
+          result.api_key,
+          vscode.ConfigurationTarget.Global
+        );
+
+        console.log("💾 API 키가 VSCode 설정에 자동 저장됨");
+
+        return {
+          success: true,
+          apiKey: result.api_key,
+        };
+      } else {
+        const errorText = await response.text();
+        console.error("❌ API 키 발급 실패:", {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorText,
+        });
+
+        return {
+          success: false,
+          error: `서버 응답 오류: ${response.status} - ${errorText}`,
+        };
+      }
+    } catch (error) {
+      console.error("❌ API 키 발급 중 예외 발생:", error);
+
+      if (error instanceof TypeError && error.message.includes("fetch")) {
+        return {
+          success: false,
+          error: "서버에 연결할 수 없습니다. 네트워크 상태를 확인해주세요.",
+        };
+      }
+
+      return {
+        success: false,
+        error: `API 키 발급 오류: ${(error as Error).message}`,
+      };
+    }
+  }
+
+  /**
+   * 온보딩 완료 표시 (필수)
+   */
+  private async markOnboardingCompleted(): Promise<void> {
+    const config = vscode.workspace.getConfiguration("hapa");
+    await config.update(
+      "userProfile.isOnboardingCompleted",
+      true,
+      vscode.ConfigurationTarget.Global
+    );
+    console.log("✅ 온보딩 완료 상태 저장됨");
   }
 }

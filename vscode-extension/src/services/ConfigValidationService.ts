@@ -1,5 +1,13 @@
 import * as vscode from "vscode";
 import { EnhancedErrorService, ErrorSeverity } from "./EnhancedErrorService";
+import { ConfigService } from "./ConfigService";
+import {
+  ConfigValidationResult,
+  ConfigDiagnostics,
+  ConfigValidationError,
+  DiagnosticIssue,
+  DiagnosticRecommendation,
+} from "../types/index";
 
 export interface ValidationRule {
   key: string;
@@ -65,7 +73,7 @@ export class ConfigValidationService {
       type: "string",
       required: true,
       validator: (value) => {
-        if (!value) return "API URL은 필수입니다";
+        if (!value) {return "API URL은 필수입니다";}
         try {
           new URL(value);
           return true;
@@ -86,9 +94,9 @@ export class ConfigValidationService {
       min: 5000,
       max: 300000,
       validator: (value) => {
-        if (typeof value !== "number") return true; // 선택사항
-        if (value < 5000) return "최소 타임아웃은 5초입니다";
-        if (value > 300000) return "최대 타임아웃은 5분입니다";
+        if (typeof value !== "number") {return true;} // 선택사항
+        if (value < 5000) {return "최소 타임아웃은 5초입니다";}
+        if (value > 300000) {return "최대 타임아웃은 5분입니다";}
         return true;
       },
     },
@@ -99,9 +107,9 @@ export class ConfigValidationService {
       min: 100,
       max: 8000,
       validator: (value) => {
-        if (typeof value !== "number") return true;
-        if (value < 100) return "최소 토큰 수는 100개입니다";
-        if (value > 8000) return "최대 토큰 수는 8000개입니다";
+        if (typeof value !== "number") {return true;}
+        if (value < 100) {return "최소 토큰 수는 100개입니다";}
+        if (value > 8000) {return "최대 토큰 수는 8000개입니다";}
         return true;
       },
     },
@@ -112,8 +120,8 @@ export class ConfigValidationService {
       min: 0,
       max: 2,
       validator: (value) => {
-        if (typeof value !== "number") return true;
-        if (value < 0 || value > 2) return "온도 값은 0과 2 사이여야 합니다";
+        if (typeof value !== "number") {return true;}
+        if (value < 0 || value > 2) {return "온도 값은 0과 2 사이여야 합니다";}
         return true;
       },
     },
@@ -128,7 +136,7 @@ export class ConfigValidationService {
       required: false,
       enum: ["ko", "en", "ja", "zh", "auto"],
       validator: (value) => {
-        if (!value) return true;
+        if (!value) {return true;}
         const supportedLangs = ["ko", "en", "ja", "zh", "auto"];
         if (!supportedLangs.includes(value)) {
           return `지원되는 언어: ${supportedLangs.join(", ")}`;
@@ -142,7 +150,7 @@ export class ConfigValidationService {
       required: false,
       enum: ["auto", "light", "dark", "high-contrast"],
       validator: (value) => {
-        if (!value) return true;
+        if (!value) {return true;}
         const supportedThemes = ["auto", "light", "dark", "high-contrast"];
         if (!supportedThemes.includes(value)) {
           return `지원되는 테마: ${supportedThemes.join(", ")}`;
@@ -157,9 +165,9 @@ export class ConfigValidationService {
       min: 300000, // 5분
       max: 86400000, // 24시간
       validator: (value) => {
-        if (typeof value !== "number") return true;
-        if (value < 300000) return "최소 캐시 지속시간은 5분입니다";
-        if (value > 86400000) return "최대 캐시 지속시간은 24시간입니다";
+        if (typeof value !== "number") {return true;}
+        if (value < 300000) {return "최소 캐시 지속시간은 5분입니다";}
+        if (value > 86400000) {return "최대 캐시 지속시간은 24시간입니다";}
         return true;
       },
     },
@@ -168,9 +176,9 @@ export class ConfigValidationService {
       type: "string",
       required: false,
       validator: (value) => {
-        if (!value) return true;
-        if (value.length < 2) return "이름은 최소 2자 이상이어야 합니다";
-        if (value.length > 50) return "이름은 최대 50자까지 가능합니다";
+        if (!value) {return true;}
+        if (value.length < 2) {return "이름은 최소 2자 이상이어야 합니다";}
+        if (value.length > 50) {return "이름은 최대 50자까지 가능합니다";}
         return true;
       },
     },
@@ -180,7 +188,7 @@ export class ConfigValidationService {
       required: false,
       enum: ["beginner", "intermediate", "advanced", "expert"],
       validator: (value) => {
-        if (!value) return true;
+        if (!value) {return true;}
         const levels = ["beginner", "intermediate", "advanced", "expert"];
         if (!levels.includes(value)) {
           return `경험 수준: ${levels.join(", ")}`;
@@ -193,7 +201,7 @@ export class ConfigValidationService {
       type: "array",
       required: false,
       validator: (value) => {
-        if (!Array.isArray(value)) return true;
+        if (!Array.isArray(value)) {return true;}
         const supportedLangs = [
           "python",
           "javascript",
@@ -732,4 +740,573 @@ export class ConfigValidationService {
     this.configChangeListeners.clear();
     this.lastValidationResult.clear();
   }
+
+  /**
+   * 실시간 설정 검증 수행
+   * 설정이 변경될 때마다 자동으로 호출됨
+   */
+  async validateConfigInRealTime(): Promise<ConfigValidationResult> {
+    try {
+      const config = vscode.workspace.getConfiguration("hapa");
+      const result: ConfigValidationResult = {
+        isValid: true,
+        errors: [],
+        warnings: [],
+        suggestions: [],
+        autoFixAvailable: false,
+      };
+
+      // 1. API 키 실시간 검증
+      const apiKey = config.get<string>("apiKey");
+      if (!apiKey) {
+        result.errors.push({
+          field: "apiKey",
+          message: "API 키가 설정되지 않았습니다",
+          suggestion: "API 키를 설정하여 HAPA AI 기능을 활성화하세요",
+          autoFix: true,
+        });
+        result.autoFixAvailable = true;
+      } else if (apiKey.length < 20) {
+        result.warnings.push({
+          field: "apiKey",
+          message: "API 키가 너무 짧습니다",
+          suggestion: "올바른 HAPA API 키를 입력하세요 (최소 20자)",
+          autoFix: false,
+        });
+      }
+
+      // 2. API URL 실시간 검증
+      const apiUrl = config.get<string>("apiBaseUrl");
+      if (apiUrl) {
+        try {
+          const url = new URL(apiUrl);
+          if (!["http:", "https:"].includes(url.protocol)) {
+            result.errors.push({
+              field: "apiBaseUrl",
+              message: "올바르지 않은 프로토콜입니다",
+              suggestion: "http:// 또는 https://로 시작하는 URL을 입력하세요",
+              autoFix: true,
+            });
+            result.autoFixAvailable = true;
+          }
+        } catch {
+          result.errors.push({
+            field: "apiBaseUrl",
+            message: "올바르지 않은 URL 형식입니다",
+            suggestion:
+              "올바른 URL 형식으로 입력하세요 (예: http://3.13.240.111:8000)",
+            autoFix: true,
+          });
+          result.autoFixAvailable = true;
+        }
+      }
+
+      // 3. 타임아웃 설정 검증
+      const timeout = config.get<number>("timeout");
+      if (timeout && (timeout < 5000 || timeout > 300000)) {
+        result.warnings.push({
+          field: "timeout",
+          message: "타임아웃 값이 권장 범위를 벗어났습니다",
+          suggestion: "5초-300초 사이의 값을 권장합니다",
+          autoFix: true,
+        });
+        result.autoFixAvailable = true;
+      }
+
+      // 4. 인라인 제안 설정 검증
+      const inlineSuggestions = config.get<boolean>("enableInlineSuggestions");
+      const triggerMode = config.get<string>("triggerMode");
+      if (inlineSuggestions && triggerMode === "manual") {
+        result.suggestions.push({
+          field: "enableInlineSuggestions",
+          message: "인라인 제안이 활성화되었지만 수동 트리거 모드입니다",
+          suggestion: "자동 트리거 모드로 변경하여 더 나은 경험을 얻으세요",
+          autoFix: true,
+        });
+        result.autoFixAvailable = true;
+      }
+
+      result.isValid = result.errors.length === 0;
+
+      // 실시간 상태바 업데이트
+      this.updateStatusBarWithValidation(result);
+
+      return result;
+    } catch (error) {
+      console.error("실시간 설정 검증 실패:", error);
+      return {
+        isValid: false,
+        errors: [
+          {
+            field: "general",
+            message: "설정 검증 중 오류가 발생했습니다",
+            suggestion: "",
+            autoFix: false,
+          },
+        ],
+        warnings: [],
+        suggestions: [],
+        autoFixAvailable: false,
+      };
+    }
+  }
+
+  /**
+   * 자동 수정 제안 적용
+   */
+  async applyAutoFixes(): Promise<boolean> {
+    try {
+      const config = vscode.workspace.getConfiguration("hapa");
+      let fixesApplied = 0;
+
+      // API 키 자동 설정
+      const apiKey = config.get<string>("apiKey");
+      if (!apiKey) {
+        const demoKey = "hapa_demo_20241228_secure_key_for_testing";
+        await config.update(
+          "apiKey",
+          demoKey,
+          vscode.ConfigurationTarget.Global
+        );
+        fixesApplied++;
+        vscode.window.showInformationMessage(
+          "✅ 데모 API 키가 자동으로 설정되었습니다"
+        );
+      }
+
+      // API URL 자동 수정
+      const apiUrl = config.get<string>("apiBaseUrl");
+      if (apiUrl) {
+        try {
+          const url = new URL(apiUrl);
+          if (!["http:", "https:"].includes(url.protocol)) {
+            const fixedUrl = `http://${apiUrl}`;
+            await config.update(
+              "apiBaseUrl",
+              fixedUrl,
+              vscode.ConfigurationTarget.Global
+            );
+            fixesApplied++;
+            vscode.window.showInformationMessage(
+              `✅ API URL이 자동으로 수정되었습니다: ${fixedUrl}`
+            );
+          }
+        } catch {
+          const defaultUrl = "http://3.13.240.111:8000";
+          await config.update(
+            "apiBaseUrl",
+            defaultUrl,
+            vscode.ConfigurationTarget.Global
+          );
+          fixesApplied++;
+          vscode.window.showInformationMessage(
+            `✅ API URL이 기본값으로 설정되었습니다: ${defaultUrl}`
+          );
+        }
+      } else {
+        const defaultUrl = "http://3.13.240.111:8000";
+        await config.update(
+          "apiBaseUrl",
+          defaultUrl,
+          vscode.ConfigurationTarget.Global
+        );
+        fixesApplied++;
+      }
+
+      // 타임아웃 자동 수정
+      const timeout = config.get<number>("timeout");
+      if (timeout && (timeout < 5000 || timeout > 300000)) {
+        const fixedTimeout = Math.max(5000, Math.min(30000, timeout));
+        await config.update(
+          "timeout",
+          fixedTimeout,
+          vscode.ConfigurationTarget.Global
+        );
+        fixesApplied++;
+        vscode.window.showInformationMessage(
+          `✅ 타임아웃이 자동으로 수정되었습니다: ${fixedTimeout}ms`
+        );
+      }
+
+      // 인라인 제안과 트리거 모드 최적화
+      const inlineSuggestions = config.get<boolean>("enableInlineSuggestions");
+      const triggerMode = config.get<string>("triggerMode");
+      if (inlineSuggestions && triggerMode === "manual") {
+        await config.update(
+          "triggerMode",
+          "auto",
+          vscode.ConfigurationTarget.Global
+        );
+        fixesApplied++;
+        vscode.window.showInformationMessage(
+          "✅ 트리거 모드가 자동으로 변경되었습니다"
+        );
+      }
+
+      if (fixesApplied > 0) {
+        vscode.window.showInformationMessage(
+          `🔧 총 ${fixesApplied}개 설정이 자동으로 수정되었습니다`
+        );
+        return true;
+      } else {
+        vscode.window.showInformationMessage(
+          "✅ 모든 설정이 이미 올바르게 구성되어 있습니다"
+        );
+        return false;
+      }
+    } catch (error) {
+      console.error("자동 수정 실패:", error);
+      vscode.window.showErrorMessage("자동 수정 중 오류가 발생했습니다");
+      return false;
+    }
+  }
+
+  /**
+   * 설정 진단 실행
+   */
+  async runConfigDiagnostics(): Promise<ConfigDiagnostics> {
+    try {
+      const config = vscode.workspace.getConfiguration("hapa");
+      const diagnostics: ConfigDiagnostics = {
+        timestamp: new Date(),
+        overallHealth: "good",
+        issues: [],
+        recommendations: [],
+        performanceMetrics: {},
+        compatibilityChecks: {},
+      };
+
+      // 1. API 연결 테스트
+      const apiUrl = config.get<string>(
+        "apiBaseUrl",
+        "http://3.13.240.111:8000"
+      );
+      try {
+        const startTime = Date.now();
+        const response = await fetch(`${apiUrl}/health`, {
+          method: "GET",
+          timeout: 5000,
+        } as any);
+        const responseTime = Date.now() - startTime;
+
+        diagnostics.performanceMetrics.apiResponseTime = responseTime;
+
+        if (response.ok) {
+          diagnostics.recommendations.push({
+            type: "info",
+            message: `API 서버 연결 성공 (응답시간: ${responseTime}ms)`,
+            action: "없음",
+          });
+        } else {
+          diagnostics.issues.push({
+            severity: "warning",
+            category: "connectivity",
+            message: `API 서버 응답 오류 (HTTP ${response.status})`,
+            solution: "API 서버 상태를 확인하세요",
+          });
+          diagnostics.overallHealth = "warning";
+        }
+      } catch (error) {
+        diagnostics.issues.push({
+          severity: "error",
+          category: "connectivity",
+          message: "API 서버에 연결할 수 없습니다",
+          solution: "API URL과 서버 상태를 확인하세요",
+        });
+        diagnostics.overallHealth = "error";
+      }
+
+      // 2. 설정 완성도 검사
+      const requiredSettings = ["apiKey", "apiBaseUrl", "timeout"];
+      const missingSettings = requiredSettings.filter(
+        (setting) => !config.get(setting)
+      );
+
+      if (missingSettings.length > 0) {
+        diagnostics.issues.push({
+          severity: "warning",
+          category: "configuration",
+          message: `필수 설정이 누락됨: ${missingSettings.join(", ")}`,
+          solution: "설정 패널에서 누락된 설정을 완료하세요",
+        });
+        if (diagnostics.overallHealth === "good") {
+          diagnostics.overallHealth = "warning";
+        }
+      }
+
+      // 3. 호환성 검사
+      const vscodeVersion = vscode.version;
+      diagnostics.compatibilityChecks.vscodeVersion = vscodeVersion;
+
+      // VSCode 최소 버전 체크 (1.60.0 이상)
+      const minVersion = "1.60.0";
+      if (this.compareVersions(vscodeVersion, minVersion) < 0) {
+        diagnostics.issues.push({
+          severity: "error",
+          category: "compatibility",
+          message: `VSCode 버전이 너무 낮습니다 (현재: ${vscodeVersion}, 최소: ${minVersion})`,
+          solution: "VSCode를 최신 버전으로 업데이트하세요",
+        });
+        diagnostics.overallHealth = "error";
+      }
+
+      // 4. 성능 최적화 권장사항
+      const inlineSuggestions = config.get<boolean>("enableInlineSuggestions");
+      const cacheEnabled = config.get<boolean>("enableCache", true);
+
+      if (inlineSuggestions && !cacheEnabled) {
+        diagnostics.recommendations.push({
+          type: "optimization",
+          message: "인라인 제안 사용 시 캐시 활성화를 권장합니다",
+          action: "캐시 설정을 활성화하세요",
+        });
+      }
+
+      return diagnostics;
+    } catch (error) {
+      console.error("설정 진단 실패:", error);
+      return {
+        timestamp: new Date(),
+        overallHealth: "error",
+        issues: [
+          {
+            severity: "error",
+            category: "system",
+            message: "설정 진단 중 오류가 발생했습니다",
+            solution: "확장 프로그램을 다시 시작하세요",
+          },
+        ],
+        recommendations: [],
+        performanceMetrics: {},
+        compatibilityChecks: {},
+      };
+    }
+  }
+
+  /**
+   * 설정 백업 생성
+   */
+  async backupCurrentConfig(): Promise<boolean> {
+    try {
+      const config = vscode.workspace.getConfiguration("hapa");
+      const backup = {
+        timestamp: new Date().toISOString(),
+        settings: {
+          apiKey: config.get<string>("apiKey"),
+          apiBaseUrl: config.get<string>("apiBaseUrl"),
+          timeout: config.get<number>("timeout"),
+          enableInlineSuggestions: config.get<boolean>(
+            "enableInlineSuggestions"
+          ),
+          triggerMode: config.get<string>("triggerMode"),
+          enableCache: config.get<boolean>("enableCache"),
+          logLevel: config.get<string>("logLevel"),
+        },
+      };
+
+      // 클립보드에 JSON으로 저장
+      await vscode.env.clipboard.writeText(JSON.stringify(backup, null, 2));
+
+      vscode.window
+        .showInformationMessage(
+          "✅ 설정이 클립보드에 백업되었습니다",
+          "백업 보기"
+        )
+        .then((action) => {
+          if (action === "백업 보기") {
+            vscode.workspace
+              .openTextDocument({
+                content: JSON.stringify(backup, null, 2),
+                language: "json",
+              })
+              .then((doc) => {
+                vscode.window.showTextDocument(doc);
+              });
+          }
+        });
+
+      return true;
+    } catch (error) {
+      console.error("설정 백업 실패:", error);
+      vscode.window.showErrorMessage("설정 백업에 실패했습니다");
+      return false;
+    }
+  }
+
+  /**
+   * 설정 복원
+   */
+  async restoreConfig(): Promise<boolean> {
+    try {
+      const backupJson = await vscode.window.showInputBox({
+        prompt: "백업된 설정 JSON을 붙여넣으세요",
+        placeHolder: '{"timestamp": "...", "settings": {...}}',
+        ignoreFocusOut: true,
+      });
+
+      if (!backupJson) {
+        return false;
+      }
+
+      const backup = JSON.parse(backupJson);
+      if (!backup.settings) {
+        vscode.window.showErrorMessage("올바르지 않은 백업 형식입니다");
+        return false;
+      }
+
+      const config = vscode.workspace.getConfiguration("hapa");
+
+      // 설정 복원
+      for (const [key, value] of Object.entries(backup.settings)) {
+        if (value !== undefined && value !== null) {
+          await config.update(key, value, vscode.ConfigurationTarget.Global);
+        }
+      }
+
+      const backupDate = backup.timestamp
+        ? new Date(backup.timestamp).toLocaleString()
+        : "알 수 없음";
+      vscode.window.showInformationMessage(
+        `✅ 설정이 복원되었습니다 (백업 시점: ${backupDate})`
+      );
+
+      return true;
+    } catch (error) {
+      console.error("설정 복원 실패:", error);
+      vscode.window.showErrorMessage(
+        "설정 복원에 실패했습니다: " + (error as Error).message
+      );
+      return false;
+    }
+  }
+
+  /**
+   * 실시간 설정 모니터링 시작
+   */
+  startConfigMonitoring(): vscode.Disposable {
+    return vscode.workspace.onDidChangeConfiguration(async (e) => {
+      if (e.affectsConfiguration("hapa")) {
+        // 0.5초 디바운스
+        clearTimeout(this.configChangeTimeout);
+        this.configChangeTimeout = setTimeout(async () => {
+          const result = await this.validateConfigInRealTime();
+
+          // 심각한 오류가 있으면 사용자에게 알림
+          if (result.errors.length > 0) {
+            const action = await vscode.window.showWarningMessage(
+              `HAPA 설정에 ${result.errors.length}개의 오류가 있습니다`,
+              "자동 수정",
+              "무시"
+            );
+
+            if (action === "자동 수정") {
+              await this.applyAutoFixes();
+            }
+          }
+        }, 500);
+      }
+    });
+  }
+
+  /**
+   * 상태바 업데이트
+   */
+  private updateStatusBarWithValidation(result: ConfigValidationResult): void {
+    if (!this.statusBarItem) {
+      this.statusBarItem = vscode.window.createStatusBarItem(
+        vscode.StatusBarAlignment.Right,
+        100
+      );
+    }
+
+    if (result.isValid) {
+      this.statusBarItem.text = "$(check) HAPA 정상";
+      this.statusBarItem.color = new vscode.ThemeColor(
+        "statusBarItem.foreground"
+      );
+      this.statusBarItem.backgroundColor = undefined;
+    } else if (result.errors.length > 0) {
+      this.statusBarItem.text = `$(error) HAPA 오류 ${result.errors.length}개`;
+      this.statusBarItem.color = new vscode.ThemeColor(
+        "statusBarItem.errorForeground"
+      );
+      this.statusBarItem.backgroundColor = new vscode.ThemeColor(
+        "statusBarItem.errorBackground"
+      );
+    } else if (result.warnings.length > 0) {
+      this.statusBarItem.text = `$(warning) HAPA 경고 ${result.warnings.length}개`;
+      this.statusBarItem.color = new vscode.ThemeColor(
+        "statusBarItem.warningForeground"
+      );
+      this.statusBarItem.backgroundColor = new vscode.ThemeColor(
+        "statusBarItem.warningBackground"
+      );
+    }
+
+    this.statusBarItem.command = "hapa.showSettings";
+    this.statusBarItem.tooltip = this.createTooltip(result);
+    this.statusBarItem.show();
+  }
+
+  /**
+   * 툴팁 생성
+   */
+  private createTooltip(result: ConfigValidationResult): string {
+    const lines = ["HAPA 설정 상태"];
+
+    if (result.errors.length > 0) {
+      lines.push("", "❌ 오류:");
+      result.errors.forEach((error) => {
+        lines.push(`  • ${error.message}`);
+      });
+    }
+
+    if (result.warnings.length > 0) {
+      lines.push("", "⚠️ 경고:");
+      result.warnings.forEach((warning) => {
+        lines.push(`  • ${warning.message}`);
+      });
+    }
+
+    if (result.suggestions.length > 0) {
+      lines.push("", "💡 제안:");
+      result.suggestions.forEach((suggestion) => {
+        lines.push(`  • ${suggestion.message}`);
+      });
+    }
+
+    if (result.autoFixAvailable) {
+      lines.push("", "🔧 자동 수정 가능 - 클릭하여 설정 열기");
+    }
+
+    return lines.join("\n");
+  }
+
+  /**
+   * 버전 비교 유틸리티
+   */
+  private compareVersions(a: string, b: string): number {
+    const aParts = a.split(".").map(Number);
+    const bParts = b.split(".").map(Number);
+
+    for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
+      const aPart = aParts[i] || 0;
+      const bPart = bParts[i] || 0;
+
+      if (aPart > bPart) {return 1;}
+      if (aPart < bPart) {return -1;}
+    }
+
+    return 0;
+  }
+
+  /**
+   * 설정 변경 타임아웃
+   */
+  private configChangeTimeout: NodeJS.Timeout | undefined;
+
+  /**
+   * 상태바 아이템
+   */
+  private statusBarItem: vscode.StatusBarItem | undefined;
 }

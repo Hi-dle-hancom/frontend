@@ -83,14 +83,30 @@ export interface APIConfig {
 }
 
 /**
- * 코드 생성 요청
+ * 코드 생성 요청 (Backend 스키마와 완전 일치)
  */
 export interface CodeGenerationRequest {
-  user_question: string;
-  code_context?: string;
-  language: string;
-  file_path?: string;
-  userProfile?: UserProfile;
+  // 핵심 요청 정보
+  prompt: string;
+  model_type?: string; // "code_generation", "code_completion", etc.
+  context?: string;
+
+  // vLLM 서버 전용 매개변수
+  temperature?: number;
+  top_p?: number;
+  max_tokens?: number;
+
+  // 사용자 선택 옵션
+  programming_level?: "beginner" | "intermediate" | "advanced" | "expert";
+  explanation_detail?: "minimal" | "standard" | "detailed" | "comprehensive";
+  code_style?: "clean" | "performance" | "readable" | "pythonic";
+  include_comments?: boolean;
+  include_docstring?: boolean;
+  include_type_hints?: boolean;
+
+  // 추가 메타데이터
+  language?: string;
+  project_context?: string;
 }
 
 /**
@@ -350,3 +366,40 @@ export type AsyncState<T> = {
   loading: boolean;
   error?: string;
 };
+
+export interface ConfigValidationResult {
+  isValid: boolean;
+  errors: ConfigValidationError[];
+  warnings: ConfigValidationError[];
+  suggestions: ConfigValidationError[];
+  autoFixAvailable: boolean;
+}
+
+export interface ConfigValidationError {
+  field: string;
+  message: string;
+  suggestion: string;
+  autoFix: boolean;
+}
+
+export interface ConfigDiagnostics {
+  timestamp: Date;
+  overallHealth: "good" | "warning" | "error";
+  issues: DiagnosticIssue[];
+  recommendations: DiagnosticRecommendation[];
+  performanceMetrics: Record<string, any>;
+  compatibilityChecks: Record<string, any>;
+}
+
+export interface DiagnosticIssue {
+  severity: "error" | "warning" | "info";
+  category: "connectivity" | "configuration" | "compatibility" | "system";
+  message: string;
+  solution: string;
+}
+
+export interface DiagnosticRecommendation {
+  type: "info" | "optimization" | "security";
+  message: string;
+  action: string;
+}

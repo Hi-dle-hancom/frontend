@@ -65,7 +65,6 @@ export class HAPACompletionProvider implements vscode.CompletionItemProvider {
         cursor_position: position.character,
         file_path: document.fileName,
         context: enableContextAnalysis ? completionContext.context : undefined,
-        trigger_character: context.triggerCharacter,
       });
 
       if (response.status === "success" && response.completions) {
@@ -369,7 +368,7 @@ export class HAPACompletionProvider implements vscode.CompletionItemProvider {
         language: "python",
       });
 
-      if (response.status === "success" && response.generated_code) {
+      if (response.success && response.generated_code) {
         return {
           code: response.generated_code,
           explanation: response.explanation,
@@ -467,7 +466,7 @@ export class HAPAInlineCompletionProvider
         // 현재 입력과 중복되지 않는 부분만 추출
         const insertText = this.extractInsertText(
           prefix,
-          completion.insertion_text || completion.code
+          (completion as any).insertion_text || completion.code
         );
 
         if (insertText.trim()) {
@@ -477,11 +476,11 @@ export class HAPAInlineCompletionProvider
           );
 
           // 추가 명령어 설정 (선택 시 실행)
-          if (completion.explanation) {
+          if ((completion as any).explanation) {
             item.command = {
               command: "hapa.showCompletionExplanation",
               title: "AI 추천 이유 보기",
-              arguments: [completion.explanation],
+              arguments: [(completion as any).explanation],
             };
           }
 

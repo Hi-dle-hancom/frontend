@@ -196,7 +196,7 @@ export class TelemetryService {
     properties: Record<string, any> = {},
     immediate: boolean = false
   ): void {
-    if (!this.isEnabled) return;
+    if (!this.isEnabled) {return;}
 
     try {
       const event: TelemetryEvent = {
@@ -244,7 +244,7 @@ export class TelemetryService {
     success: boolean,
     metadata: Record<string, any> = {}
   ): void {
-    if (!this.isEnabled) return;
+    if (!this.isEnabled) {return;}
 
     this.trackEvent("feature_usage", {
       feature: featureName,
@@ -284,7 +284,7 @@ export class TelemetryService {
     severity: string,
     context: Record<string, any> = {}
   ): void {
-    if (!this.isEnabled) return;
+    if (!this.isEnabled) {return;}
 
     const errorType = error.constructor.name;
 
@@ -310,7 +310,7 @@ export class TelemetryService {
     memoryUsed: number,
     metadata: Record<string, any> = {}
   ): void {
-    if (!this.isEnabled) return;
+    if (!this.isEnabled) {return;}
 
     this.trackEvent("performance_metric", {
       operation: operationName,
@@ -328,7 +328,7 @@ export class TelemetryService {
    * 사용자 설정 변경 추적
    */
   trackConfigChange(configKey: string, oldValue: any, newValue: any): void {
-    if (!this.isEnabled) return;
+    if (!this.isEnabled) {return;}
 
     this.trackEvent("config_changed", {
       configKey,
@@ -342,7 +342,7 @@ export class TelemetryService {
    * 세션 시작 추적
    */
   startSession(): void {
-    if (!this.isEnabled) return;
+    if (!this.isEnabled) {return;}
 
     this.currentSessionId = this.generateSessionId();
     this.sessionStartTime = new Date();
@@ -359,7 +359,7 @@ export class TelemetryService {
    * 세션 종료 추적
    */
   endSession(): void {
-    if (!this.isEnabled) return;
+    if (!this.isEnabled) {return;}
 
     const sessionDuration = Date.now() - this.sessionStartTime.getTime();
 
@@ -586,7 +586,7 @@ ${this.generateImprovementSuggestions()}
   }
 
   private processBatch(): void {
-    if (this.eventQueue.length === 0) return;
+    if (this.eventQueue.length === 0) {return;}
 
     try {
       // 실제 서버 전송은 구현하지 않음 (로컬 저장만)

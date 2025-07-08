@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import { PromptExtractor, ExtractedPrompt } from "./promptExtractor";
 
 export interface TriggerEvent {
-  type: "command" | "selection" | "manual" | "contextMenu";
+  type: "command" | "selection" | "manual" | "contextMenu" | "comment";
   action: "analyze" | "generate" | "test" | "explain" | "custom";
   data: ExtractedPrompt;
   timestamp: Date;

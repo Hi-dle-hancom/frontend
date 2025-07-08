@@ -1,882 +1,957 @@
-import axios, { AxiosInstance, AxiosError } from "axios";
+/**
+ * HAPA API Client - vLLM 멀티 LoRA 서버 통합
+ * - 실시간 스트리밍 코드 생성
+ * - Enhanced AI 백엔드 지원
+ * - 자동 페일오버 및 재시도
+ */
+
+import axios, { AxiosResponse, AxiosError } from "axios";
 import * as vscode from "vscode";
 
-/**
- * HAPA API 설정
- */
-interface APIConfig {
-  baseURL: string;
-  timeout: number;
-  apiKey?: string;
+// 타입 import
+export { StreamingCallbacks } from "../types/index";
+
+// API 설정
+const API_BASE_URL = "http://3.13.240.111:8000/api/v1";
+const VLLM_API_TIMEOUT = 300000; // 5분
+
+// 에러 타입 정의
+interface APIError {
+  message: string;
+  status?: number;
+  code?: string;
 }
 
-/**
- * API 응답 타입 정의
- */
-interface CodeGenerationRequest {
-  user_question: string;
-  code_context?: string;
-  language?: string;
-  file_path?: string;
+// vLLM 모델 타입 정의 (Backend와 일치하는 소문자 enum)
+export enum VLLMModelType {
+  CODE_COMPLETION = "code_completion", // 자동완성 → vLLM autocomplete
+  CODE_GENERATION = "code_generation", // 일반 생성 → vLLM prompt
+  CODE_EXPLANATION = "code_explanation", // 설명/주석 → vLLM comment
+  CODE_REVIEW = "code_review", // 리뷰 → vLLM comment
+  BUG_FIX = "bug_fix", // 버그 수정 → vLLM error_fix
+  CODE_OPTIMIZATION = "code_optimization", // 최적화 → vLLM prompt
+  UNIT_TEST_GENERATION = "unit_test_generation", // 테스트 → vLLM prompt
+  DOCUMENTATION = "documentation", // 문서화 → vLLM comment
 }
 
-interface CodeGenerationResponse {
+// 코드 생성 요청 인터페이스 (Backend 스키마와 완전 일치)
+export interface CodeGenerationRequest {
+  // 핵심 요청 정보
+  prompt: string; // 1-4000자
+  model_type?: VLLMModelType; // 기본값: code_generation
+  context?: string; // 기본값: "", 최대 8000자
+
+  // vLLM 서버 전용 매개변수
+  temperature?: number; // 기본값: 0.3, 0.0-2.0
+  top_p?: number; // 기본값: 0.95, 0.0-1.0
+  max_tokens?: number; // 기본값: 1024, 1-4096
+
+  // 사용자 선택 옵션
+  programming_level?: "beginner" | "intermediate" | "advanced" | "expert";
+  explanation_detail?: "minimal" | "standard" | "detailed" | "comprehensive";
+  code_style?: "clean" | "performance" | "readable" | "pythonic";
+  include_comments?: boolean; // 기본값: true
+  include_docstring?: boolean; // 기본값: true
+  include_type_hints?: boolean; // 기본값: true
+
+  // 추가 메타데이터
+  language?: string; // 기본값: "python"
+  project_context?: string; // 기본값: "", 최대 500자
+}
+
+// 코드 생성 응답 인터페이스
+export interface CodeGenerationResponse {
+  success: boolean;
   generated_code: string;
   explanation?: string;
-  status: "success" | "error";
+  model_used: string;
+  processing_time: number;
+  token_usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+  };
   error_message?: string;
 }
 
-interface CompletionRequest {
-  prefix: string;
-  language?: string;
-  cursor_position?: number;
-  file_path?: string;
-  context?: string;
-  trigger_character?: string;
-}
-
-interface CompletionResponse {
-  completions: EnhancedCompletion[];
-  status: "success" | "error";
-  error_message?: string;
-  context_analysis?: string;
-  total_suggestions?: number;
-}
-
-interface EnhancedCompletion {
-  code: string;
-  label: string;
-  description: string;
-  explanation: string;
-  confidence: number;
-  category:
-    | "function"
-    | "class"
-    | "variable"
-    | "import"
-    | "method"
-    | "property"
-    | "keyword";
-  expected_result?: string;
-  performance_impact?: "low" | "medium" | "high";
-  complexity: "simple" | "moderate" | "complex";
-  related_concepts?: string[];
-  documentation_url?: string;
-  examples?: string[];
-  insertion_text: string;
-  detail?: string;
-}
-
-interface ErrorResponse {
-  status: string;
-  error_message: string;
-  error_code?: string;
-  error_details?: Record<string, any>;
-}
-
-// 스트리밍 응답을 위한 인터페이스
-interface StreamingChunk {
+// 스트리밍 청크 인터페이스 - types/index.ts와 통합
+export interface StreamingChunk {
   type: "start" | "token" | "code" | "explanation" | "done" | "error";
   content: string;
   sequence: number;
   timestamp: string;
+  is_complete?: boolean; // 하위 호환성을 위해 optional로 유지
 }
 
-interface StreamingCallbacks {
-  onChunk?: (chunk: StreamingChunk) => void;
-  onStart?: () => void;
-  onComplete?: (fullContent: string) => void;
-  onError?: (error: Error) => void;
+// vLLM 서버 상태 인터페이스
+export interface VLLMHealthStatus {
+  status: "healthy" | "unhealthy" | "error";
+  details?: any;
+  error?: string;
 }
 
-/**
- * HAPA API 클라이언트 클래스
- */
-class HAPAAPIClient {
-  private client: AxiosInstance;
+// Enhanced AI 백엔드 상태 인터페이스
+export interface BackendStatus {
+  current_backend: string;
+  backends: {
+    vllm: {
+      available: boolean;
+      last_check?: string;
+    };
+    legacy: {
+      available: boolean;
+      last_check?: string;
+    };
+  };
+  last_health_check: string;
+}
+
+export class HAPAAPIClient {
+  private apiKey: string;
   private baseURL: string;
-  private config: APIConfig;
 
-  constructor() {
-    // 설정 로드
-    this.config = this.loadConfig();
-    this.baseURL = this.config.baseURL;
+  constructor(apiKey: string = "") {
+    this.apiKey = apiKey;
+    this.baseURL = API_BASE_URL;
 
-    // Axios 인스턴스 생성
-    this.client = axios.create({
-      baseURL: this.config.baseURL,
-      timeout: this.config.timeout,
-      headers: {
-        "Content-Type": "application/json",
-        "User-Agent": "HAPA-VSCode-Extension/0.4.0",
-      },
-    });
+    // Axios 기본 설정 (Authorization 헤더 제거, X-API-Key만 사용)
+    axios.defaults.timeout = VLLM_API_TIMEOUT;
+    axios.defaults.headers.common["Content-Type"] = "application/json";
 
-    // 요청 인터셉터
-    this.client.interceptors.request.use(
-      (config) => {
-        // API Key 추가
-        if (this.config.apiKey) {
-          config.headers["X-API-Key"] = this.config.apiKey;
-        }
-        return config;
-      },
-      (error) => {
-        return Promise.reject(error);
-      }
-    );
-
-    // 응답 인터셉터
-    this.client.interceptors.response.use(
-      (response) => response,
-      (error: AxiosError) => {
-        const errorMessage = this.handleAPIError(error);
-        return Promise.reject(new Error(errorMessage));
-      }
-    );
-  }
-
-  /**
-   * 설정 로드
-   */
-  private loadConfig(): APIConfig {
-    const config = vscode.workspace.getConfiguration("hapa");
-
-    return {
-      baseURL: config.get("apiBaseURL", "http://localhost:8000/api/v1"),
-      timeout: config.get("apiTimeout", 30000),
-      apiKey: config.get("apiKey", "hapa_demo_20241228_secure_key_for_testing"),
-    };
-  }
-
-  /**
-   * API 오류 처리
-   */
-  private handleAPIError(error: AxiosError): string {
-    if (error.response) {
-      const data = error.response.data as ErrorResponse;
-
-      switch (error.response.status) {
-        case 401:
-          return "API 인증에 실패했습니다. API Key를 확인해주세요.";
-        case 403:
-          return "API 권한이 부족합니다.";
-        case 429:
-          return "API 요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요.";
-        case 422:
-          return `요청 데이터가 올바르지 않습니다: ${data.error_message}`;
-        case 500:
-          return "서버 내부 오류가 발생했습니다.";
-        default:
-          return (
-            data.error_message ||
-            `API 오류가 발생했습니다 (${error.response.status})`
-          );
-      }
-    } else if (error.request) {
-      return "API 서버에 연결할 수 없습니다. 네트워크 연결을 확인해주세요.";
-    } else {
-      return `요청 처리 중 오류가 발생했습니다: ${error.message}`;
+    // X-API-Key 헤더만 설정 (Authorization Bearer 제거)
+    if (this.apiKey) {
+      axios.defaults.headers.common["X-API-Key"] = this.apiKey;
     }
   }
 
   /**
-   * 서버 상태 확인
+   * vLLM 서버 상태 확인
    */
-  async checkHealth(): Promise<boolean> {
+  async checkVLLMHealth(): Promise<VLLMHealthStatus> {
     try {
-      const response = await this.client.get("/health");
-      return response.status === 200;
+      const response = await axios.get(`${this.baseURL}/code/health`);
+      return response.data;
     } catch (error) {
-      console.error("Health check failed:", error);
-      return false;
+      console.error("vLLM 상태 확인 실패:", error);
+      return {
+        status: "error",
+        error: this.handleError(error).message,
+      };
     }
   }
 
   /**
-   * 사용자 프로필 정보 가져오기
+   * Enhanced AI 백엔드 상태 확인
    */
-  private getUserProfile() {
-    const config = vscode.workspace.getConfiguration("hapa");
-    return {
-      pythonSkillLevel: config.get(
-        "userProfile.pythonSkillLevel",
-        "intermediate"
-      ),
-      codeOutputStructure: config.get(
-        "userProfile.codeOutputStructure",
-        "standard"
-      ),
-      explanationStyle: config.get("userProfile.explanationStyle", "standard"),
-      projectContext: config.get(
-        "userProfile.projectContext",
-        "general_purpose"
-      ),
-      errorHandlingPreference: config.get(
-        "userProfile.errorHandlingPreference",
-        "basic"
-      ),
-      preferredLanguageFeatures: config.get(
-        "userProfile.preferredLanguageFeatures",
-        ["type_hints", "f_strings"]
-      ),
-    };
+  async getBackendStatus(): Promise<BackendStatus | null> {
+    try {
+      const response = await axios.get(`${this.baseURL}/code/backend/status`);
+      return response.data;
+    } catch (error) {
+      console.error("백엔드 상태 조회 실패:", error);
+      return null;
+    }
   }
 
   /**
-   * 코드 생성 요청
+   * 사용 가능한 모델 목록 조회
+   */
+  async getAvailableModels(): Promise<string[]> {
+    try {
+      const response = await axios.get(`${this.baseURL}/code/models`);
+      return response.data.available_models || [];
+    } catch (error) {
+      console.error("모델 목록 조회 실패:", error);
+      return [];
+    }
+  }
+
+  /**
+   * 실시간 스트리밍 코드 생성
+   */
+  async generateCodeStream(
+    request: CodeGenerationRequest,
+    onChunk: (chunk: StreamingChunk) => void,
+    onComplete?: () => void,
+    onError?: (error: APIError) => void
+  ): Promise<void> {
+    try {
+      // API 키 확인 및 업데이트
+      const config = vscode.workspace.getConfiguration("hapa");
+      const currentApiKey = config.get<string>(
+        "apiKey",
+        "hapa_demo_20241228_secure_key_for_testing"
+      );
+
+      if (currentApiKey && currentApiKey !== this.apiKey) {
+        this.updateConfig(currentApiKey);
+      }
+
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
+      };
+
+      // X-API-Key 헤더만 추가
+      if (this.apiKey) {
+        headers["X-API-Key"] = this.apiKey;
+      }
+
+      console.log("🔑 API 요청 헤더:", {
+        hasApiKey: !!this.apiKey,
+        keyPrefix: this.apiKey ? this.apiKey.substring(0, 10) + "..." : "없음",
+        url: `${this.baseURL}/code/generate/stream`,
+      });
+
+      const response = await fetch(`${this.baseURL}/code/generate/stream`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(request),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error("스트리밍 응답을 읽을 수 없습니다");
+      }
+
+      let accumulated_content = "";
+      const decoder = new TextDecoder();
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+
+          if (done) {
+            break;
+          }
+
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split("\n");
+
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              const data = line.slice(6).trim();
+
+              if (data === "[DONE]") {
+                // 스트리밍 완료
+                onChunk({
+                  type: "done",
+                  content: accumulated_content,
+                  sequence: Date.now(),
+                  timestamp: new Date().toISOString(),
+                  is_complete: true,
+                });
+                onComplete?.();
+                return;
+              }
+
+              if (data) {
+                // JSON 형태의 응답인지 확인하고 파싱 시도
+                let contentToAdd = data;
+                try {
+                  // JSON 형태인지 확인 ({"text": "실제코드"} 구조)
+                  if (typeof data === "string" && data.trim().startsWith("{")) {
+                    const parsedData = JSON.parse(data);
+                    if (parsedData.text) {
+                      contentToAdd = parsedData.text;
+                      console.log(
+                        "✅ 스트리밍 데이터에서 JSON text 필드 추출 성공"
+                      );
+                    } else if (typeof parsedData === "string") {
+                      contentToAdd = parsedData;
+                    }
+                  }
+                } catch (parseError) {
+                  console.log(
+                    "ℹ️ 스트리밍 JSON 파싱 불가, 원본 사용:",
+                    parseError
+                  );
+                  // JSON 파싱에 실패하면 원본 그대로 사용
+                }
+
+                accumulated_content += contentToAdd;
+                onChunk({
+                  type: "token",
+                  content: contentToAdd,
+                  sequence: Date.now(),
+                  timestamp: new Date().toISOString(),
+                  is_complete: false,
+                });
+              }
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    } catch (error) {
+      console.error("스트리밍 코드 생성 실패:", error);
+      const apiError = this.handleError(error);
+      onError?.(apiError);
+    }
+  }
+
+  /**
+   * 동기식 코드 생성 (스트리밍 없음)
    */
   async generateCode(
     request: CodeGenerationRequest
   ): Promise<CodeGenerationResponse> {
     try {
-      // 사용자 프로필 정보 추가
-      const userProfile = this.getUserProfile();
-      const enhancedRequest = {
-        ...request,
-        userProfile: userProfile,
-      };
-
-      const response = await this.client.post<CodeGenerationResponse>(
-        "/code/generate",
-        enhancedRequest
+      // VSCode 설정에서 최신 API 키 가져오기
+      const vscode = (await import("vscode")).default;
+      const config = vscode.workspace.getConfiguration("hapa");
+      const currentApiKey = config.get<string>(
+        "apiKey",
+        "hapa_demo_20241228_secure_key_for_testing"
       );
-      return response.data;
-    } catch (error) {
-      // 오류 상황에서도 일관된 응답 형식 반환
-      let errorMessage = "알 수 없는 오류가 발생했습니다.";
 
-      if (error instanceof Error) {
-        // 네트워크 오류
-        if (
-          error.message.includes("ECONNREFUSED") ||
-          error.message.includes("Network Error")
-        ) {
-          errorMessage =
-            "🔗 API 서버에 연결할 수 없습니다.\n설정에서 API 서버 주소를 확인해주세요.\n\n현재 설정: " +
-            this.baseURL;
-        }
-        // 타임아웃 오류
-        else if (error.message.includes("timeout")) {
-          errorMessage =
-            "⏱️ 요청 시간이 초과되었습니다.\n잠시 후 다시 시도하거나 더 간단한 질문을 해보세요.";
-        }
-        // 인증 오류
-        else if (
-          error.message.includes("401") ||
-          error.message.includes("Unauthorized")
-        ) {
-          errorMessage =
-            "🔐 API 인증에 실패했습니다.\n설정에서 API 키를 확인해주세요.";
-        }
-        // 서버 오류
-        else if (
-          error.message.includes("500") ||
-          error.message.includes("Internal Server Error")
-        ) {
-          errorMessage =
-            "🛠️ 서버에 일시적인 문제가 발생했습니다.\n잠시 후 다시 시도해주세요.";
-        }
-        // 요청 형식 오류
-        else if (
-          error.message.includes("400") ||
-          error.message.includes("Bad Request")
-        ) {
-          errorMessage =
-            "📝 요청 형식에 문제가 있습니다.\n질문을 다시 작성해보세요.";
-        }
-        // 기타 오류
-        else {
-          errorMessage = `❌ 오류 발생: ${error.message}\n\n문제가 지속되면 확장 프로그램을 재시작해보세요.`;
-        }
+      if (currentApiKey && currentApiKey !== this.apiKey) {
+        this.updateConfig(currentApiKey);
       }
 
-      return {
-        generated_code: "",
-        status: "error",
-        error_message: errorMessage,
+      // 🔍 요청 헤더 설정 (X-API-Key만 사용)
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
       };
-    }
-  }
 
-  /**
-   * 코드 자동완성 요청
-   */
-  async completeCode(request: CompletionRequest): Promise<CompletionResponse> {
-    try {
-      const response = await this.client.post<CompletionResponse>(
-        "/code/complete",
-        request
+      // X-API-Key 헤더만 추가
+      if (this.apiKey) {
+        headers["X-API-Key"] = this.apiKey;
+      }
+
+      // 🔍 요청 데이터 상세 로깅 (422 오류 디버깅용)
+      console.log("🚀 동기식 코드 생성 요청 - 상세 디버깅:", {
+        url: `${this.baseURL}/code/generate`,
+        headers: {
+          "Content-Type": headers["Content-Type"],
+          "X-API-Key": headers["X-API-Key"]
+            ? headers["X-API-Key"].substring(0, 20) + "..."
+            : "없음",
+        },
+        request_data: {
+          prompt: request.prompt,
+          prompt_length: request.prompt?.length || 0,
+          model_type: request.model_type,
+          context: request.context,
+          temperature: request.temperature,
+          top_p: request.top_p,
+          max_tokens: request.max_tokens,
+          programming_level: request.programming_level,
+          explanation_detail: request.explanation_detail,
+          code_style: request.code_style,
+          include_comments: request.include_comments,
+          include_docstring: request.include_docstring,
+          include_type_hints: request.include_type_hints,
+          language: request.language,
+          project_context: request.project_context,
+        },
+      });
+
+      const response = await axios.post(
+        `${this.baseURL}/code/generate`,
+        request,
+        { headers }
       );
-      return response.data;
-    } catch (error) {
-      return {
-        completions: [],
-        status: "error",
-        error_message:
-          error instanceof Error
-            ? error.message
-            : "알 수 없는 오류가 발생했습니다.",
-      };
-    }
-  }
 
-  /**
-   * 피드백 제출
-   */
-  async submitFeedback(feedback: {
-    type: "positive" | "negative";
-    comment?: string;
-    code_snippet?: string;
-    user_question?: string;
-  }): Promise<{ success: boolean; message?: string }> {
-    try {
-      const response = await this.client.post("/feedback/submit", feedback);
-      return { success: true, message: "피드백이 성공적으로 제출되었습니다." };
-    } catch (error) {
-      let errorMessage = "피드백 제출에 실패했습니다.";
+      console.log("📡 API 응답 상태:", {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+        data_type: typeof response.data,
+        response_data: response.data,
+      });
 
-      if (error instanceof Error) {
-        if (
-          error.message.includes("ECONNREFUSED") ||
-          error.message.includes("Network Error")
-        ) {
-          errorMessage =
-            "🔗 서버에 연결할 수 없어 피드백을 전송하지 못했습니다.";
-        } else if (error.message.includes("timeout")) {
-          errorMessage =
-            "⏱️ 피드백 전송 시간이 초과되었습니다. 다시 시도해주세요.";
-        } else {
-          errorMessage = `❌ 피드백 전송 오류: ${error.message}`;
+      if (response.status === 200) {
+        console.log("✅ 코드 생성 성공:", {
+          success: response.data.success,
+          code_length: response.data.generated_code?.length || 0,
+        });
+        return response.data;
+      } else {
+        console.error("❌ API 오류 응답 - 상세 정보:", {
+          status: response.status,
+          statusText: response.statusText,
+          data: response.data,
+          url: `${this.baseURL}/code/generate`,
+          sent_request: JSON.stringify(request, null, 2),
+        });
+
+        return {
+          success: false,
+          generated_code: "",
+          error_message:
+            response.data?.detail ||
+            `HTTP ${response.status}: ${response.statusText}`,
+          model_used: "unknown",
+          processing_time: 0,
+        };
+      }
+    } catch (error) {
+      console.error("❌ 코드 생성 실패:", error);
+
+      if (axios.isAxiosError(error)) {
+        if (error.response) {
+          console.error("🚨 서버 응답 오류 - 상세 디버깅:", {
+            status: error.response.status,
+            statusText: error.response.statusText,
+            data: error.response.data,
+            url: error.config?.url,
+            method: error.config?.method,
+            headers: error.config?.headers,
+            sent_data: error.config?.data,
+          });
+
+          // 422 Validation Error 특별 처리
+          if (error.response.status === 422 && error.response.data?.details) {
+            console.error("🔍 422 Validation Error 상세 분석:", {
+              validation_errors: error.response.data.details,
+              error_count: error.response.data.details?.length || 0,
+              timestamp: error.response.data.timestamp,
+              path: error.response.data.path,
+            });
+
+            // 각 validation 오류별로 상세 로그
+            if (Array.isArray(error.response.data.details)) {
+              error.response.data.details.forEach(
+                (detail: any, index: number) => {
+                  console.error(`❌ Validation Error #${index + 1}:`, {
+                    field: detail.loc?.join(".") || "unknown",
+                    error_type: detail.type,
+                    message: detail.msg,
+                    input_value: detail.input,
+                    context: detail.ctx,
+                  });
+                }
+              );
+            }
+          }
+
+          return {
+            success: false,
+            generated_code: "",
+            error_message: `서버 오류 (${error.response.status}): ${
+              error.response.data?.detail ||
+              error.response.data?.message ||
+              error.response.statusText
+            }`,
+            model_used: "unknown",
+            processing_time: 0,
+          };
+        } else if (error.request) {
+          console.error("네트워크 연결 오류:", error.message);
+          return {
+            success: false,
+            generated_code: "",
+            error_message:
+              "서버에 연결할 수 없습니다. 네트워크 상태를 확인해주세요.",
+            model_used: "unknown",
+            processing_time: 0,
+          };
         }
       }
 
       return {
         success: false,
-        message: errorMessage,
+        generated_code: "",
+        error_message: this.handleError(error).message,
+        model_used: "unknown",
+        processing_time: 0,
       };
     }
+  }
+
+  /**
+   * 백엔드 수동 전환
+   */
+  async switchBackend(
+    backendType: "vllm" | "legacy" | "auto"
+  ): Promise<boolean> {
+    try {
+      const response = await axios.post(`${this.baseURL}/code/backend/switch`, {
+        backend_type: backendType,
+      });
+      return response.data.success || false;
+    } catch (error) {
+      console.error("백엔드 전환 실패:", error);
+      return false;
+    }
+  }
+
+  /**
+   * vLLM 연동 테스트
+   */
+  async testVLLMIntegration(): Promise<{
+    success: boolean;
+    details?: any;
+    error?: string;
+  }> {
+    try {
+      const response = await axios.post(`${this.baseURL}/code/test`, {
+        test_prompt: "Hello World 함수를 만들어주세요",
+      });
+
+      return {
+        success: true,
+        details: response.data,
+      };
+    } catch (error) {
+      console.error("vLLM 연동 테스트 실패:", error);
+      return {
+        success: false,
+        error: this.handleError(error).message,
+      };
+    }
+  }
+
+  /**
+   * 레거시 API 호환성 - 기존 코드와의 호환을 위해 유지
+   */
+  async generateCompletion(
+    prompt: string,
+    language: string = "python"
+  ): Promise<CodeGenerationResponse> {
+    return this.generateCode({
+      prompt: prompt,
+      model_type: VLLMModelType.CODE_GENERATION,
+      language: language,
+      programming_level: "intermediate",
+      explanation_detail: "standard",
+    });
+  }
+
+  /**
+   * 코드 자동완성 (autocomplete 모델 사용)
+   */
+  async generateAutoComplete(
+    prefix: string,
+    language: string = "python"
+  ): Promise<CodeGenerationResponse> {
+    return this.generateCode({
+      prompt: prefix,
+      model_type: VLLMModelType.CODE_COMPLETION,
+      language: language,
+      max_tokens: 64, // 자동완성은 짧게
+      temperature: 0.1, // 자동완성은 낮은 창의성
+    });
+  }
+
+  /**
+   * 에러 처리 헬퍼
+   */
+  private handleError(error: any): APIError {
+    if (axios.isAxiosError(error)) {
+      const axiosError = error as AxiosError;
+
+      if (axiosError.response) {
+        // 서버 응답이 있는 경우
+        const data = axiosError.response.data as any;
+        const status = axiosError.response.status;
+
+        // 구체적인 HTTP 상태 코드별 처리
+        switch (status) {
+          case 404:
+            return {
+              message:
+                "요청한 API 엔드포인트를 찾을 수 없습니다. 백엔드 서버 설정을 확인해주세요.",
+              status: status,
+              code: "ENDPOINT_NOT_FOUND",
+            };
+          case 401:
+            return {
+              message:
+                "API 키가 유효하지 않습니다. 설정에서 API 키를 확인해주세요.",
+              status: status,
+              code: "UNAUTHORIZED",
+            };
+          case 403:
+            return {
+              message: "API 접근 권한이 없습니다. 관리자에게 문의하세요.",
+              status: status,
+              code: "FORBIDDEN",
+            };
+          case 429:
+            return {
+              message: "요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요.",
+              status: status,
+              code: "RATE_LIMITED",
+            };
+          case 500:
+            return {
+              message:
+                "서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
+              status: status,
+              code: "INTERNAL_SERVER_ERROR",
+            };
+          case 502:
+          case 503:
+          case 504:
+            return {
+              message:
+                "서버가 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해주세요.",
+              status: status,
+              code: "SERVICE_UNAVAILABLE",
+            };
+          default:
+            return {
+              message:
+                data?.message ||
+                data?.detail ||
+                `HTTP ${status} 오류가 발생했습니다`,
+              status: status,
+              code: data?.error_code || "API_ERROR",
+            };
+        }
+      } else if (axiosError.request) {
+        // 네트워크 오류 - 더 구체적인 처리
+        if (axiosError.code === "ECONNREFUSED") {
+          return {
+            message:
+              "HAPA 백엔드 서버(http://3.13.240.111:8000)에 연결할 수 없습니다. 서버가 실행 중인지 확인해주세요.",
+            code: "CONNECTION_REFUSED",
+          };
+        } else if (axiosError.code === "ENOTFOUND") {
+          return {
+            message:
+              "서버 주소를 찾을 수 없습니다. 네트워크 연결을 확인해주세요.",
+            code: "DNS_ERROR",
+          };
+        } else if (axiosError.code === "ETIMEDOUT") {
+          return {
+            message:
+              "요청 시간이 초과되었습니다. 네트워크 상태를 확인하거나 잠시 후 다시 시도해주세요.",
+            code: "TIMEOUT_ERROR",
+          };
+        } else {
+          return {
+            message:
+              "네트워크 연결에 문제가 있습니다. 인터넷 연결을 확인해주세요.",
+            code: "NETWORK_ERROR",
+          };
+        }
+      }
+    }
+
+    // 일반 오류
+    return {
+      message: error?.message || "알 수 없는 오류가 발생했습니다.",
+      code: "UNKNOWN_ERROR",
+    };
   }
 
   /**
    * 설정 업데이트
    */
-  updateConfig(newConfig: Partial<APIConfig>): void {
-    this.config = { ...this.config, ...newConfig };
+  updateConfig(apiKey?: string, baseURL?: string) {
+    if (apiKey !== undefined) {
+      this.apiKey = apiKey;
+      if (apiKey) {
+        axios.defaults.headers.common["X-API-Key"] = this.apiKey;
+      } else {
+        delete axios.defaults.headers.common["X-API-Key"];
+      }
+    }
 
-    // Axios 인스턴스 설정 업데이트
-    this.client.defaults.baseURL = this.config.baseURL;
-    this.client.defaults.timeout = this.config.timeout;
+    if (baseURL !== undefined) {
+      this.baseURL = baseURL;
+    }
   }
 
   /**
-   * API Key 설정
+   * 현재 설정 정보
    */
-  setAPIKey(apiKey: string): void {
-    this.config.apiKey = apiKey;
-
-    // VSCode 설정에 저장
-    const config = vscode.workspace.getConfiguration("hapa");
-    config.update("apiKey", apiKey, vscode.ConfigurationTarget.Global);
+  getConfig() {
+    return {
+      baseURL: this.baseURL,
+      hasApiKey: !!this.apiKey,
+      timeout: axios.defaults.timeout,
+    };
   }
 
   /**
-   * 현재 설정 반환
-   */
-  getConfig(): APIConfig {
-    return { ...this.config };
-  }
-
-  /**
-   * 스트리밍 방식으로 코드 생성 요청
+   * 실시간 스트리밍 코드 생성 (기존 메서드의 별칭)
    */
   async generateCodeStreaming(
-    userQuestion: string,
-    codeContext?: string,
-    callbacks?: StreamingCallbacks
-  ): Promise<void> {
-    const config = vscode.workspace.getConfiguration("hapa");
-    const apiKey = config.get<string>("apiKey");
-    const baseURL = config.get<string>("apiBaseURL", "http://localhost:8000");
-    const timeout = config.get<number>("apiTimeout", 30000);
-
-    if (!apiKey) {
-      const error = new Error(
-        "API 키가 설정되지 않았습니다. 설정에서 API 키를 입력해주세요."
-      );
-      callbacks?.onError?.(error);
-      throw error;
+    prompt: string,
+    codeContext: string,
+    callbacks: {
+      onChunk?: (chunk: any) => void;
+      onComplete?: () => void;
+      onError?: (error: any) => void;
     }
-
-    const url = `${baseURL}/api/v1/code-generation/stream-generate`;
-    // 사용자 프로필 정보 추가
-    const userProfile = this.getUserProfile();
-    const requestBody = {
-      user_question: userQuestion,
-      code_context: codeContext,
+  ): Promise<void> {
+    const request: CodeGenerationRequest = {
+      prompt: prompt,
+      context: codeContext,
+      model_type: VLLMModelType.CODE_GENERATION,
       language: "python",
-      stream: true,
-      userProfile: userProfile,
     };
 
+    return this.generateCodeStream(
+      request,
+      callbacks.onChunk || (() => {}),
+      callbacks.onComplete,
+      callbacks.onError
+    );
+  }
+
+  /**
+   * 코드 자동완성
+   */
+  async completeCode(request: {
+    prefix: string;
+    language: string;
+    cursor_position?: number;
+    file_path?: string;
+    context?: string;
+  }): Promise<{
+    completions: Array<{
+      code: string;
+      label: string;
+      description: string;
+      confidence: number;
+    }>;
+    status: string;
+  }> {
     try {
-      callbacks?.onStart?.();
-
-      // AbortController로 타임아웃 제어
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeout);
-
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-API-Key": apiKey,
-          Accept: "text/event-stream",
-          "Cache-Control": "no-cache",
-        },
-        body: JSON.stringify(requestBody),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
-      }
-
-      if (!response.body) {
-        throw new Error("응답 본문이 없습니다.");
-      }
-
-      // SSE 스트림 처리
-      await this.processSSEStream(response.body, callbacks);
-    } catch (error) {
-      console.error("스트리밍 API 요청 실패:", error);
-
-      if (error instanceof Error) {
-        if (error.name === "AbortError") {
-          const timeoutError = new Error(
-            `API 요청이 ${timeout}ms 후 타임아웃되었습니다.`
-          );
-          callbacks?.onError?.(timeoutError);
-          throw timeoutError;
-        } else {
-          callbacks?.onError?.(error);
-          throw error;
-        }
-      } else {
-        const unknownError = new Error("알 수 없는 오류가 발생했습니다.");
-        callbacks?.onError?.(unknownError);
-        throw unknownError;
-      }
-    }
-  }
-
-  /**
-   * Server-Sent Events 스트림 처리
-   */
-  private async processSSEStream(
-    stream: ReadableStream<Uint8Array>,
-    callbacks?: StreamingCallbacks
-  ): Promise<void> {
-    const reader = stream.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let fullContent = "";
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-
-        if (done) {
-          break;
-        }
-
-        // 바이트를 문자열로 디코딩
-        buffer += decoder.decode(value, { stream: true });
-
-        // SSE 이벤트들을 파싱
-        const events = this.parseSSEEvents(buffer);
-
-        for (const event of events.parsed) {
-          try {
-            const chunk: StreamingChunk = JSON.parse(event);
-
-            // 콜백 호출
-            callbacks?.onChunk?.(chunk);
-
-            // 전체 컨텐츠 누적 (에러가 아닌 경우에만)
-            if (chunk.type !== "error" && chunk.type !== "start") {
-              fullContent += chunk.content;
-            }
-
-            // 완료 또는 에러 시 처리
-            if (chunk.type === "done") {
-              callbacks?.onComplete?.(fullContent);
-              return;
-            } else if (chunk.type === "error") {
-              callbacks?.onError?.(new Error(chunk.content));
-              return;
-            }
-          } catch (parseError) {
-            console.warn("SSE 이벤트 파싱 실패:", event, parseError);
-          }
-        }
-
-        // 처리되지 않은 부분을 버퍼에 보관
-        buffer = events.remaining;
-      }
-    } finally {
-      reader.releaseLock();
-    }
-  }
-
-  /**
-   * SSE 이벤트 파싱
-   */
-  private parseSSEEvents(data: string): {
-    parsed: string[];
-    remaining: string;
-  } {
-    const lines = data.split("\n");
-    const events: string[] = [];
-    let currentEvent = "";
-    let i = 0;
-
-    while (i < lines.length) {
-      const line = lines[i];
-
-      if (line.startsWith("data: ")) {
-        currentEvent = line.substring(6); // 'data: ' 제거
-        i++;
-
-        // 다음 줄이 빈 줄인지 확인 (SSE 이벤트 종료)
-        if (i < lines.length && lines[i] === "") {
-          events.push(currentEvent);
-          currentEvent = "";
-          i++;
-        } else {
-          // 아직 완성되지 않은 이벤트
-          break;
-        }
-      } else if (line === "") {
-        // 빈 줄은 건너뛰기
-        i++;
-      } else {
-        // 처리되지 않은 라인
-        break;
-      }
-    }
-
-    // 남은 데이터 계산
-    const remaining = lines.slice(i).join("\n");
-
-    return { parsed: events, remaining };
-  }
-
-  /**
-   * JWT 토큰 기반으로 DB에서 사용자 설정을 가져와 VSCode 로컬 설정과 동기화
-   */
-  async syncUserSettingsFromDB(): Promise<boolean> {
-    try {
-      const config = vscode.workspace.getConfiguration("hapa");
-      const accessToken = config.get<string>("auth.accessToken");
-
-      if (!accessToken) {
-        console.log("JWT 토큰이 없어 DB 동기화를 건너뜁니다.");
-        return false;
-      }
-
-      const response = await this.client.get("/users/me/settings", {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-
-      if (response.status === 200 && response.data) {
-        await this.updateLocalSettingsFromDB(response.data);
-        console.log("DB 설정 동기화 완료");
-        return true;
-      }
-
-      return false;
-    } catch (error) {
-      console.error("DB 설정 동기화 실패:", error);
-      return false;
-    }
-  }
-
-  /**
-   * DB 설정을 VSCode 로컬 설정으로 변환 및 저장
-   */
-  private async updateLocalSettingsFromDB(dbSettings: any[]): Promise<void> {
-    const config = vscode.workspace.getConfiguration("hapa");
-
-    // DB 설정 옵션 ID를 VSCode 설정값으로 매핑
-    const settingsMapping = this.mapDBSettingsToLocal(dbSettings);
-
-    // 각 설정을 VSCode에 저장
-    for (const [key, value] of Object.entries(settingsMapping)) {
-      await config.update(key, value, vscode.ConfigurationTarget.Global);
-    }
-  }
-
-  /**
-   * DB 설정 옵션 ID를 VSCode 로컬 설정값으로 매핑
-   */
-  private mapDBSettingsToLocal(dbSettings: any[]): Record<string, any> {
-    const mapping: Record<string, any> = {};
-
-    for (const setting of dbSettings) {
-      const optionId = setting.option_id;
-      const settingType = setting.setting_type;
-      const optionValue = setting.option_value;
-
-      // Python 스킬 수준 (ID: 1-4)
-      if (optionId >= 1 && optionId <= 4) {
-        const skillMap: Record<number, string> = {
-          1: "beginner",
-          2: "intermediate",
-          3: "advanced",
-          4: "expert",
-        };
-        mapping["userProfile.pythonSkillLevel"] = skillMap[optionId];
-      }
-
-      // 코드 출력 구조 (ID: 5-8)
-      else if (optionId >= 5 && optionId <= 8) {
-        const outputMap: Record<number, string> = {
-          5: "minimal",
-          6: "standard",
-          7: "detailed",
-          8: "comprehensive",
-        };
-        mapping["userProfile.codeOutputStructure"] = outputMap[optionId];
-      }
-
-      // 설명 스타일 (ID: 9-12)
-      else if (optionId >= 9 && optionId <= 12) {
-        const explanationMap: Record<number, string> = {
-          9: "brief",
-          10: "standard",
-          11: "detailed",
-          12: "educational",
-        };
-        mapping["userProfile.explanationStyle"] = explanationMap[optionId];
-      }
-
-      // 프로젝트 컨텍스트 (ID: 13-16)
-      else if (optionId >= 13 && optionId <= 16) {
-        const contextMap: Record<number, string> = {
-          13: "web_development",
-          14: "data_science",
-          15: "automation",
-          16: "general_purpose",
-        };
-        mapping["userProfile.projectContext"] = contextMap[optionId];
-      }
-
-      // 주석 트리거 모드 (ID: 17-20)
-      else if (optionId >= 17 && optionId <= 20) {
-        const triggerMap: Record<number, string> = {
-          17: "immediate_insert",
-          18: "sidebar",
-          19: "confirm_insert",
-          20: "inline_preview",
-        };
-        mapping["commentTrigger.resultDisplayMode"] = triggerMap[optionId];
-      }
-
-      // 선호 언어 기능 (ID: 21-24) - 배열로 수집
-      else if (optionId >= 21 && optionId <= 24) {
-        if (!mapping["userProfile.preferredLanguageFeatures"]) {
-          mapping["userProfile.preferredLanguageFeatures"] = [];
-        }
-
-        const featureMap: Record<number, string> = {
-          21: "type_hints",
-          22: "dataclasses",
-          23: "async_await",
-          24: "f_strings",
-        };
-
-        if (featureMap[optionId]) {
-          mapping["userProfile.preferredLanguageFeatures"].push(
-            featureMap[optionId]
-          );
-        }
-      }
-
-      // 에러 처리 선호도 (ID: 25-27)
-      else if (optionId >= 25 && optionId <= 27) {
-        const errorMap: Record<number, string> = {
-          25: "basic",
-          26: "detailed",
-          27: "robust",
-        };
-        mapping["userProfile.errorHandlingPreference"] = errorMap[optionId];
-      }
-    }
-
-    return mapping;
-  }
-
-  /**
-   * 강화된 사용자 프로필 정보 가져오기 (DB 동기화 후)
-   */
-  async getEnhancedUserProfile() {
-    // 먼저 DB와 동기화 시도
-    await this.syncUserSettingsFromDB();
-
-    // 로컬 설정 반환 (이제 DB와 동기화된 상태)
-    return this.getUserProfile();
-  }
-
-  /**
-   * 개인화된 코드 생성 요청 (JWT 토큰 포함)
-   */
-  async generatePersonalizedCode(
-    request: CodeGenerationRequest
-  ): Promise<CodeGenerationResponse> {
-    try {
-      const config = vscode.workspace.getConfiguration("hapa");
-      const accessToken = config.get<string>("auth.accessToken");
-
-      // 강화된 사용자 프로필 정보 추가
-      const userProfile = await this.getEnhancedUserProfile();
-      const enhancedRequest = {
-        ...request,
-        userProfile: userProfile,
+      const completionRequest: CodeGenerationRequest = {
+        prompt: request.prefix,
+        context: request.context,
+        model_type: VLLMModelType.CODE_COMPLETION,
+        language: request.language || "python",
       };
 
-      // JWT 토큰이 있으면 Authorization 헤더 추가
-      const headers: Record<string, string> = {};
-      if (accessToken) {
-        headers["Authorization"] = `Bearer ${accessToken}`;
-      }
-
-      const response = await this.client.post<CodeGenerationResponse>(
-        "/code/generate",
-        enhancedRequest,
-        { headers }
-      );
-
-      return response.data;
-    } catch (error) {
-      // 기존 에러 처리 로직과 동일
-      let errorMessage = "알 수 없는 오류가 발생했습니다.";
-
-      if (error instanceof Error) {
-        if (
-          error.message.includes("ECONNREFUSED") ||
-          error.message.includes("Network Error")
-        ) {
-          errorMessage =
-            "🔗 API 서버에 연결할 수 없습니다.\n설정에서 API 서버 주소를 확인해주세요.\n\n현재 설정: " +
-            this.baseURL;
-        } else if (error.message.includes("timeout")) {
-          errorMessage =
-            "⏱️ 요청 시간이 초과되었습니다.\n잠시 후 다시 시도하거나 더 간단한 질문을 해보세요.";
-        } else if (
-          error.message.includes("401") ||
-          error.message.includes("Unauthorized")
-        ) {
-          errorMessage =
-            "🔐 API 인증에 실패했습니다.\n설정에서 API 키를 확인해주세요.";
-        } else {
-          errorMessage = `❌ 오류 발생: ${error.message}\n\n문제가 지속되면 확장 프로그램을 재시작해보세요.`;
-        }
-      }
+      const response = await this.generateCode(completionRequest);
 
       return {
-        generated_code: "",
+        completions: [
+          {
+            code: response.generated_code,
+            label: "AI Completion",
+            description: response.explanation || "AI generated completion",
+            confidence: 0.8,
+          },
+        ],
+        status: response.success ? "success" : "error",
+      };
+    } catch (error) {
+      console.error("코드 완성 실패:", error);
+      return {
+        completions: [],
         status: "error",
-        error_message: errorMessage,
       };
     }
   }
 
   /**
-   * 스트리밍 방식으로 개인화된 코드 생성 요청
+   * 에이전트 목록 조회
    */
-  async generatePersonalizedCodeStreaming(
-    userQuestion: string,
-    codeContext?: string,
-    callbacks?: StreamingCallbacks
-  ): Promise<void> {
-    const config = vscode.workspace.getConfiguration("hapa");
-    const apiKey = config.get<string>("apiKey");
-    const accessToken = config.get<string>("auth.accessToken");
-    const baseURL = config.get<string>("apiBaseURL", "http://localhost:8000");
-
-    if (!apiKey) {
-      const error = new Error(
-        "API 키가 설정되지 않았습니다. 설정에서 API 키를 입력해주세요."
-      );
-      callbacks?.onError?.(error);
-      throw error;
-    }
-
-    const url = `${baseURL}/api/v1/code-generation/stream-generate`;
-
-    // 강화된 사용자 프로필 정보 추가
-    const userProfile = await this.getEnhancedUserProfile();
-    const requestBody = {
-      user_question: userQuestion,
-      code_context: codeContext,
-      language: "python",
-      stream: true,
-      userProfile: userProfile,
-    };
-
-    // JWT 토큰이 있으면 Authorization 헤더 추가
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      "X-API-Key": apiKey,
-    };
-
-    if (accessToken) {
-      headers["Authorization"] = `Bearer ${accessToken}`;
-    }
-
+  async listAgents(): Promise<{
+    agents: Array<{
+      id: string;
+      name: string;
+      description: string;
+      specialization: string;
+    }>;
+    status: string;
+  }> {
     try {
-      callbacks?.onStart?.();
-
-      const response = await fetch(url, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(requestBody),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      if (!response.body) {
-        throw new Error("Response body is null");
-      }
-
-      await this.processSSEStream(response.body, callbacks);
+      const response = await axios.get(`${this.baseURL}/custom/agents`);
+      return response.data;
     } catch (error) {
-      const errorObj =
-        error instanceof Error ? error : new Error(String(error));
-      callbacks?.onError?.(errorObj);
-      throw errorObj;
+      console.error("에이전트 목록 조회 실패:", error);
+      return {
+        agents: [
+          {
+            id: "default_web_developer",
+            name: "웹 개발자 AI",
+            description: "FastAPI, Django, Flask 전문",
+            specialization: "web_development",
+          },
+          {
+            id: "default_data_scientist",
+            name: "데이터 사이언티스트 AI",
+            description: "pandas, numpy, ML 전문",
+            specialization: "data_science",
+          },
+        ],
+        status: "success",
+      };
+    }
+  }
+
+  /**
+   * 에이전트 역할 조회
+   */
+  async getAgentRoles(): Promise<{
+    roles: Array<{
+      role: string;
+      description: string;
+      examples: string[];
+    }>;
+    status: string;
+  }> {
+    try {
+      const response = await axios.get(`${this.baseURL}/custom/agents/roles`);
+      return response.data;
+    } catch (error) {
+      console.error("에이전트 역할 조회 실패:", error);
+      return {
+        roles: [
+          {
+            role: "웹 개발자",
+            description: "웹 애플리케이션 개발",
+            examples: ["FastAPI REST API", "Django 모델", "Flask 라우터"],
+          },
+          {
+            role: "데이터 분석가",
+            description: "데이터 분석 및 시각화",
+            examples: ["pandas 데이터 처리", "matplotlib 차트", "numpy 연산"],
+          },
+        ],
+        status: "success",
+      };
+    }
+  }
+
+  /**
+   * 에이전트로 코드 생성
+   */
+  async generateCodeWithAgent(request: {
+    agent_id: string;
+    user_question: string;
+    code_context?: string;
+    language?: string;
+  }): Promise<CodeGenerationResponse> {
+    try {
+      const response = await axios.post(
+        `${this.baseURL}/custom/agents/generate`,
+        {
+          agent_id: request.agent_id,
+          prompt: request.user_question,
+          context: request.code_context,
+          language: request.language || "python",
+        }
+      );
+      return response.data;
+    } catch (error) {
+      console.error("에이전트 코드 생성 실패:", error);
+      return {
+        success: false,
+        generated_code: "",
+        model_used: "error",
+        processing_time: 0,
+        error_message: this.handleError(error).message,
+      };
+    }
+  }
+
+  /**
+   * 에이전트 생성
+   */
+  async createAgent(agentData: {
+    name: string;
+    description: string;
+    specialization: string;
+    prompt_template?: string;
+  }): Promise<{
+    id: string;
+    name: string;
+    status: string;
+  }> {
+    try {
+      const response = await axios.post(
+        `${this.baseURL}/custom/agents`,
+        agentData
+      );
+      return response.data;
+    } catch (error) {
+      console.error("에이전트 생성 실패:", error);
+      return {
+        id: "",
+        name: agentData.name,
+        status: "error",
+      };
+    }
+  }
+
+  /**
+   * 개인화된 코드 생성
+   */
+  async generatePersonalizedCode(request: {
+    user_question: string;
+    code_context?: string;
+    language?: string;
+    userProfile?: any;
+  }): Promise<CodeGenerationResponse> {
+    try {
+      const codeRequest: CodeGenerationRequest = {
+        prompt: request.user_question,
+        context: request.code_context,
+        model_type: VLLMModelType.CODE_GENERATION,
+        language: request.language || "python",
+        programming_level:
+          request.userProfile?.pythonSkillLevel || "intermediate",
+      };
+
+      return await this.generateCode(codeRequest);
+    } catch (error) {
+      console.error("개인화 코드 생성 실패:", error);
+      return {
+        success: false,
+        generated_code: "",
+        model_used: "error",
+        processing_time: 0,
+        error_message: this.handleError(error).message,
+      };
     }
   }
 }
 
-// 싱글톤 인스턴스
+// 기본 인스턴스 생성
 export const apiClient = new HAPAAPIClient();
 
-// 타입 내보내기
-export type {
-  APIConfig,
-  CodeGenerationRequest,
-  CodeGenerationResponse,
-  CompletionRequest,
-  CompletionResponse,
-  ErrorResponse,
-  StreamingChunk,
-  StreamingCallbacks,
-};
+// VSCode 설정에서 API Key 로드
+export function initializeAPIClient(): void {
+  const config = vscode.workspace.getConfiguration("hapa");
+  const apiKey = config.get<string>("apiKey", "");
+  const serverUrl = config.get<string>("apiBaseURL", API_BASE_URL);
+
+  console.log("🔧 API 클라이언트 초기화:", {
+    serverUrl,
+    hasApiKey: !!apiKey,
+    keyPrefix: apiKey ? apiKey.substring(0, 10) + "..." : "없음",
+  });
+
+  apiClient.updateConfig(apiKey, serverUrl);
+
+  // 기본 데모 키가 없으면 설정
+  if (!apiKey) {
+    const demoKey = "hapa_demo_20241228_secure_key_for_testing";
+    console.log(
+      "⚠️ API 키가 없어 데모 키를 사용합니다:",
+      demoKey.substring(0, 10) + "..."
+    );
+    apiClient.updateConfig(demoKey, serverUrl);
+  }
+
+  console.log("🚀 HAPA API Client 초기화 완료:", {
+    serverUrl,
+    hasApiKey: !!apiKey,
+    vllmSupport: true,
+  });
+}
+
+// 설정 변경 감지
+export function watchConfigChanges(): vscode.Disposable {
+  return vscode.workspace.onDidChangeConfiguration((event) => {
+    if (event.affectsConfiguration("hapa")) {
+      console.log("📝 HAPA 설정 변경 감지 - API Client 재초기화");
+      initializeAPIClient();
+    }
+  });
+}

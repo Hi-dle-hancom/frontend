@@ -84,7 +84,7 @@ export class ConfigService {
     return {
       enableCodeAnalysis: config.get("enableCodeAnalysis", true),
       theme: config.get("theme", "system"),
-      apiBaseURL: config.get("apiBaseURL", "http://localhost:8000/api/v1"),
+      apiBaseURL: config.get("apiBaseURL", "http://3.13.240.111:8000/api/v1"),
       apiKey: config.get("apiKey", "hapa_demo_20241228_secure_key_for_testing"),
       apiTimeout: config.get("apiTimeout", 30000),
       autoComplete: config.get("autoComplete", true),
@@ -110,7 +110,7 @@ export class ConfigService {
     const config = vscode.workspace.getConfiguration("hapa");
 
     return {
-      baseURL: config.get("apiBaseURL", "http://localhost:8000/api/v1"),
+      baseURL: config.get("apiBaseURL", "http://3.13.240.111:8000/api/v1"),
       timeout: config.get("apiTimeout", 30000),
       apiKey: config.get("apiKey", "hapa_demo_20241228_secure_key_for_testing"),
       retryAttempts: config.get("retryAttempts", 3),

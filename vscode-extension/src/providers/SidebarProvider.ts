@@ -1,12 +1,16 @@
+
 import * as vscode from "vscode";
 import { BaseWebviewProvider } from "./BaseWebviewProvider";
 import { TriggerDetector, TriggerEvent } from "../modules/triggerDetector";
+import { ExtractedPrompt } from "../modules/promptExtractor";
+import { CodeGenerationRequest } from "../modules/apiClient";
 import { SidebarHtmlGenerator } from "../templates/SidebarHtmlGenerator";
 import {
   apiClient,
   StreamingChunk,
   StreamingCallbacks,
 } from "../modules/apiClient";
+import { VLLMModelType } from "../modules/apiClient";
 
 /**
  * 사이드바 대시보드 웹뷰 프로바이더 클래스
@@ -20,6 +24,7 @@ export class SidebarProvider extends BaseWebviewProvider {
     timestamp: string;
   }> = [];
   private expandedPanels: vscode.WebviewPanel[] = []; // 열린 expand 패널들 추적
+  private readonly maxHistorySize = 50; // 최대 50개 히스토리 유지
 
   constructor(extensionUri: vscode.Uri) {
     super(extensionUri);
@@ -87,6 +92,12 @@ export class SidebarProvider extends BaseWebviewProvider {
    * 히스토리에 새 항목 추가
    */
   private addToHistory(question: string, response: string) {
+    console.log("📚 히스토리 저장 시도:", {
+      question_preview: question.substring(0, 50) + "...",
+      response_length: response.length,
+      current_history_count: this.questionHistory.length,
+    });
+
     // 중복 질문 제한 (연속 3회까지)
     const recentSameQuestions = this.questionHistory
       .slice(0, 3)
@@ -103,13 +114,26 @@ export class SidebarProvider extends BaseWebviewProvider {
         response: response,
       });
 
-      // 최대 20개까지만 저장
-      if (this.questionHistory.length > 20) {
-        this.questionHistory = this.questionHistory.slice(0, 20);
+      // 최대 50개까지만 저장
+      if (this.questionHistory.length > this.maxHistorySize) {
+        this.questionHistory = this.questionHistory.slice(
+          0,
+          this.maxHistorySize
+        );
       }
 
       // 저장 및 동기화
       this.saveHistory();
+
+      console.log("✅ 히스토리 저장 완료:", {
+        total_count: this.questionHistory.length,
+        saved_timestamp: new Date().toLocaleString("ko-KR"),
+      });
+    } else {
+      console.log("⚠️ 히스토리 저장 스킵 (중복 질문 제한):", {
+        duplicate_count: recentSameQuestions.length,
+        question_preview: question.substring(0, 50) + "...",
+      });
     }
   }
 
@@ -310,6 +334,12 @@ export class SidebarProvider extends BaseWebviewProvider {
       case "generateCodeStreaming":
         this.handleStreamingCodeGeneration(message.question);
         return;
+      case "generateBugFixStreaming":
+        this.handleBugFixStreamingCodeGeneration(
+          message.question,
+          message.model_type
+        );
+        return;
       case "insertCode":
         this.insertCodeToActiveEditor(message.code);
         return;
@@ -384,7 +414,7 @@ ${previousContent}
 
     // 현재 활성 편집기의 컨텍스트 가져오기
     const activeEditor = vscode.window.activeTextEditor;
-    let codeContext = undefined;
+    let codeContext: string | undefined = undefined;
 
     if (
       activeEditor &&
@@ -394,45 +424,330 @@ ${previousContent}
       codeContext = activeEditor.document.getText(activeEditor.selection);
     }
 
+    // 응답 시간 제한 (30초)
+    const timeoutPromise = new Promise<void>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error("응답 시간이 초과되었습니다. 다시 시도해주세요."));
+      }, 30000);
+    });
+
+    // 스트리밍 요청과 타임아웃 경쟁
+    const streamingPromise = new Promise<void>(async (resolve, reject) => {
+      try {
+        const response = await fetch(
+          "http://3.13.240.111:8000/api/v1/generate",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              prompt: fullPrompt,
+              context: codeContext || "",
+              model_type: "code_generation",
+              language: "python",
+              temperature: 0.3,
+              top_p: 0.95,
+              max_tokens: 1024,
+              programming_level: "intermediate",
+              explanation_detail: "standard",
+              code_style: "pythonic",
+              include_comments: true,
+              include_docstring: true,
+              include_type_hints: true,
+              project_context: "",
+            }),
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const reader = response.body?.getReader();
+        if (!reader) {
+          throw new Error("응답을 읽을 수 없습니다.");
+        }
+
+        let parsedContent = "";
+        const decoder = new TextDecoder();
+        const maxContentLength = 10000; // 최대 10KB 제한
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value);
+          const lines = chunk.split("\n");
+
+          for (const line of lines) {
+            if (line.trim() === "") continue;
+
+            if (line.startsWith("data: ")) {
+              const data = line.slice(6);
+              if (data === "[DONE]") {
+                resolve();
+                return;
+              }
+
+              try {
+                const parsed = JSON.parse(data);
+                if (parsed.text) {
+                  // 응답 길이 제한 체크
+                  if (
+                    parsedContent.length + parsed.text.length >
+                    maxContentLength
+                  ) {
+                    parsedContent +=
+                      "\n\n⚠️ **응답이 너무 길어 일부가 생략되었습니다.**";
+                    resolve();
+                    return;
+                  }
+
+                  parsedContent += parsed.text;
+
+                  // 실시간 정리 및 전송
+                  const cleanedContent = this.cleanStreamingContent(
+                    parsed.text
+                  );
+                  if (cleanedContent.trim()) {
+                    this._view?.webview.postMessage({
+                      type: "streamingResponse",
+                      content: cleanedContent,
+                    });
+                  }
+                }
+              } catch (e) {
+                console.warn("JSON 파싱 오류:", e);
+              }
+            }
+          }
+        }
+
+        // 최종 응답 정리
+        let finalCleanedContent = this.finalizeResponse(parsedContent);
+
+        // 보안 경고 및 사용자 안내 추가
+        const securityWarnings = [
+          "\n\n⚠️ **보안 알림**: 위 코드를 실행하기 전에 반드시 검토하세요.",
+          "\n📝 **사용법**: 코드를 복사하여 Python 파일로 저장한 후 실행하세요.",
+          "\n🔍 **참고**: AI가 생성한 코드이므로 문법 오류나 논리적 오류가 있을 수 있습니다.",
+          "\n💡 **팁**: 복잡한 요구사항은 단계별로 나누어 질문하시면 더 정확한 답변을 받을 수 있습니다.",
+        ];
+
+        // 보안 경고 추가 (응답이 충분히 긴 경우에만)
+        if (finalCleanedContent.length > 100) {
+          finalCleanedContent += securityWarnings.join("");
+        }
+
+        // 스트리밍 완료 메시지 전송 (정리된 콘텐츠 포함)
+        this._view?.webview.postMessage({
+          type: "streamingComplete",
+          content: finalCleanedContent,
+        });
+
+        // 히스토리에 추가 (이어가기 요청도 저장)
+        this.addToHistory(continuePrompt, finalCleanedContent);
+
+        resolve();
+      } catch (error) {
+        console.error("응답 이어가기 실패:", error);
+
+        // 사용자에게 구체적인 오류 메시지 제공
+        let errorMessage = "응답 이어가기 중 오류가 발생했습니다.";
+
+        if (error instanceof Error) {
+          if (error.message.includes("응답 시간이 초과")) {
+            errorMessage =
+              "⏱️ 응답 시간이 초과되었습니다. 더 간단한 질문으로 다시 시도해주세요.";
+          } else if (error.message.includes("HTTP error")) {
+            errorMessage =
+              "🌐 서버 연결 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
+          } else if (error.message.includes("응답을 읽을 수 없습니다")) {
+            errorMessage =
+              "📡 응답 데이터를 읽는 중 오류가 발생했습니다. 다시 시도해주세요.";
+          } else {
+            errorMessage = `❌ 오류: ${error.message}`;
+          }
+        }
+
+        // 웹뷰에 오류 메시지 전송
+        this._view?.webview.postMessage({
+          type: "error",
+          message: errorMessage,
+        });
+
+        // VSCode 사용자에게도 알림
+        vscode.window.showErrorMessage(errorMessage);
+      }
+    });
+
+    // 타임아웃과 스트리밍 요청 경쟁
+    await Promise.race([streamingPromise, timeoutPromise]);
+  }
+
+  /**
+   * 버그 수정 전용 스트리밍 코드 생성 처리
+   */
+  private async handleBugFixStreamingCodeGeneration(
+    question: string,
+    modelType: string = "bug_fix"
+  ) {
+    if (!this._view?.webview) {
+      return;
+    }
+
+    console.log("🐛 ERROR 모드 전송 디버깅:", {
+      question: question,
+      modelType: modelType,
+      originalModelType: modelType,
+      expectedModelType: "bug_fix",
+    });
+
+    // 현재 활성 편집기의 컨텍스트 가져오기
+    const activeEditor = vscode.window.activeTextEditor;
+    let codeContext: string | undefined = undefined;
+
+    if (
+      activeEditor &&
+      activeEditor.selection &&
+      !activeEditor.selection.isEmpty
+    ) {
+      codeContext = activeEditor.document.getText(activeEditor.selection);
+    }
+
+    // 스트리밍 완료 후 최종 응답 저장용 변수
+    let finalStreamingContent = "";
+
+    // 버그 수정 전용 API 요청 구성
+    const bugFixRequest = {
+      prompt: question,
+      context: codeContext || "",
+      model_type: modelType || "bug_fix",
+      language: "python",
+      temperature: 0.3,
+      top_p: 0.95,
+      max_tokens: 1024,
+      programming_level: "intermediate",
+      explanation_detail: "standard",
+      code_style: "pythonic",
+      include_comments: true,
+      include_docstring: true,
+      include_type_hints: true,
+      project_context: "",
+    };
+
+    console.log("🚀 ERROR 모드 API 요청 데이터:", {
+      request: bugFixRequest,
+      model_type_final: bugFixRequest.model_type,
+      prompt_length: bugFixRequest.prompt.length,
+      has_context: !!bugFixRequest.context,
+    });
+
     // 스트리밍 콜백 설정
-    const callbacks: StreamingCallbacks = {
+    const callbacks = {
       onStart: () => {
         // 시작 신호는 UI에서 이미 처리됨
       },
 
       onChunk: (chunk: StreamingChunk) => {
         if (this._view?.webview) {
+          // 스트리밍 청크 전송
           this._view.webview.postMessage({
             command: "streamingChunk",
             chunk: chunk,
           });
+
+          // 최종 콘텐츠 누적 (정리된 버전)
+          if (chunk.type === "token" || chunk.type === "code") {
+            const cleanedContent = this.cleanStreamingContent(chunk.content);
+            finalStreamingContent += cleanedContent;
+          }
         }
       },
 
-      onComplete: (fullContent: string) => {
+      onComplete: () => {
         if (this._view?.webview) {
+          // JSON 파싱 시도
+          let parsedContent = finalStreamingContent;
+          try {
+            // JSON 형태인지 확인 ({"text": "실제코드"} 구조)
+            if (
+              typeof parsedContent === "string" &&
+              parsedContent.trim().startsWith("{")
+            ) {
+              const parsedCode = JSON.parse(parsedContent);
+              if (parsedCode.text) {
+                parsedContent = parsedCode.text;
+                console.log(
+                  "✅ 버그 수정 스트리밍 응답에서 JSON text 필드 추출 성공"
+                );
+              }
+            }
+          } catch (parseError) {
+            console.log(
+              "ℹ️ 버그 수정 스트리밍 JSON 파싱 불가, 원본 사용:",
+              parseError
+            );
+            // JSON 파싱에 실패하면 원본 그대로 사용
+          }
+
+          // 최종 응답 정리
+          let finalCleanedContent = this.finalizeResponse(parsedContent);
+
+          // 보안 경고 및 사용자 안내 추가
+          const securityWarnings = [
+            "\n\n⚠️ **보안 알림**: 위 코드를 실행하기 전에 반드시 검토하세요.",
+            "\n📝 **사용법**: 코드를 복사하여 Python 파일로 저장한 후 실행하세요.",
+            "\n🔍 **참고**: AI가 생성한 코드이므로 문법 오류나 논리적 오류가 있을 수 있습니다.",
+            "\n💡 **팁**: 복잡한 요구사항은 단계별로 나누어 질문하시면 더 정확한 답변을 받을 수 있습니다.",
+          ];
+
+          // 보안 경고 추가 (응답이 충분히 긴 경우에만)
+          if (finalCleanedContent.length > 100) {
+            finalCleanedContent += securityWarnings.join("");
+          }
+
+          // 스트리밍 완료 메시지 전송 (정리된 콘텐츠 포함)
           this._view.webview.postMessage({
             command: "streamingComplete",
-            content: fullContent,
+            finalContent: finalCleanedContent,
+          });
+
+          // 히스토리에 추가 (정리된 콘텐츠로 저장)
+          this.addToHistory(question, finalCleanedContent);
+
+          console.log("✅ 버그 수정 스트리밍 완료 및 응답 정리 적용:", {
+            original_length: finalStreamingContent.length,
+            cleaned_length: finalCleanedContent.length,
+            was_cleaned: finalStreamingContent !== finalCleanedContent,
           });
         }
       },
 
-      onError: (error: Error) => {
+      onError: (error: any) => {
         if (this._view?.webview) {
           this._view.webview.postMessage({
             command: "streamingError",
-            error: error.message,
+            error: error.message || error.toString(),
           });
         }
-        vscode.window.showErrorMessage(`응답 이어가기 오류: ${error.message}`);
+        vscode.window.showErrorMessage(
+          `버그 수정 오류: ${error.message || error.toString()}`
+        );
       },
     };
 
     try {
-      await apiClient.generateCodeStreaming(fullPrompt, codeContext, callbacks);
+      // 버그 수정 전용으로 직접 API 호출
+      await apiClient.generateCodeStream(
+        bugFixRequest as any,
+        callbacks.onChunk || (() => {}),
+        callbacks.onComplete,
+        callbacks.onError
+      );
     } catch (error) {
-      console.error("응답 이어가기 실패:", error);
+      console.error("버그 수정 스트리밍 실패:", error);
       callbacks.onError?.(
         error instanceof Error ? error : new Error("알 수 없는 오류")
       );
@@ -440,7 +755,7 @@ ${previousContent}
   }
 
   /**
-   * 스트리밍 코드 생성 처리
+   * 스트리밍 코드 생성 처리 (JSON 파싱 포함)
    */
   private async handleStreamingCodeGeneration(question: string) {
     if (!this._view?.webview) {
@@ -449,7 +764,7 @@ ${previousContent}
 
     // 현재 활성 편집기의 컨텍스트 가져오기
     const activeEditor = vscode.window.activeTextEditor;
-    let codeContext = undefined;
+    let codeContext: string | undefined = undefined;
 
     if (
       activeEditor &&
@@ -459,29 +774,83 @@ ${previousContent}
       codeContext = activeEditor.document.getText(activeEditor.selection);
     }
 
+    // 스트리밍 완료 후 최종 응답 저장용 변수
+    let finalStreamingContent = "";
+
     // 스트리밍 콜백 설정
-    const callbacks: StreamingCallbacks = {
+    const callbacks = {
       onStart: () => {
         // 시작 신호는 UI에서 이미 처리됨
       },
 
       onChunk: (chunk: StreamingChunk) => {
         if (this._view?.webview) {
+          // 스트리밍 청크 전송
           this._view.webview.postMessage({
             command: "streamingChunk",
             chunk: chunk,
           });
+
+          // 최종 콘텐츠 누적 (정리된 버전)
+          if (chunk.type === "token" || chunk.type === "code") {
+            const cleanedContent = this.cleanStreamingContent(chunk.content);
+            finalStreamingContent += cleanedContent;
+          }
         }
       },
 
-      onComplete: (fullContent: string) => {
+      onComplete: () => {
         if (this._view?.webview) {
+          // JSON 파싱 시도
+          let parsedContent = finalStreamingContent;
+          try {
+            // JSON 형태인지 확인 ({"text": "실제코드"} 구조)
+            if (
+              typeof parsedContent === "string" &&
+              parsedContent.trim().startsWith("{")
+            ) {
+              const parsedCode = JSON.parse(parsedContent);
+              if (parsedCode.text) {
+                parsedContent = parsedCode.text;
+                console.log("✅ 스트리밍 응답에서 JSON text 필드 추출 성공");
+              }
+            }
+          } catch (parseError) {
+            console.log("ℹ️ 스트리밍 JSON 파싱 불가, 원본 사용:", parseError);
+            // JSON 파싱에 실패하면 원본 그대로 사용
+          }
+
+          // 최종 응답 정리
+          let finalCleanedContent = this.finalizeResponse(parsedContent);
+
+          // 보안 경고 및 사용자 안내 추가
+          const securityWarnings = [
+            "\n\n⚠️ **보안 알림**: 위 코드를 실행하기 전에 반드시 검토하세요.",
+            "\n📝 **사용법**: 코드를 복사하여 Python 파일로 저장한 후 실행하세요.",
+            "\n🔍 **참고**: AI가 생성한 코드이므로 문법 오류나 논리적 오류가 있을 수 있습니다.",
+            "\n💡 **팁**: 복잡한 요구사항은 단계별로 나누어 질문하시면 더 정확한 답변을 받을 수 있습니다.",
+          ];
+
+          // 보안 경고 추가 (응답이 충분히 긴 경우에만)
+          if (finalCleanedContent.length > 100) {
+            finalCleanedContent += securityWarnings.join("");
+          }
+
+          // 스트리밍 완료 메시지 전송 (정리된 콘텐츠 포함)
           this._view.webview.postMessage({
             command: "streamingComplete",
-            content: fullContent,
+            finalContent: finalCleanedContent,
+          });
+
+          // 히스토리에 추가 (정리된 콘텐츠로 저장)
+          this.addToHistory(question, finalCleanedContent);
+
+          console.log("✅ 스트리밍 완료 및 응답 정리 적용:", {
+            original_length: finalStreamingContent.length,
+            cleaned_length: finalCleanedContent.length,
+            was_cleaned: finalStreamingContent !== finalCleanedContent,
           });
         }
-        // 히스토리에 추가 (question은 UI에서 전달받을 예정)
       },
 
       onError: (error: Error) => {
@@ -496,7 +865,11 @@ ${previousContent}
     };
 
     try {
-      await apiClient.generateCodeStreaming(question, codeContext, callbacks);
+      await apiClient.generateCodeStreaming(
+        question,
+        codeContext || "",
+        callbacks
+      );
     } catch (error) {
       console.error("스트리밍 코드 생성 실패:", error);
       callbacks.onError?.(
@@ -554,7 +927,7 @@ ${previousContent}
 
       // AI 질문으로 변환하여 스트리밍 처리
       const prompt = event.data.prompt;
-      await this.handleStreamingCodeGeneration(prompt);
+      await this.handleAIQuestion(prompt);
     } catch (error) {
       // 에러 처리
       this._view.webview.postMessage({
@@ -565,6 +938,14 @@ ${previousContent}
             : "알 수 없는 오류가 발생했습니다.",
       });
     }
+  }
+
+  /**
+   * AI 질문 처리 (SidebarProvider 전용 - 스트리밍 방식만 사용)
+   */
+  protected async handleAIQuestion(question: string) {
+    // 스트리밍 방식으로만 처리하여 중복 방지
+    await this.handleStreamingCodeGeneration(question);
   }
 
   /**
@@ -650,6 +1031,13 @@ ${previousContent}
       case "generateCodeStreaming":
         this.handleExpandedStreamingCodeGeneration(message.question, panel);
         return;
+      case "generateBugFixStreaming":
+        this.handleExpandedBugFixStreamingCodeGeneration(
+          message.question,
+          panel,
+          message.model_type
+        );
+        return;
       case "insertCode":
         this.insertCodeToActiveEditor(message.code);
         return;
@@ -708,11 +1096,12 @@ ${previousContent}
   }
 
   /**
-   * 확장된 뷰에서의 스트리밍 코드 생성 처리
+   * 확장된 뷰에서의 버그 수정 스트리밍 코드 생성 처리
    */
-  private async handleExpandedStreamingCodeGeneration(
+  private async handleExpandedBugFixStreamingCodeGeneration(
     question: string,
-    panel: vscode.WebviewPanel
+    panel: vscode.WebviewPanel,
+    modelType: string = "bug_fix"
   ) {
     if (!panel.webview) {
       return;
@@ -720,7 +1109,7 @@ ${previousContent}
 
     // 현재 활성 편집기의 컨텍스트 가져오기
     const activeEditor = vscode.window.activeTextEditor;
-    let codeContext = undefined;
+    let codeContext: string | undefined = undefined;
 
     if (
       activeEditor &&
@@ -730,8 +1119,26 @@ ${previousContent}
       codeContext = activeEditor.document.getText(activeEditor.selection);
     }
 
+    // 버그 수정 전용 API 요청 구성
+    const bugFixRequest = {
+      prompt: question,
+      context: codeContext || "",
+      model_type: modelType || "bug_fix",
+      language: "python",
+      temperature: 0.3,
+      top_p: 0.95,
+      max_tokens: 1024,
+      programming_level: "intermediate",
+      explanation_detail: "standard",
+      code_style: "pythonic",
+      include_comments: true,
+      include_docstring: true,
+      include_type_hints: true,
+      project_context: "",
+    };
+
     // 스트리밍 콜백 설정
-    const callbacks: StreamingCallbacks = {
+    const callbacks = {
       onStart: () => {
         // 시작 신호는 UI에서 이미 처리됨
       },
@@ -745,11 +1152,85 @@ ${previousContent}
         }
       },
 
-      onComplete: (fullContent: string) => {
+      onComplete: () => {
         if (panel.webview) {
           panel.webview.postMessage({
             command: "streamingComplete",
-            content: fullContent,
+          });
+        }
+        // 히스토리에 추가 (question은 UI에서 전달받을 예정)
+      },
+
+      onError: (error: any) => {
+        if (panel.webview) {
+          panel.webview.postMessage({
+            command: "streamingError",
+            error: error.message || error.toString(),
+          });
+        }
+        vscode.window.showErrorMessage(
+          `버그 수정 오류: ${error.message || error.toString()}`
+        );
+      },
+    };
+
+    try {
+      await apiClient.generateCodeStream(
+        bugFixRequest as any,
+        callbacks.onChunk || (() => {}),
+        callbacks.onComplete,
+        callbacks.onError
+      );
+    } catch (error) {
+      console.error("확장된 뷰 버그 수정 스트리밍 실패:", error);
+      callbacks.onError?.(
+        error instanceof Error ? error : new Error("알 수 없는 오류")
+      );
+    }
+  }
+
+  /**
+   * 확장된 뷰에서의 스트리밍 코드 생성 처리
+   */
+  private async handleExpandedStreamingCodeGeneration(
+    question: string,
+    panel: vscode.WebviewPanel
+  ) {
+    if (!panel.webview) {
+      return;
+    }
+
+    // 현재 활성 편집기의 컨텍스트 가져오기
+    const activeEditor = vscode.window.activeTextEditor;
+    let codeContext: string | undefined = undefined;
+
+    if (
+      activeEditor &&
+      activeEditor.selection &&
+      !activeEditor.selection.isEmpty
+    ) {
+      codeContext = activeEditor.document.getText(activeEditor.selection);
+    }
+
+    // 스트리밍 콜백 설정
+    const callbacks = {
+      onStart: () => {
+        // 시작 신호는 UI에서 이미 처리됨
+      },
+
+      onChunk: (chunk: StreamingChunk) => {
+        if (panel.webview) {
+          panel.webview.postMessage({
+            command: "streamingChunk",
+            chunk: chunk,
+          });
+        }
+      },
+
+      onComplete: () => {
+        if (panel.webview) {
+          panel.webview.postMessage({
+            command: "streamingComplete",
           });
         }
         // 히스토리에 추가 (question은 UI에서 전달받을 예정)
@@ -767,7 +1248,11 @@ ${previousContent}
     };
 
     try {
-      await apiClient.generateCodeStreaming(question, codeContext, callbacks);
+      await apiClient.generateCodeStreaming(
+        question,
+        codeContext || "",
+        callbacks
+      );
     } catch (error) {
       console.error("스트리밍 코드 생성 실패:", error);
       callbacks.onError?.(
@@ -782,7 +1267,7 @@ ${previousContent}
   public async updateApiStatus(): Promise<void> {
     // API 연결 상태 확인 및 업데이트
     try {
-      const response = await fetch("http://localhost:8000/api/v1/health");
+      const response = await fetch("http://3.13.240.111:8000/api/v1/health");
       const isConnected = response.ok;
 
       if (this._view?.webview) {
@@ -816,37 +1301,220 @@ ${previousContent}
   }
 
   /**
-   * 트리거 감지 (ExtensionManager에서 호출)
+   * 트리거 감지 (ExtensionManager에서 호출) - 개선된 버전
    */
   public detectTriggers(event: vscode.TextDocumentChangeEvent): void {
+    // Python 파일만 처리
+    if (event.document.languageId !== "python") {
+      return;
+    }
+
     // 텍스트 변경 이벤트에서 트리거 감지
     for (const change of event.contentChanges) {
-      if (
-        change.text.includes("#") ||
-        change.text.includes("TODO:") ||
-        change.text.includes("FIXME:")
-      ) {
-        // 트리거 감지 시 처리
-        const extractedPrompt = {
-          prompt: `코멘트에서 감지된 요청: ${change.text}`,
-          context: event.document.getText(),
-          selectedText: change.text,
-          fileName: event.document.fileName,
-          language: event.document.languageId,
-          lineNumber: 0,
-          suggestion: change.text,
-        };
+      const changedText = change.text;
 
-        const triggerEvent: TriggerEvent = {
-          type: "manual",
-          action: "custom",
-          data: extractedPrompt,
-          timestamp: new Date(),
-        };
+      // 개선된 주석 감지 로직
+      if (this.isCommentTrigger(changedText)) {
+        console.log("🔍 주석 트리거 감지:", changedText);
 
-        this.handleTriggerEvent(triggerEvent);
+        // 주석 내용 분석 및 프롬프트 생성
+        const analyzedPrompt = this.analyzeCommentContent(
+          changedText,
+          event.document,
+          change.range
+        );
+
+        if (analyzedPrompt) {
+          const triggerEvent: TriggerEvent = {
+            type: "comment",
+            action: "custom",
+            data: analyzedPrompt,
+            timestamp: new Date(),
+          };
+
+          console.log("📤 주석 트리거 이벤트 발생:", triggerEvent);
+          this.handleTriggerEvent(triggerEvent);
+        }
       }
     }
+  }
+
+  /**
+   * 주석 트리거 여부 판단 (개선된 로직)
+   */
+  private isCommentTrigger(text: string): boolean {
+    // 단순 # 문자만으로는 트리거하지 않음
+    if (!text.includes("#")) {
+      return false;
+    }
+
+    // 주석 패턴 감지
+    const commentPatterns = [
+      /^\s*#\s*TODO[:\s]/i, // TODO 주석
+      /^\s*#\s*FIXME[:\s]/i, // FIXME 주석
+      /^\s*#\s*생성[:\s]/, // 한국어: 생성
+      /^\s*#\s*만들어[:\s]/, // 한국어: 만들어
+      /^\s*#\s*작성[:\s]/, // 한국어: 작성
+      /^\s*#\s*구현[:\s]/, // 한국어: 구현
+      /^\s*#\s*추가[:\s]/, // 한국어: 추가
+      /^\s*#\s*수정[:\s]/, // 한국어: 수정
+      /^\s*#\s*개선[:\s]/, // 한국어: 개선
+      /^\s*#\s*[가-힣\w]+.*함수/, // ~함수
+      /^\s*#\s*[가-힣\w]+.*클래스/, // ~클래스
+      /^\s*#\s*[가-힣\w]+.*메서드/, // ~메서드
+      /^\s*#\s*create[:\s]/i, // 영어: create
+      /^\s*#\s*make[:\s]/i, // 영어: make
+      /^\s*#\s*implement[:\s]/i, // 영어: implement
+      /^\s*#\s*add[:\s]/i, // 영어: add
+      /^\s*#\s*write[:\s]/i, // 영어: write
+    ];
+
+    return commentPatterns.some((pattern) => pattern.test(text));
+  }
+
+  /**
+   * 주석 내용 분석 및 프롬프트 생성
+   */
+  private analyzeCommentContent(
+    commentText: string,
+    document: vscode.TextDocument,
+    range: vscode.Range
+  ): ExtractedPrompt | null {
+    try {
+      // 주석에서 # 제거하고 정리
+      const cleanComment = commentText.replace(/^\s*#\s*/, "").trim();
+
+      if (!cleanComment) {
+        return null;
+      }
+
+      // 의도 분석
+      const intent = this.analyzeCommentIntent(cleanComment);
+
+      // 컨텍스트 추출 (주석 주변 코드)
+      const contextRange = new vscode.Range(
+        Math.max(0, range.start.line - 3),
+        0,
+        Math.min(document.lineCount - 1, range.end.line + 10),
+        0
+      );
+      const contextCode = document.getText(contextRange);
+
+      // AI가 이해할 수 있는 프롬프트 구성
+      const aiPrompt = this.constructAIPrompt(
+        cleanComment,
+        intent,
+        contextCode
+      );
+
+      return {
+        prompt: aiPrompt,
+        context: contextCode,
+        selectedCode: commentText,
+        language: "python",
+        filePath: document.fileName,
+        lineNumbers: {
+          start: range.start.line + 1,
+          end: range.end.line + 1,
+        },
+      };
+    } catch (error) {
+      console.error("❌ 주석 분석 중 오류:", error);
+      return null;
+    }
+  }
+
+  /**
+   * 주석 의도 분석
+   */
+  private analyzeCommentIntent(comment: string): string {
+    const intentPatterns = [
+      { pattern: /(함수|function)/i, intent: "function_creation" },
+      { pattern: /(클래스|class)/i, intent: "class_creation" },
+      { pattern: /(메서드|method)/i, intent: "method_creation" },
+      { pattern: /(생성|만들|create|make)/i, intent: "creation" },
+      { pattern: /(구현|implement)/i, intent: "implementation" },
+      { pattern: /(수정|fix|개선|improve)/i, intent: "modification" },
+      { pattern: /(추가|add)/i, intent: "addition" },
+      { pattern: /(삭제|제거|remove|delete)/i, intent: "removal" },
+      { pattern: /(테스트|test)/i, intent: "testing" },
+      { pattern: /(API|api)/i, intent: "api_creation" },
+      { pattern: /(데이터|data|처리|process)/i, intent: "data_processing" },
+    ];
+
+    for (const { pattern, intent } of intentPatterns) {
+      if (pattern.test(comment)) {
+        return intent;
+      }
+    }
+
+    return "general";
+  }
+
+  /**
+   * AI를 위한 프롬프트 구성
+   */
+  private constructAIPrompt(
+    comment: string,
+    intent: string,
+    context: string
+  ): string {
+    // 기본 프롬프트 템플릿
+    let prompt = `다음 요청사항에 따라 Python 코드를 생성해주세요:\n\n`;
+
+    // 요청사항
+    prompt += `요청: ${comment}\n\n`;
+
+    // 의도별 세부 지침
+    switch (intent) {
+      case "function_creation":
+        prompt += `지침: 
+- 명확한 함수명과 매개변수를 가진 함수를 작성하세요
+- docstring을 포함하여 함수의 목적과 사용법을 설명하세요
+- 타입 힌트를 사용하여 매개변수와 반환값의 타입을 명시하세요
+- 예외 처리를 적절히 포함하세요\n\n`;
+        break;
+
+      case "class_creation":
+        prompt += `지침:
+- 클래스명은 PascalCase를 사용하세요
+- __init__ 메서드를 포함하여 초기화 로직을 작성하세요
+- docstring으로 클래스의 목적을 설명하세요
+- 필요한 메서드들을 구현하세요\n\n`;
+        break;
+
+      case "api_creation":
+        prompt += `지침:
+- RESTful API 구조를 고려하여 작성하세요
+- 적절한 HTTP 상태 코드를 사용하세요
+- 에러 핸들링을 포함하세요
+- FastAPI 또는 Flask 패턴을 따르세요\n\n`;
+        break;
+
+      case "data_processing":
+        prompt += `지침:
+- pandas, numpy 등 적절한 라이브러리를 사용하세요
+- 데이터 검증 로직을 포함하세요
+- 메모리 효율성을 고려하세요
+- 에러 처리를 포함하세요\n\n`;
+        break;
+
+      default:
+        prompt += `지침:
+- Python 베스트 프랙티스를 따르세요
+- PEP 8 스타일 가이드를 준수하세요
+- 적절한 주석과 docstring을 포함하세요
+- 에러 처리를 고려하세요\n\n`;
+    }
+
+    // 컨텍스트 정보
+    if (context.trim()) {
+      prompt += `기존 코드 컨텍스트:\n\`\`\`python\n${context}\n\`\`\`\n\n`;
+    }
+
+    prompt += `생성된 코드만 반환하고, 설명은 주석으로 포함해주세요.`;
+
+    return prompt;
   }
 
   /**
@@ -871,5 +1539,264 @@ ${previousContent}
   public async explainCode(code: string): Promise<void> {
     const question = `다음 코드가 어떤 일을 하는지 설명해주세요:\n\n${code}`;
     await this.handleStreamingCodeGeneration(question);
+  }
+
+  /**
+   * 스트리밍 콘텐츠 정리
+   */
+  private cleanStreamingContent(content: string): string {
+    if (!content || typeof content !== "string") {
+      return "";
+    }
+
+    let cleaned = content;
+
+    // 1. AI 모델 토큰과 불완전한 응답 정리 (한 번에 처리)
+    const tokenPatterns = [
+      /<\|im_end\|>/g,
+      /\|im_end\|>/g,
+      /\|im_end\|/g,
+      /<\|im_start\|>/g,
+      /<\|system\|>/g,
+      /<\|user\|>/g,
+      /<\|assistant\|>/g,
+      /\{"text"/g,
+      /\{\"text\"/g,
+      /\{"content"/g,
+      /\{\"content\"/g,
+    ];
+
+    tokenPatterns.forEach((pattern) => {
+      cleaned = cleaned.replace(pattern, "");
+    });
+
+    // 2. 불완전한 JSON 문자열 제거
+    cleaned = cleaned.replace(/^["{,]/g, "");
+
+    // 3. 깨진 문법 패턴 수정 (성능 최적화)
+    const syntaxFixes = [
+      [/if __name_ _== "_ ___":/g, 'if __name__ == "__main__":'],
+      [/\{"text"rint/g, "print"],
+      [/print\(f"\{__file_\{"/g, 'print(f"{__file__}\\n{'],
+      [
+        /print\("Exception occurred repr\(e\)\)/g,
+        'print(f"Exception occurred: {repr(e)}")',
+      ],
+      [/raise\|im_end\|/g, "raise"],
+      [/__all__ = \[calculate"\]/g, '__all__ = ["calculate"]'],
+      [/"([^"]*)" "([^"]*)"/g, '"$1", "$2"'],
+    ];
+
+    syntaxFixes.forEach(([pattern, replacement]) => {
+      cleaned = cleaned.replace(pattern, replacement as string);
+    });
+
+    // 4. 불필요한 공백 및 줄바꿈 정리
+    cleaned = cleaned.replace(/\n{3,}/g, "\n\n");
+    cleaned = cleaned.replace(/\s+$/gm, "");
+
+    return cleaned.trim();
+  }
+
+  private finalizeResponse(content: string): string {
+    if (!content) return content;
+
+    let finalized = content;
+
+    // 1. 중복된 코드 블록 완전 제거
+    const lines = finalized.split("\n");
+    const uniqueLines: string[] = [];
+    const seenFunctions = new Set<string>();
+    let skipUntilEnd = false;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+
+      // 중복된 main 블록 스킵
+      if (
+        line.includes('if __name__ == "__main__"') &&
+        seenFunctions.has("main_block")
+      ) {
+        skipUntilEnd = true;
+        continue;
+      }
+
+      // doctest 관련 중복 제거
+      if (line.includes("doctest.testmod()") && seenFunctions.has("doctest")) {
+        continue;
+      }
+
+      // timer 관련 중복 제거
+      if (
+        line.includes("from timeit import default_timer") &&
+        seenFunctions.has("timer")
+      ) {
+        skipUntilEnd = true;
+        continue;
+      }
+
+      if (skipUntilEnd) {
+        // 다음 함수나 클래스 정의까지 스킵
+        if (
+          line.startsWith("def ") ||
+          line.startsWith("class ") ||
+          (line.startsWith("if ") && line.includes("__name__"))
+        ) {
+          skipUntilEnd = false;
+          if (!seenFunctions.has("main_block") && line.includes("__name__")) {
+            seenFunctions.add("main_block");
+          }
+        } else {
+          continue;
+        }
+      }
+
+      // 주요 함수 정의 추적
+      if (line.startsWith("def ")) {
+        const funcName = line.split("(")[0].replace("def ", "");
+        if (seenFunctions.has(funcName)) {
+          skipUntilEnd = true;
+          continue;
+        }
+        seenFunctions.add(funcName);
+      }
+
+      if (line.includes("doctest.testmod()")) {
+        seenFunctions.add("doctest");
+      }
+
+      if (line.includes("from timeit import default_timer")) {
+        seenFunctions.add("timer");
+      }
+
+      uniqueLines.push(lines[i]);
+    }
+
+    finalized = uniqueLines.join("\n");
+
+    // 2. 불완전한 함수 완성
+    if (finalized.includes("def ") && !finalized.trim().endsWith(":")) {
+      // 함수가 불완전하면 적절한 return 문 추가
+      const lastLine = finalized.trim();
+      if (!lastLine.includes("return") && !lastLine.includes("print")) {
+        finalized += '\n    return "함수가 완성되지 않았습니다"';
+      }
+    }
+
+    // 3. 실제 AI 응답 정리 (대체하지 않고 정리만)
+    // 복잡한 구현도 그대로 유지하되 정리만 수행
+    finalized = this.cleanupComplexCode(finalized);
+
+    // 4. 최종 정리
+    finalized = finalized.replace(/\n\s*\n\s*\n/g, "\n\n");
+    finalized = finalized.trim();
+
+    return finalized;
+  }
+
+  private cleanupComplexCode(content: string): string {
+    // 실제 AI 응답을 정리하되 대체하지는 않음
+    let cleaned = content;
+
+    // 1. AI 모델 토큰과 불완전한 응답 정리
+    cleaned = cleaned.replace(/<\|im_end\|>/g, "");
+    cleaned = cleaned.replace(/\|im_end\|>/g, "");
+    cleaned = cleaned.replace(/\|im_end\|/g, "");
+    cleaned = cleaned.replace(/<\|im_start\|>/g, "");
+    cleaned = cleaned.replace(/<\|system\|>/g, "");
+    cleaned = cleaned.replace(/<\|user\|>/g, "");
+    cleaned = cleaned.replace(/<\|assistant\|>/g, "");
+    cleaned = cleaned.replace(/\{"text"/g, "");
+    cleaned = cleaned.replace(/\{\"text\"/g, "");
+    cleaned = cleaned.replace(/\{"content"/g, "");
+    cleaned = cleaned.replace(/\{\"content\"/g, "");
+
+    // 2. 깨진 문법 패턴 수정
+    cleaned = cleaned.replace(
+      /if __name_ _== "_ ___":/g,
+      'if __name__ == "__main__":'
+    );
+    cleaned = cleaned.replace(/\{"text"rint/g, "print");
+    cleaned = cleaned.replace(
+      /print\(f"\{__file_\{"/g,
+      'print(f"{__file__}\\n{'
+    );
+
+    // 추가 문법 오류 수정
+    cleaned = cleaned.replace(
+      /print\("Exception occurred repr\(e\)\)/g,
+      'print(f"Exception occurred: {repr(e)}")'
+    );
+    cleaned = cleaned.replace(/raise\|im_end\|/g, "raise");
+    cleaned = cleaned.replace(
+      /__all__ = \[calculate"\]/g,
+      '__all__ = ["calculate"]'
+    );
+    cleaned = cleaned.replace(/"([^"]*)" "([^"]*)"/g, '"$1", "$2"'); // 쉼표 누락 수정
+    cleaned = cleaned.replace(
+      /\[([^,\]]*)"([^,\]]*)" ([^,\]]*)"([^,\]]*)"([^,\]]*)"\]/g,
+      '["$1", "$2", "$3", "$4", "$5"]'
+    ); // 복잡한 배열 수정
+
+    // 3. 불완전한 함수 종료 정리
+    cleaned = cleaned.replace(
+      /return eval\(output\)<\|im_end\|>/g,
+      "return eval(output)"
+    );
+    cleaned = cleaned.replace(/print\(eval\(output\)\)<\|im_end\|>/g, "");
+    cleaned = cleaned.replace(/quit\(\)<\|im_end\|>/g, "");
+
+    // 4. 중복된 main 블록 정리
+    const mainBlocks = cleaned.match(
+      /if __name__ == "__main__":[\s\S]*?(?=\n\w|\n$|$)/g
+    );
+    if (mainBlocks && mainBlocks.length > 1) {
+      // 첫 번째 main 블록만 유지
+      const firstMainBlock = mainBlocks[0];
+      const beforeMain = cleaned.split(mainBlocks[0])[0];
+      cleaned = beforeMain + firstMainBlock;
+    }
+
+    // 5. 중복된 import 문 정리
+    const lines = cleaned.split("\n");
+    const imports = new Set();
+    const cleanedLines = [];
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+
+      // import 문 중복 체크
+      if (trimmed.startsWith("import ") || trimmed.startsWith("from ")) {
+        if (!imports.has(trimmed)) {
+          imports.add(trimmed);
+          cleanedLines.push(line);
+        }
+      } else {
+        cleanedLines.push(line);
+      }
+    }
+
+    cleaned = cleanedLines.join("\n");
+
+    // 6. 불완전한 docstring 정리
+    cleaned = cleaned.replace(/"""[\s\S]*?(?=[^"])/g, (match) => {
+      if (!match.endsWith('"""')) {
+        return match + '"""';
+      }
+      return match;
+    });
+
+    // 7. eval() 사용 시 경고 주석 추가 (보안 고려사항)
+    if (cleaned.includes("eval(") && !cleaned.includes("# 주의: eval()")) {
+      cleaned =
+        "# 주의: 이 코드는 eval()을 사용합니다. 실제 사용 시 보안을 고려하세요.\n" +
+        cleaned;
+    }
+
+    // 8. 과도한 공백 정리
+    cleaned = cleaned.replace(/\n\s*\n\s*\n+/g, "\n\n");
+    cleaned = cleaned.trim();
+
+    return cleaned;
   }
 }

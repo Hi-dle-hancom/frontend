@@ -14,10 +14,19 @@ import {
 } from "../providers/CompletionProvider";
 import { configService } from "../services/ConfigService";
 import {
-  ErrorService,
-  ErrorCategory,
+  EnhancedErrorService,
   ErrorSeverity,
-} from "../services/ErrorService";
+} from "../services/EnhancedErrorService";
+import { MemoryManager } from "../services/MemoryManager";
+import { PerformanceOptimizer } from "../services/PerformanceOptimizer";
+import { OfflineService } from "../services/OfflineService";
+import { ConfigValidationService } from "../services/ConfigValidationService";
+import { LoadingService } from "../services/LoadingService";
+import { TelemetryService } from "../services/TelemetryService";
+import { AccessibilityService } from "../services/AccessibilityService";
+import { ResponsiveDesignService } from "../services/ResponsiveDesignService";
+import { TriggerDetector, TriggerEvent } from "../modules/triggerDetector";
+import { CodeInserter } from "../modules/inserter";
 import { ExtensionConfig } from "../types";
 
 /**
@@ -28,6 +37,20 @@ export class ExtensionManager {
   private providers: Map<string, any> = new Map();
   private disposables: vscode.Disposable[] = [];
   private isActivated = false;
+
+  // 서비스들
+  private memoryManager = MemoryManager.getInstance();
+  private performanceOptimizer = PerformanceOptimizer.getInstance();
+  private offlineService = OfflineService.getInstance();
+  private configValidationService = ConfigValidationService.getInstance();
+  private loadingService = LoadingService.getInstance();
+  private telemetryService = TelemetryService.getInstance();
+  private accessibilityService = AccessibilityService.getInstance();
+  private responsiveDesignService = ResponsiveDesignService.getInstance();
+
+  // 트리거 및 코드 처리
+  private triggerDetector: TriggerDetector | null = null;
+  private codeInserter = new CodeInserter();
 
   constructor(context: vscode.ExtensionContext) {
     this.context = context;
@@ -45,6 +68,9 @@ export class ExtensionManager {
     try {
       console.log("🚀 HAPA Extension 활성화 시작...");
 
+      // 서비스들 초기화
+      await this.initializeServices();
+
       // 설정 서비스 초기화
       configService.setContext(this.context);
 
@@ -57,19 +83,158 @@ export class ExtensionManager {
       // 이벤트 리스너 등록
       this.registerEventListeners();
 
+      // 트리거 설정
+      this.setupTriggerDetector();
+
       // 온보딩 확인
       await this.checkOnboarding();
 
       this.isActivated = true;
       console.log("✅ HAPA Extension 활성화 완료");
     } catch (error) {
-      await ErrorService.getInstance().handleError(
+      EnhancedErrorService.getInstance().logError(
         error instanceof Error ? error : new Error(String(error)),
-        ErrorCategory.SYSTEM,
         ErrorSeverity.CRITICAL,
-        { showToUser: true }
+        { component: "ExtensionManager", operation: "activate" }
       );
     }
+  }
+
+  /**
+   * 서비스들 초기화
+   */
+  private async initializeServices(): Promise<void> {
+    try {
+      this.memoryManager.initialize();
+      console.log("📦 모든 서비스 초기화 완료");
+    } catch (error) {
+      EnhancedErrorService.getInstance().logError(
+        error instanceof Error ? error : new Error(String(error)),
+        ErrorSeverity.HIGH,
+        { component: "ExtensionManager", operation: "initializeServices" }
+      );
+    }
+  }
+
+  /**
+   * 트리거 디텍터 설정
+   */
+  private setupTriggerDetector(): void {
+    try {
+      this.triggerDetector = new TriggerDetector();
+
+      // 트리거 이벤트 처리
+      this.triggerDetector.onTrigger((event: TriggerEvent) => {
+        this.handleTriggerEvent(event);
+      });
+
+      console.log("🎯 TriggerDetector 설정 완료");
+    } catch (error) {
+      EnhancedErrorService.getInstance().logError(
+        error instanceof Error ? error : new Error(String(error)),
+        ErrorSeverity.HIGH,
+        { component: "TriggerDetector" }
+      );
+    }
+  }
+
+  /**
+   * 트리거 이벤트 처리
+   */
+  private async handleTriggerEvent(event: TriggerEvent): Promise<void> {
+    try {
+      const sidebarProvider = this.providers.get("sidebar");
+      if (sidebarProvider && sidebarProvider.handleTriggerEvent) {
+        await sidebarProvider.handleTriggerEvent(event);
+      }
+    } catch (error) {
+      EnhancedErrorService.getInstance().logError(
+        error instanceof Error ? error : new Error(String(error)),
+        ErrorSeverity.MEDIUM,
+        { event: event.type }
+      );
+    }
+  }
+
+  // 성능 및 모니터링 관련 메서드들
+  private async showPerformanceReport(): Promise<void> {
+    const report = this.performanceOptimizer.generatePerformanceReport();
+    vscode.window.showInformationMessage(`HAPA 성능 보고서: ${report}`);
+  }
+
+  private async showOfflineStatus(): Promise<void> {
+    const status = this.offlineService.getStatus();
+    vscode.window.showInformationMessage(
+      `HAPA 오프라인 상태: ${status.isOnline ? "온라인" : "오프라인"}`
+    );
+  }
+
+  private async validateConfigs(): Promise<void> {
+    const isValid = this.configValidationService.validateAllConfigs();
+    vscode.window.showInformationMessage(
+      `HAPA 설정 검증: ${isValid ? "유효" : "오류 발견"}`
+    );
+  }
+
+  private async clearOfflineCache(): Promise<void> {
+    this.offlineService.clearCache();
+    vscode.window.showInformationMessage(
+      "HAPA 오프라인 캐시가 삭제되었습니다."
+    );
+  }
+
+  private async resetPerformanceMetrics(): Promise<void> {
+    this.performanceOptimizer.clearMetrics();
+    vscode.window.showInformationMessage(
+      "HAPA 성능 메트릭이 초기화되었습니다."
+    );
+  }
+
+  // 텔레메트리 관련 메서드들
+  private async showUsageReport(): Promise<void> {
+    const report = this.telemetryService.generateUsageReport();
+    vscode.window.showInformationMessage(`HAPA 사용 통계: ${report}`);
+  }
+
+  private async showTelemetryStats(): Promise<void> {
+    const stats = this.telemetryService.getStatistics();
+    vscode.window.showInformationMessage(
+      `HAPA 텔레메트리: ${JSON.stringify(stats)}`
+    );
+  }
+
+  private async toggleTelemetry(): Promise<void> {
+    const stats = this.telemetryService.getStatistics();
+    const currentState = stats.isEnabled || false;
+    this.telemetryService.setEnabled(!currentState);
+    vscode.window.showInformationMessage(
+      "HAPA 텔레메트리 설정이 변경되었습니다."
+    );
+  }
+
+  // 접근성 관련 메서드들
+  private async showAccessibilityReport(): Promise<void> {
+    const report = this.accessibilityService.generateAccessibilityReport();
+    vscode.window.showInformationMessage(`HAPA 접근성 보고서: ${report}`);
+  }
+
+  // 반응형 디자인 관련 메서드들
+  private async showResponsiveReport(): Promise<void> {
+    const report = this.responsiveDesignService.generateResponsiveReport();
+    vscode.window.showInformationMessage(`HAPA 반응형 보고서: ${report}`);
+  }
+
+  private async showResponsiveCSS(): Promise<void> {
+    const css = this.responsiveDesignService.generateResponsiveCSS();
+    vscode.window.showInformationMessage(`HAPA 반응형 CSS: ${css}`);
+  }
+
+  private async toggleResponsive(): Promise<void> {
+    const currentState = this.responsiveDesignService.getCurrentState();
+    this.responsiveDesignService.setResponsiveEnabled(!currentState.isEnabled);
+    vscode.window.showInformationMessage(
+      "HAPA 반응형 디자인이 토글되었습니다."
+    );
   }
 
   /**
@@ -97,7 +262,22 @@ export class ExtensionManager {
 
       // 서비스 정리
       configService.dispose();
-      ErrorService.getInstance().clearHistory();
+      EnhancedErrorService.getInstance().clearErrorLog();
+
+      // 모든 서비스들 정리
+      this.memoryManager.cleanup();
+      this.performanceOptimizer.cleanup();
+      this.offlineService.cleanup();
+      this.configValidationService.cleanup();
+      this.loadingService.cleanup();
+      this.telemetryService.cleanup();
+      this.accessibilityService.cleanup();
+      this.responsiveDesignService.cleanup();
+
+      // 트리거 디텍터 정리
+      if (this.triggerDetector) {
+        this.triggerDetector = null;
+      }
 
       this.isActivated = false;
       console.log("✅ HAPA Extension 비활성화 완료");
@@ -240,11 +420,137 @@ export class ExtensionManager {
       },
     ];
 
-    commands.forEach(({ command, callback }) => {
+    // 추가 고급 명령어들
+    const advancedCommands = [
+      // 성능 및 모니터링 명령어
+      {
+        command: "hapa.showPerformanceReport",
+        callback: () => this.showPerformanceReport(),
+        title: "HAPA 성능 보고서",
+      },
+      {
+        command: "hapa.showOfflineStatus",
+        callback: () => this.showOfflineStatus(),
+        title: "HAPA 오프라인 상태",
+      },
+      {
+        command: "hapa.validateConfigs",
+        callback: () => this.validateConfigs(),
+        title: "HAPA 설정 검증",
+      },
+      {
+        command: "hapa.clearOfflineCache",
+        callback: () => this.clearOfflineCache(),
+        title: "HAPA 오프라인 캐시 삭제",
+      },
+      {
+        command: "hapa.resetPerformanceMetrics",
+        callback: () => this.resetPerformanceMetrics(),
+        title: "HAPA 성능 메트릭 초기화",
+      },
+
+      // 텔레메트리 명령어
+      {
+        command: "hapa.showUsageReport",
+        callback: () => this.showUsageReport(),
+        title: "HAPA 사용 통계 보고서",
+      },
+      {
+        command: "hapa.showTelemetryStats",
+        callback: () => this.showTelemetryStats(),
+        title: "HAPA 텔레메트리 상태",
+      },
+      {
+        command: "hapa.toggleTelemetry",
+        callback: () => this.toggleTelemetry(),
+        title: "HAPA 텔레메트리 토글",
+      },
+
+      // 접근성 명령어
+      {
+        command: "hapa.showAccessibilityReport",
+        callback: () => this.showAccessibilityReport(),
+        title: "HAPA 접근성 보고서",
+      },
+      {
+        command: "hapa.announceStatus",
+        callback: () => this.accessibilityService.announceCurrentStatus(),
+        title: "HAPA 현재 상태 안내",
+      },
+      {
+        command: "hapa.readSelection",
+        callback: () => this.accessibilityService.readSelection(),
+        title: "HAPA 선택 텍스트 읽기",
+      },
+      {
+        command: "hapa.increaseFontSize",
+        callback: () => this.accessibilityService.adjustFontSize(2),
+        title: "HAPA 폰트 크기 증가",
+      },
+      {
+        command: "hapa.decreaseFontSize",
+        callback: () => this.accessibilityService.adjustFontSize(-2),
+        title: "HAPA 폰트 크기 감소",
+      },
+      {
+        command: "hapa.toggleHighContrast",
+        callback: () =>
+          this.accessibilityService.toggleFeature("high-contrast"),
+        title: "HAPA 고대비 모드 토글",
+      },
+      {
+        command: "hapa.toggleKeyboardNavigation",
+        callback: () =>
+          this.accessibilityService.toggleFeature("keyboard-navigation"),
+        title: "HAPA 키보드 네비게이션 토글",
+      },
+      {
+        command: "hapa.toggleScreenReader",
+        callback: () =>
+          this.accessibilityService.toggleFeature("screen-reader"),
+        title: "HAPA 스크린 리더 모드 토글",
+      },
+
+      // 반응형 디자인 명령어
+      {
+        command: "hapa.showResponsiveReport",
+        callback: () => this.showResponsiveReport(),
+        title: "HAPA 반응형 디자인 보고서",
+      },
+      {
+        command: "hapa.showResponsiveCSS",
+        callback: () => this.showResponsiveCSS(),
+        title: "HAPA 반응형 CSS 보기",
+      },
+      {
+        command: "hapa.toggleResponsive",
+        callback: () => this.toggleResponsive(),
+        title: "HAPA 반응형 디자인 토글",
+      },
+      {
+        command: "hapa.setBreakpointMobile",
+        callback: () => this.responsiveDesignService.setBreakpoint("mobile"),
+        title: "HAPA 모바일 브레이크포인트 설정",
+      },
+      {
+        command: "hapa.setBreakpointTablet",
+        callback: () => this.responsiveDesignService.setBreakpoint("tablet"),
+        title: "HAPA 태블릿 브레이크포인트 설정",
+      },
+      {
+        command: "hapa.setBreakpointDesktop",
+        callback: () => this.responsiveDesignService.setBreakpoint("medium"),
+        title: "HAPA 데스크톱 브레이크포인트 설정",
+      },
+    ];
+
+    // 모든 명령어 등록
+    const allCommands = [...commands, ...advancedCommands];
+    allCommands.forEach(({ command, callback }) => {
       this.disposables.push(vscode.commands.registerCommand(command, callback));
     });
 
-    console.log(`📋 ${commands.length}개 명령어 등록 완료`);
+    console.log(`📋 ${allCommands.length}개 명령어 등록 완료`);
   }
 
   /**

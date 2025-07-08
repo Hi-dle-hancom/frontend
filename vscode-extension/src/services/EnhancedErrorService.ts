@@ -71,7 +71,7 @@ export class EnhancedErrorService {
     retryFunction?: () => Promise<any>,
     maxRetries: number = 3
   ): Promise<boolean> {
-    if (!retryFunction) return false;
+    if (!retryFunction) {return false;}
 
     for (let i = 0; i < maxRetries; i++) {
       try {
@@ -272,8 +272,8 @@ export class EnhancedErrorService {
       case ErrorSeverity.HIGH:
       case ErrorSeverity.CRITICAL:
         console.error(prefix, error.message);
-        if (error.stack) console.error(error.stack);
-        if (error.context) console.error("Context:", error.context);
+        if (error.stack) {console.error(error.stack);}
+        if (error.context) {console.error("Context:", error.context);}
         break;
     }
   }

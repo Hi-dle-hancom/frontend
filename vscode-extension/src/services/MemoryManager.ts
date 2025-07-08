@@ -38,6 +38,9 @@ export class MemoryManager {
   private memoryCheckInterval: NodeJS.Timeout | null = null;
   private memoryThreshold = 100 * 1024 * 1024; // 100MB
 
+  // 초기화 상태
+  private initialized = false;
+
   static getInstance(): MemoryManager {
     if (!MemoryManager.instance) {
       MemoryManager.instance = new MemoryManager();
@@ -51,7 +54,9 @@ export class MemoryManager {
   initialize(): void {
     this.startMemoryMonitoring();
     this.startCacheCleanup();
-    console.log("✅ MemoryManager 초기화됨");
+    // 초기화 완료
+    this.initialized = true;
+    // MemoryManager 초기화 완료
   }
 
   /**
@@ -79,10 +84,10 @@ export class MemoryManager {
 
   getCache<T>(namespace: string, key: string): T | null {
     const cache = this.caches.get(namespace);
-    if (!cache) return null;
+    if (!cache) {return null;}
 
     const entry = cache.get(key);
-    if (!entry) return null;
+    if (!entry) {return null;}
 
     // 만료 확인
     if (Date.now() - entry.timestamp > this.maxCacheAge) {
