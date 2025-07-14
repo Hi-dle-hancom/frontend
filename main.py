@@ -1,112 +1,269 @@
 """
-HAPA DB Module - 메인 애플리케이션
-사용자 관리 및 개인화 설정 마이크로서비스
+HAPA (Hancom AI Python Assistant) Backend
+메인 애플리케이션 엔트리 포인트
+- vLLM 멀티 LoRA 서버 통합
+- Enhanced AI 모델 서비스 지원
+- 실시간 스트리밍 코드 생성
 """
 
-from fastapi import FastAPI, HTTPException
+import time
+from contextlib import asynccontextmanager
+
+import uvicorn
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-import os
-from dotenv import load_dotenv
-import logging
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.responses import JSONResponse
 
-# 환경변수 로드
-load_dotenv(".env")
+# Core imports
+from app.core.config import settings
+from app.core.logging_config import setup_logging
+from app.core.structured_logger import StructuredLogger
 
-# 로깅 설정
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+# API imports
+from app.api.api import api_router
 
-# 모듈 import
-import database
-from routers import auth_router, settings_router, users_router, admin_router
+# Service imports
+from app.services.enhanced_ai_model import enhanced_ai_service
+from app.services.vllm_integration_service import vllm_service
+from app.middleware.enhanced_logging_middleware import EnhancedLoggingMiddleware
 
-# FastAPI 앱 생성
-app = FastAPI(
-    title="HAPA DB Module API",
-    description="사용자 관리 및 개인화 설정 마이크로서비스",
-    version="1.0.0"
-)
+# Exception handlers
+from app.api.endpoints.error_monitoring import setup_error_handlers
 
-# CORS 설정
-cors_origins = [
-    "http://3.13.240.111:3000",  # React Landing Page
-    "http://3.13.240.111:8000",  # Backend API
-    "vscode://*",                # VSCode Extension
-    "vscode-webview://*"         # VSCode WebView
-]
+logger = StructuredLogger("main")
 
-if os.getenv("ENVIRONMENT") == "development":
-    cors_origins.extend([
-        "http://localhost:3000", 
-        "http://localhost:8000", 
-        "http://localhost:8001"
-    ])
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=cors_origins,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE"],
-    allow_headers=["*"],
-)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    애플리케이션 라이프사이클 관리
+    - 시작시: Enhanced AI 서비스 초기화
+    - 종료시: 연결 정리
+    """
+    # === 시작 단계 ===
+    logger.log_system_event("HAPA 백엔드 시작", "started", {
+        "environment": settings.ENVIRONMENT,
+        "vllm_server": settings.VLLM_SERVER_URL,
+        "debug_mode": settings.DEBUG
+    })
 
-# 라우터 등록
-app.include_router(auth_router)
-app.include_router(settings_router)
-app.include_router(users_router)
-app.include_router(admin_router)
-
-# 애플리케이션 이벤트 핸들러
-@app.on_event("startup")
-async def startup_event():
-    """애플리케이션 시작 시 실행"""
-    await database.connect_to_db()
-    logger.info("🚀 HAPA DB Module 서버가 시작되었습니다.")
-
-@app.on_event("shutdown") 
-async def shutdown_event():
-    """애플리케이션 종료 시 실행"""
-    await database.close_db_connection()
-    logger.info("👋 HAPA DB Module 서버가 종료되었습니다.")
-
-# 기본 엔드포인트
-@app.get("/")
-async def root():
-    """API 상태 확인"""
-    return {
-        "message": "HAPA DB Module API is running!",
-        "environment": os.getenv("ENVIRONMENT", "development"),
-        "version": "1.0.0"
-    }
-
-@app.get("/health")
-async def health_check():
-    """헬스 체크 엔드포인트"""
     try:
-        pool = await database.get_db_pool()
-        async with pool.acquire() as connection:
-            await connection.fetchval("SELECT 1")
-        
-        return {
-            "status": "healthy",
-            "database": "connected",
-            "environment": os.getenv("ENVIRONMENT", "development")
-        }
-    except Exception as e:
-        raise HTTPException(
-            status_code=503,
-            detail=f"Database connection failed: {str(e)}"
-        )
+        # Enhanced AI 서비스 초기화
+        logger.log_system_event("Enhanced AI 서비스 초기화", "started")
+        await enhanced_ai_service.initialize()
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(
-        "main:app",
-        host=os.getenv("HOST", "0.0.0.0"),
-        port=int(os.getenv("PORT", "8001")),
-        reload=os.getenv("ENVIRONMENT") == "development"
+        # vLLM 서버 연결 확인
+        health_status = await vllm_service.check_health()
+        if health_status["status"] == "healthy":
+            logger.log_system_event("vLLM 서버 연결", "success", health_status)
+        else:
+            logger.log_system_event("vLLM 서버 연결", "failed", health_status)
+
+        # 백엔드 상태 조회
+        backend_status = await enhanced_ai_service.get_backend_status()
+        logger.log_system_event("AI 백엔드 상태", "success", backend_status)
+
+        logger.log_system_event("HAPA 백엔드 초기화", "completed", {
+            "vllm_available": backend_status["vllm"]["available"],
+            "backend_type": backend_status["backend_type"],
+            "last_health_check": backend_status["last_health_check"]
+        })
+
+    except Exception as e:
+        logger.log_error(e, "HAPA 백엔드 초기화")
+        # 초기화 실패해도 서버는 시작 (graceful degradation)
+
+    yield
+
+    # === 종료 단계 ===
+    logger.log_system_event("HAPA 백엔드 종료", "started")
+
+    try:
+        # Enhanced AI 서비스 정리
+        await enhanced_ai_service.close()
+
+        # vLLM 서비스 정리
+        await vllm_service.close()
+
+        logger.log_system_event("HAPA 백엔드 종료", "completed")
+
+    except Exception as e:
+        logger.log_error(e, "HAPA 백엔드 종료")
+
+
+def create_application() -> FastAPI:
+    """
+    FastAPI 애플리케이션 생성 및 설정
+    """
+    # 로깅 설정
+    setup_logging()
+
+    # FastAPI 인스턴스 생성
+    app = FastAPI(
+        title=settings.PROJECT_NAME,
+        version="1.0.0",
+        description="""
+        🚀 **HAPA (Hancom AI Python Assistant) API**
+
+        **새로운 기능:**
+        - 🤖 vLLM 멀티 LoRA 서버 통합
+        - 📡 실시간 스트리밍 코드 생성
+        - 🌐 한국어/영어 자동 번역
+        - 🔄 듀얼 백엔드 (vLLM + Legacy AI)
+        - 📊 성능 모니터링 및 분석
+
+        **지원 모델:**
+        - `autocomplete`: 코드 자동완성
+        - `prompt`: 일반 코드 생성
+        - `comment`: 주석/문서 생성
+        - `error_fix`: 버그 수정
+        """,
+        openapi_url=(
+            f"{settings.API_V1_PREFIX}/openapi.json"
+            if settings.DEBUG else None
+        ),
+        docs_url="/docs" if settings.DEBUG else None,
+        redoc_url="/redoc" if settings.DEBUG else None,
+        lifespan=lifespan
     )
 
+    # CORS 미들웨어 설정
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.CORS_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"]
+    )
+
+    # Enhanced 로깅 미들웨어 추가
+    app.add_middleware(EnhancedLoggingMiddleware)
+
+    # Trusted Host 미들웨어 (운영환경)
+    if not settings.DEBUG:
+        app.add_middleware(
+            TrustedHostMiddleware,
+            allowed_hosts=settings.ALLOWED_HOSTS
+        )
+
+    # API 라우터 포함
+    app.include_router(api_router, prefix=settings.API_V1_PREFIX)
+
+    # 에러 핸들러 설정
+    setup_error_handlers(app)
+
+    # 글로벌 미들웨어 - 요청 처리 시간 측정
+    @app.middleware("http")
+    async def add_process_time_header(request: Request, call_next):
+        start_time = time.time()
+        response = await call_next(request)
+        process_time = time.time() - start_time
+        response.headers["X-Process-Time"] = str(process_time)
+        return response
+
+    # 루트 엔드포인트 - vLLM 통합 상태 표시
+    @app.get("/", tags=["Root"])
+    async def root():
+        """
+        HAPA 백엔드 루트 엔드포인트
+        vLLM 통합 상태 및 서비스 정보 제공
+        """
+        try:
+            # 백엔드 상태 조회
+            backend_status = await enhanced_ai_service.get_backend_status()
+
+            return {
+                "service": "HAPA (Hancom AI Python Assistant)",
+                "version": "1.0.0",
+                "status": "running",
+                "timestamp": time.time(),
+                "environment": settings.ENVIRONMENT,
+                "ai_backends": {
+                    "backend_type": backend_status["backend_type"],
+                    "vllm": {
+                        "available": backend_status["vllm"]["available"],
+                        "server_url": settings.VLLM_SERVER_URL
+                    }
+                },
+                "features": [
+                    "실시간 스트리밍 코드 생성",
+                    "한국어/영어 자동 번역", 
+                    "vLLM 멀티 LoRA 모델 지원",
+                    "스마트 캐시 시스템",
+                    "고성능 AI 추론"
+                ],
+                "endpoints": {
+                    "docs": "/docs",
+                    "health": "/api/v1/code/health",
+                    "streaming": "/api/v1/code/generate/stream",
+                    "sync": "/api/v1/code/generate"
+                }
+            }
+
+        except Exception as e:
+            logger.log_error(e, "루트 엔드포인트")
+            return {
+                "service": "HAPA (Hancom AI Python Assistant)",
+                "status": "degraded",
+                "error": "백엔드 상태 조회 실패"
+            }
+
+    # vLLM 통합 상태 엔드포인트
+    @app.get("/vllm/status", tags=["vLLM Integration"])
+    async def vllm_status():
+        """
+        vLLM 멀티 LoRA 서버 통합 상태 상세 조회
+        """
+        try:
+            # vLLM 서버 상태
+            health_status = await vllm_service.check_health()
+
+            # 사용 가능한 모델
+            models_info = await vllm_service.get_available_models()
+
+            # 백엔드 상태
+            backend_status = await enhanced_ai_service.get_backend_status()
+
+            return {
+                "vllm_integration": {
+                    "server_health": health_status,
+                    "available_models": models_info.get("available_models", []),
+                    "server_details": models_info,
+                    "backend_status": backend_status["vllm"],
+                    "configuration": {
+                        "server_url": settings.VLLM_SERVER_URL,
+                        "timeout": settings.VLLM_TIMEOUT_SECONDS,
+                        "max_retries": settings.VLLM_MAX_RETRIES,
+                        "connection_pool_size": settings.VLLM_CONNECTION_POOL_SIZE
+                    }
+                },
+                "timestamp": time.time()
+            }
+
+        except Exception as e:
+            logger.log_error(e, "vLLM 상태 조회")
+            return JSONResponse(
+                status_code=500,
+                content={"error": "vLLM 상태 조회 실패", "details": str(e)}
+            )
+
+    # 간단한 헬스 체크 엔드포인트 추가
+    @app.get("/health", tags=["Health"])
+    async def health_check():
+        """서비스 상태 확인"""
+        return {"status": "healthy", "timestamp": time.time()}
+
+    return app
+
+
+app = create_application()
+
+if __name__ == "__main__":
+    uvicorn.run(
+        "main:app",
+        host=settings.HOST,
+        port=settings.PORT,
+        reload=settings.DEBUG,
+        log_level=settings.LOG_LEVEL.lower(),
+    ) 
