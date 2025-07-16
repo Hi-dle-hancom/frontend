@@ -58,8 +58,7 @@ async def validate_code(
         코드 검증 결과 (문법 오류, 실행 결과, 코드 구조 분석 등)
     """
     try:
-        logger.info(f"코드 검증 요청: {
-            request.language} - 길이: {len(request.code)}자 (사용자: {api_key.user_id})")
+        logger.info(f"코드 검증 요청: {request.language} - 길이: {len(request.code)}자 (사용자: {api_key.user_id})")
 
         # 코드 길이 검증
         if len(request.code.strip()) == 0:
@@ -76,18 +75,14 @@ async def validate_code(
         ]
         if request.language not in supported_languages:
             # 경고는 주지만 기본적으로 Python으로 처리
-            logger.warning(
-                f"지원하지 않는 언어: {
-                    request.language}, Python으로 처리 (사용자: {
-                    api_key.user_id})")
+            logger.warning(f"지원하지 않는 언어: {request.language}, Python으로 처리 (사용자: {api_key.user_id})")
             request.language = "python"
 
         # 코드 검증 수행 (사용자 ID 추가)
         result = validation_service.validate_code(
             request, user_id=api_key.user_id)
 
-        logger.info(f"코드 검증 완료: {
-            result.validation_id} - 상태: {result.status} (사용자: {api_key.user_id})")
+        logger.info(f"코드 검증 완료: {result.validation_id} - 상태: {result.status} (사용자: {api_key.user_id})")
         return result
 
     except HTTPException:
@@ -122,8 +117,7 @@ async def validate_code_batch(
         배치 검증 결과 (개별 검증 결과의 집합)
     """
     try:
-        logger.info(f"배치 코드 검증 요청: {
-            len(request.code_snippets)}개 스니펫 (사용자: {api_key.user_id})")
+        logger.info(f"배치 코드 검증 요청: {len(request.code_snippets)}개 스니펫 (사용자: {api_key.user_id})")
 
         batch_id = f"batch_{uuid.uuid4().hex[:8]}"
         results = []
@@ -184,8 +178,7 @@ async def validate_code_batch(
             timestamp=datetime.now(),
         )
 
-        logger.info(f"배치 코드 검증 완료: {
-            batch_id} - 성공: {valid_count}, 실패: {invalid_count} (사용자: {api_key.user_id})")
+        logger.info(f"배치 코드 검증 완료: {batch_id} - 성공: {valid_count}, 실패: {invalid_count} (사용자: {api_key.user_id})")
         return response
 
     except HTTPException:
@@ -221,10 +214,7 @@ async def get_validation_stats(
         stats = validation_service.get_validation_stats(
             user_id=api_key.user_id)
 
-        logger.info(
-            f"검증 통계 조회 성공: 총 {
-                stats.total_validations}개 (사용자: {
-                api_key.user_id})")
+        logger.info(f"검증 통계 조회 성공: 총 {stats.total_validations}개 (사용자: {api_key.user_id})")
         return stats
 
     except Exception as e:
@@ -266,10 +256,7 @@ async def get_validation_history(
             session_id, limit, user_id=api_key.user_id
         )
 
-        logger.info(
-            f"세션 {session_id} 검증 이력 조회 성공: {
-                len(history)}개 (사용자: {
-                api_key.user_id})")
+        logger.info(f"세션 {session_id} 검증 이력 조회 성공: {len(history)}개 (사용자: {api_key.user_id})")
         return history
 
     except Exception as e:
@@ -299,17 +286,13 @@ async def get_recent_validations(
         최신순으로 정렬된 검증 이력 리스트
     """
     try:
-        logger.info(f"최근 검증 이력 조회 요청: {limit}개, 언어: {
-            language} (사용자: {api_key.user_id})")
+        logger.info(f"최근 검증 이력 조회 요청: {limit}개, 언어: {language} (사용자: {api_key.user_id})")
 
         recent_validations = validation_service.get_recent_validations(
             limit, language, user_id=api_key.user_id
         )
 
-        logger.info(
-            f"최근 검증 이력 조회 성공: {
-                len(recent_validations)}개 (사용자: {
-                api_key.user_id})")
+        logger.info(f"최근 검증 이력 조회 성공: {len(recent_validations)}개 (사용자: {api_key.user_id})")
         return recent_validations
 
     except Exception as e:

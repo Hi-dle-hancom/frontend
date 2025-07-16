@@ -8,7 +8,9 @@ import json
 import logging
 from typing import Any, Dict, List, Optional, Union
 from pathlib import Path
-from pydantic import BaseSettings, Field, validator
+from pydantic import Field
+from pydantic_settings import BaseSettings
+from pydantic import field_validator
 from functools import lru_cache
 
 
@@ -67,13 +69,15 @@ class SecuritySettings(BaseSettings):
     ssl_cert_path: Optional[str] = Field(None, env="SSL_CERT_PATH")
     ssl_key_path: Optional[str] = Field(None, env="SSL_KEY_PATH")
     
-    @validator("allowed_origins", pre=True)
+    @field_validator("allowed_origins", mode='before')
+    @classmethod
     def parse_allowed_origins(cls, v):
         if isinstance(v, str):
             return [origin.strip() for origin in v.split(",")]
         return v
-    
-    @validator("allowed_hosts", pre=True)
+
+    @field_validator("allowed_hosts", mode='before')
+    @classmethod
     def parse_allowed_hosts(cls, v):
         if isinstance(v, str):
             return [host.strip() for host in v.split(",")]
@@ -139,19 +143,40 @@ class HAPASettings(BaseSettings):
     environment: str = Field("development", env="ENVIRONMENT")
     debug: bool = Field(False, env="DEBUG")
     
-    # 서브 설정들
-    database: DatabaseSettings = DatabaseSettings()
-    redis: RedisSettings = RedisSettings()
-    security: SecuritySettings = SecuritySettings()
-    server: ServerSettings = ServerSettings()
-    logging: LoggingSettings = LoggingSettings()
-    vllm: VLLMSettings = VLLMSettings()
-    monitoring: MonitoringSettings = MonitoringSettings()
+    # 서브 설정들을 property로 lazy loading
+    @property
+    def database(self) -> DatabaseSettings:
+        return DatabaseSettings()
+    
+    @property
+    def redis(self) -> RedisSettings:
+        return RedisSettings()
+    
+    @property
+    def security(self) -> SecuritySettings:
+        return SecuritySettings()
+    
+    @property
+    def server(self) -> ServerSettings:
+        return ServerSettings()
+    
+    @property
+    def logging(self) -> LoggingSettings:
+        return LoggingSettings()
+    
+    @property
+    def vllm(self) -> VLLMSettings:
+        return VLLMSettings()
+    
+    @property
+    def monitoring(self) -> MonitoringSettings:
+        return MonitoringSettings()
     
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
+        extra = "allow"
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

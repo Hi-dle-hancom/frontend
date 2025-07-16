@@ -95,8 +95,7 @@ class ErrorHandlingService:
 
         # 주요 오류 메시지 결정
         main_error = exc.errors()[0] if exc.errors() else {}
-        error_message = f"입력 데이터 검증에 실패했습니다: {
-            main_error.get('msg', '알 수 없는 오류')}"
+        error_message = f"입력 데이터 검증에 실패했습니다: {main_error.get('msg', '알 수 없는 오류')}"
 
         # 복구 가이드 생성
         recovery_guide = RecoveryGuide(
@@ -169,8 +168,7 @@ class ErrorHandlingService:
                 incident_id = (
                     f"INC-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:8]}"
                 )
-                logger.critical(f"Critical server error: {
-                                incident_id} - {exc.detail}")
+                logger.critical(f"Critical server error: {incident_id} - {exc.detail}")
 
             return ServerErrorResponse(
                 error_code=error_code,
@@ -210,8 +208,7 @@ class ErrorHandlingService:
         severity = self._determine_exception_severity(exc)
 
         # 인시던트 ID 생성
-        incident_id = f"INC-{datetime.now().strftime('%Y%m%d')
-                             }-{uuid.uuid4().hex[:8]}"
+        incident_id = f"INC-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:8]}"
 
         # 디버그 정보 수집
         debug_info = None

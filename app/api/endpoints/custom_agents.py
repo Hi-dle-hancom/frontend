@@ -305,10 +305,8 @@ async def generate_code_with_agent(
             raise HTTPException(status_code=404, detail="에이전트를 찾을 수 없습니다")
 
         # 커스텀 에이전트 접근 권한 확인
-        if agent.agent_id.startswith(
-            f"custom_") and not agent.agent_id.startswith(
-            f"custom_{
-                api_key.user_id}_"):
+        custom_prefix = f"custom_{api_key.user_id}_"
+        if agent.agent_id.startswith("custom_") and not agent.agent_id.startswith(custom_prefix):
             raise HTTPException(
                 status_code=403, detail="해당 에이전트에 접근할 권한이 없습니다"
             )

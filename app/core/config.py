@@ -360,6 +360,8 @@ class Settings(BaseSettings):
         "env_file": [".env.production", ".env"],
         "env_file_encoding": "utf-8",
         "case_sensitive": True,
+        "extra": "ignore"  # 🆕 추가: 정의되지 않은 필드 무시 
+        
     }
 
     def get_cors_origins(self) -> List[str]:
@@ -529,4 +531,4 @@ except Exception as e:
     # .env 파일이 없어도 기본값으로 설정 인스턴스 생성
     logger.warning(f".env 파일을 찾을 수 없거나 로드하는 중 오류 발생: {e}")
     logger.info("기본 설정값을 사용합니다.")
-    settings = Settings()
+    settings =Settings()

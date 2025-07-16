@@ -189,8 +189,7 @@ class PersistentCache:
             # 메모리 제한 적용
             self._enforce_memory_limit()
 
-            logger.debug(f"캐시 저장 완료: {key} (TTL: {ttl}초, Policy: {
-                policy}, Size: {value_size} bytes)")
+            logger.debug(f"캐시 저장 완료: {key} (TTL: {ttl}초, Policy: {policy}, Size: {value_size} bytes)")
             return True
 
         except Exception as e:
@@ -234,14 +233,11 @@ class PersistentCache:
                 target_memory = int(self.max_memory_bytes * 0.8)  # 80%까지 줄이기
                 bytes_to_free = current_memory - target_memory
 
-                logger.warning(
-                    f"메모리 제한 초과 ({
-                        current_memory /
-                        1024 /
-                        1024:.2f}MB), {
-                        bytes_to_free /
-                        1024 /
-                        1024:.2f}MB 정리 중...")
+                # 메모리 사용량 MB 계산
+                current_memory_mb = current_memory / 1024 / 1024
+                bytes_to_free_mb = bytes_to_free / 1024 / 1024
+
+                logger.warning(f"메모리 제한 초과 ({current_memory_mb:.2f}MB), {bytes_to_free_mb:.2f}MB 정리 중...")
                 self._cleanup_lru(bytes_to_free)
 
         except Exception as e:
@@ -269,9 +265,8 @@ class PersistentCache:
                     logger.error(f"LRU 정리 중 삭제 실패: {entry['key']} - {e}")
 
             if removed_count > 0:
-                logger.info(
-                    f"LRU 정리 완료: {removed_count}개 항목, {
-                        freed_bytes / 1024 / 1024:.2f}MB 확보")
+                freed_mb = freed_bytes / 1024 / 1024
+                logger.info(f"LRU 정리 완료: {removed_count}개 항목, {freed_mb:.2f}MB 확보")
 
         except Exception as e:
             logger.error(f"LRU 정리 실패: {e}")
@@ -538,25 +533,23 @@ class AdvancedCacheMonitor:
         # 메모리 사용량 확인 (안전한 접근)
         memory_mb = stats.get("total_size_mb", 0)
         if memory_mb > self.alert_thresholds["memory_usage_mb"]:
+            threshold_mb = self.alert_thresholds['memory_usage_mb']
             self._send_alert(
-                "HIGH_MEMORY_USAGE", f"캐시 메모리 사용량이 {
-                    memory_mb:.2f}MB를 초과했습니다 (임계값: {
-                    self.alert_thresholds['memory_usage_mb']}MB)", )
+                "HIGH_MEMORY_USAGE", f"캐시 메모리 사용량이 {memory_mb:.2f}MB를 초과했습니다 (임계값: {threshold_mb}MB)")
 
         # 히트율 확인 (안전한 접근)
         hit_rate = stats.get("hit_rate", 0)
         if hit_rate < self.alert_thresholds["hit_rate_threshold"]:
+            threshold_rate = self.alert_thresholds['hit_rate_threshold']
             self._send_alert(
-                "LOW_HIT_RATE", f"캐시 히트율이 {
-                    hit_rate:.2%}로 낮습니다 (임계값: {
-                    self.alert_thresholds['hit_rate_threshold']:.2%})", )
+                "LOW_HIT_RATE", f"캐시 히트율이 {hit_rate:.2%}로 낮습니다 (임계값: {threshold_rate:.2%})")
 
         # 엔트리 수 확인 (안전한 접근)
         entry_count = stats.get("total_entries", 0)
         if entry_count > self.alert_thresholds["max_entries"]:
+            max_entries = self.alert_thresholds['max_entries']
             self._send_alert(
-                "HIGH_ENTRY_COUNT", f"캐시 엔트리 수가 {entry_count}개를 초과했습니다 (임계값: {
-                    self.alert_thresholds['max_entries']}개)", )
+                "HIGH_ENTRY_COUNT", f"캐시 엔트리 수가 {entry_count}개를 초과했습니다 (임계값: {max_entries}개)")
 
         # 시스템 메모리 확인
         try:

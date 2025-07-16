@@ -45,8 +45,7 @@ async def submit_feedback(
     - **platform**: 플랫폼 정보 (vscode, web 등)
     """
     try:
-        logger.info(f"피드백 제출 요청: {
-            feedback.feedback_type} - {feedback.session_id} (사용자: {api_key.user_id})")
+        logger.info(f"피드백 제출 요청: {feedback.feedback_type} - {feedback.session_id} (사용자: {api_key.user_id})")
 
         # 피드백 유형별 유효성 검사
         if feedback.feedback_type == "rating" and feedback.rating is None:
@@ -141,10 +140,7 @@ async def get_feedback_by_session(
             session_id, user_id=api_key.user_id
         )
 
-        logger.info(
-            f"세션 {session_id} 피드백 조회 성공: {
-                len(feedback_list)}개 (사용자: {
-                api_key.user_id})")
+        logger.info(f"세션 {session_id} 피드백 조회 성공: {len(feedback_list)}개 (사용자: {api_key.user_id})")
         return feedback_list
 
     except Exception as e:

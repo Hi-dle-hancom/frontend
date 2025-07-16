@@ -142,8 +142,7 @@ class RateLimiter:
                     # Rate limit 정보 파싱하여 에러 메시지 생성
                     try:
                         limit_str, period_str = rate_limit.split("/")
-                        raise HTTPException(status_code=429, detail=f"Rate limit 초과: {
-                            period_str}당 {limit_str}회까지 요청 가능합니다.", )
+                        raise HTTPException(status_code=429, detail=f"Rate limit 초과: {period_str}당 {limit_str}회까지 요청 가능합니다.")
                     except ValueError:
                         raise HTTPException(
                             status_code=429, detail="Rate limit 초과")

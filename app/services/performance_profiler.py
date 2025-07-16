@@ -53,9 +53,8 @@ class PerformanceProfiler:
             }
 
             logger.info(
-                f"[PERFORMANCE] {function_name}: {
-                    execution_time:.4f}s, Memory: {
-                    memory_diff / 1024 / 1024:.2f}MB")
+                f"[PERFORMANCE] {function_name}: {execution_time:.4f}s, Memory: {memory_diff / 1024 / 1024:.2f}MB"
+            )
 
     def profile_decorator(self, function_name: str = None):
         """데코레이터를 통한 함수 프로파일링"""
@@ -143,7 +142,7 @@ class PerformanceProfiler:
         }
 
     def _generate_optimization_recommendations(
-        self, time_sorted: list, memory_sorted: list
+        self, time_sorted: list, memory_sorted: list, memory_mb: float
     ) -> list:
         """성능 최적화 권장사항 생성"""
         recommendations = []
@@ -154,8 +153,7 @@ class PerformanceProfiler:
                 {
                     "type": "execution_time",
                     "function": time_sorted[0][0],
-                    "issue": f"실행 시간이 {
-                        time_sorted[0][1]['execution_time']:.2f}초로 느림",
+                    "issue": f"실행 시간이 {time_sorted[0][1]['execution_time']:.2f}초로 느림",
                     "suggestion": "캐싱, 배치 처리, 또는 비동기 처리 고려",
                 })
 
@@ -166,10 +164,8 @@ class PerformanceProfiler:
                 {
                     "type": "memory_usage",
                     "function": memory_sorted[0][0],
-                    "issue": f"메모리 사용량이 {
-                        memory_sorted[0][1]['memory_used'] /
-                        1024 /
-                        1024:.2f}MB로 높음",
+                    "memory_mb": memory_sorted[0][1]['memory_used'] / 1024 / 1024,
+                    "issue": f"메모리 사용량이 {memory_mb:.2f}MB로 높음",
                     "suggestion": "제너레이터 사용, 메모리 풀링, 또는 스트리밍 처리 고려",
                 })
 
@@ -217,8 +213,7 @@ class ResponseTimeLogger:
                 }
             )
 
-            logger.info(f"[API_RESPONSE_TIME] {method} {
-                endpoint}: {response_time:.4f}s")
+            logger.info(f"[API_RESPONSE_TIME] {method} {endpoint}: {response_time:.4f}s")
 
     def get_average_response_time(self, endpoint: str = None) -> float:
         """평균 응답 시간 계산"""

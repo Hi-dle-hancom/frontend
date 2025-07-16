@@ -213,8 +213,7 @@ async def get_error_patterns(
     - 카테고리 (client_error, server_error, validation_error 등)
     """
     try:
-        logger.info(f"오류 패턴 분석 요청: limit={limit}, severity={
-            severity}, category={category}")
+        logger.info(f"오류 패턴 분석 요청: limit={limit}, severity={severity}, category={category}")
 
         # 전체 요약 데이터 가져오기
         time_range = timedelta(hours=hours)

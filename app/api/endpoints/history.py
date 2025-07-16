@@ -91,8 +91,7 @@ async def add_history_entry(
     - **line_number**: 라인 번호 (선택사항)
     """
     try:
-        logger.info(f"히스토리 엔트리 추가 요청: {
-            request.session_id} - {request.conversation_type} (사용자: {api_key.user_id})")
+        logger.info(f"히스토리 엔트리 추가 요청: {request.session_id} - {request.conversation_type} (사용자: {api_key.user_id})")
 
         response = history_service.add_entry(request, user_id=api_key.user_id)
 
@@ -138,10 +137,7 @@ async def get_session_history(
             session_id, limit, user_id=api_key.user_id
         )
 
-        logger.info(
-            f"세션 {session_id} 히스토리 조회 성공: {
-                len(history)}개 (사용자: {
-                api_key.user_id})")
+        logger.info(f"세션 {session_id} 히스토리 조회 성공: {len(history)}개 (사용자: {api_key.user_id})")
         return history
 
     except Exception as e:
@@ -251,10 +247,7 @@ async def get_history_stats(
 
         stats = history_service.get_stats(user_id=api_key.user_id)
 
-        logger.info(
-            f"히스토리 통계 조회 성공: 총 {
-                stats.total_sessions}개 세션 (사용자: {
-                api_key.user_id})")
+        logger.info(f"히스토리 통계 조회 성공: 총 {stats.total_sessions}개 세션 (사용자: {api_key.user_id})")
         return stats
 
     except Exception as e:
