@@ -3,6 +3,7 @@ import {
   apiClient,
   CodeGenerationRequest,
   CodeGenerationResponse,
+  VLLMModelType,
 } from "../modules/apiClient";
 import { PromptExtractor, ExtractedPrompt } from "../modules/promptExtractor";
 import { CodeInserter } from "../modules/inserter";
@@ -190,12 +191,24 @@ export abstract class BaseWebviewProvider
       const extractedPrompt =
         PromptExtractor.combinePromptWithContext(question);
 
-      // 백엔드 API 호출
+      // 백엔드 API 호출 (개선된 개인화 설정 포함)
       const request: CodeGenerationRequest = {
         prompt: question,
         context: extractedPrompt.context,
-        model_type: "CODE_GENERATION" as any,
+        model_type: VLLMModelType.CODE_GENERATION,
         language: "python",
+        temperature: 0.3,
+        top_p: 0.95,
+        max_tokens: 1024,
+
+        // 사용자 개인화 옵션 (DB 연동으로 개선)
+        programming_level: await this.getUserProgrammingLevel(),
+        explanation_detail: await this.getUserExplanationDetail(),
+        code_style: "pythonic",
+        include_comments: true,
+        include_docstring: true,
+        include_type_hints: true,
+        project_context: await this.getUserProjectContext(),
       };
 
       // 로딩 상태 표시
@@ -206,6 +219,15 @@ export abstract class BaseWebviewProvider
 
       // 실제 API 호출
       const response = await apiClient.generateCode(request);
+
+      console.log("📡 API 응답 상세 분석:", {
+        success: response.success,
+        hasGeneratedCode: !!response.generated_code,
+        codeLength: response.generated_code?.length || 0,
+        codePreview: response.generated_code?.substring(0, 100) || "없음",
+        hasExplanation: !!response.explanation,
+        errorMessage: response.error_message,
+      });
 
       // 성공 응답 처리 및 JSON 파싱
       if (response.success && response.generated_code) {
@@ -224,6 +246,11 @@ export abstract class BaseWebviewProvider
               console.log(
                 "✅ BaseWebviewProvider JSON 응답에서 text 필드 추출 성공"
               );
+            } else if (parsedCode.content) {
+              finalCode = parsedCode.content;
+              console.log(
+                "✅ BaseWebviewProvider JSON 응답에서 content 필드 추출 성공"
+              );
             }
           }
         } catch (parseError) {
@@ -234,24 +261,58 @@ export abstract class BaseWebviewProvider
           // JSON 파싱에 실패하면 원본 그대로 사용
         }
 
+        // 응답 데이터 정리
+        const cleanedCode = finalCode;
+
+        console.log("🧹 응답 정리 결과:", {
+          originalLength: finalCode.length,
+          cleanedLength: cleanedCode.length,
+          cleanedPreview: cleanedCode.substring(0, 100) || "없음",
+        });
+
         // 응답을 웹뷰에 전송
+        const responseData = {
+          generated_code: cleanedCode,
+          explanation: response.explanation || "AI가 생성한 코드입니다.",
+          originalQuestion: question,
+          success: true,
+          processingTime: response.processing_time || 0,
+        };
+
+        console.log("📤 웹뷰로 응답 전송:", {
+          command: "addAIResponse",
+          codeLength: responseData.generated_code.length,
+          hasExplanation: !!responseData.explanation,
+        });
+
         webview.postMessage({
           command: "addAIResponse",
-          response: {
-            generated_code: finalCode,
-            explanation: response.explanation || "AI가 생성한 코드입니다.",
-            originalQuestion: question,
-            success: true,
-          },
+          response: responseData,
         });
+
+        // 응답 표시 확인을 위한 추가 메시지
+        setTimeout(() => {
+          webview.postMessage({
+            command: "ensureResponseVisible",
+            data: responseData,
+          });
+        }, 100);
       } else {
         // 오류 응답 처리
+        console.error("❌ API 응답 실패:", {
+          success: response.success,
+          error: response.error_message,
+          hasCode: !!response.generated_code,
+        });
+
         webview.postMessage({
           command: "showError",
           error: response.error_message || "응답 생성에 실패했습니다.",
         });
       }
     } catch (error) {
+      console.error("❌ AI 질문 처리 실패:", error);
+
       // 에러 처리
       webview.postMessage({
         command: "showError",
@@ -281,6 +342,281 @@ export abstract class BaseWebviewProvider
           error instanceof Error ? error.message : "알 수 없는 오류"
         }`
       );
+    }
+  }
+
+  /**
+   * JWT 토큰 조회 (캐시된 설정에서)
+   */
+  protected getJWTToken(): string | null {
+    try {
+      const config = vscode.workspace.getConfiguration("hapa");
+      const accessToken = config.get<string>("auth.accessToken");
+      return accessToken || null;
+    } catch (error) {
+      console.error("❌ BaseWebviewProvider JWT 토큰 조회 실패:", error);
+      return null;
+    }
+  }
+
+  /**
+   * DB에서 사용자 설정 조회
+   */
+  protected async fetchUserSettingsFromDB(): Promise<{
+    success: boolean;
+    settings?: any[];
+    error?: string;
+  }> {
+    try {
+      const config = vscode.workspace.getConfiguration("hapa");
+      const apiBaseURL =
+        config.get<string>("apiBaseURL") || "http://3.13.240.111:8000/api/v1";
+      const accessToken = this.getJWTToken();
+
+      if (!accessToken) {
+        return {
+          success: false,
+          error: "JWT 토큰이 없습니다.",
+        };
+      }
+
+      console.log("⚙️ BaseWebviewProvider: DB에서 사용자 설정 조회 시작");
+
+      const response = await fetch(`${apiBaseURL}/users/settings`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        timeout: 10000,
+      } as any);
+
+      if (!response.ok) {
+        console.error(
+          "❌ BaseWebviewProvider 사용자 설정 조회 실패:",
+          response.status
+        );
+        return {
+          success: false,
+          error: `설정 조회 실패: ${response.status}`,
+        };
+      }
+
+      const settings = await response.json();
+      console.log("✅ BaseWebviewProvider DB 사용자 설정 조회 성공:", {
+        settingsCount: settings.length,
+      });
+
+      return { success: true, settings };
+    } catch (error) {
+      console.error("❌ BaseWebviewProvider 사용자 설정 조회 중 예외:", error);
+      return {
+        success: false,
+        error: "설정 조회 중 오류가 발생했습니다.",
+      };
+    }
+  }
+
+  /**
+   * DB 설정을 사용자 프로필로 변환
+   */
+  protected convertDBSettingsToUserProfile(dbSettings: any[]): any {
+    try {
+      const userProfile = {
+        pythonSkillLevel: "intermediate",
+        explanationStyle: "standard",
+        projectContext: "general_purpose",
+      };
+
+      // DB 설정을 사용자 프로필로 매핑
+      dbSettings.forEach((setting) => {
+        switch (setting.setting_type) {
+          case "python_skill_level":
+            userProfile.pythonSkillLevel = setting.option_value;
+            break;
+          case "explanation_style":
+            userProfile.explanationStyle = setting.option_value;
+            break;
+        }
+      });
+
+      console.log("🔄 BaseWebviewProvider DB 설정 변환 완료:", userProfile);
+      return userProfile;
+    } catch (error) {
+      console.error("❌ BaseWebviewProvider DB 설정 변환 실패:", error);
+      return {
+        pythonSkillLevel: "intermediate",
+        explanationStyle: "standard",
+        projectContext: "general_purpose",
+      };
+    }
+  }
+
+  /**
+   * 개선된 사용자 프로그래밍 레벨 가져오기 (JWT + DB 우선, 로컬 fallback)
+   */
+  protected async getUserProgrammingLevel(): Promise<
+    "beginner" | "intermediate" | "advanced" | "expert"
+  > {
+    try {
+      // 1단계: DB에서 실제 사용자 설정 조회 시도
+      const dbResult = await this.fetchUserSettingsFromDB();
+
+      if (dbResult.success && dbResult.settings) {
+        const userProfile = this.convertDBSettingsToUserProfile(
+          dbResult.settings
+        );
+        const dbLevel = userProfile.pythonSkillLevel;
+
+        if (
+          ["beginner", "intermediate", "advanced", "expert"].includes(dbLevel)
+        ) {
+          console.log(
+            "✅ BaseWebviewProvider: DB에서 프로그래밍 레벨 사용:",
+            dbLevel
+          );
+          return dbLevel as "beginner" | "intermediate" | "advanced" | "expert";
+        }
+      }
+
+      // 2단계: DB 조회 실패 시 로컬 VSCode 설정 사용 (fallback)
+      console.log("⚠️ BaseWebviewProvider: DB 조회 실패, 로컬 설정 사용");
+      const config = vscode.workspace.getConfiguration("hapa");
+      return config.get("userProfile.pythonSkillLevel", "intermediate") as any;
+    } catch (error) {
+      console.error(
+        "❌ BaseWebviewProvider getUserProgrammingLevel 오류:",
+        error
+      );
+      return "intermediate";
+    }
+  }
+
+  /**
+   * 개선된 사용자 설명 상세도 가져오기 (JWT + DB 우선, 로컬 fallback)
+   */
+  protected async getUserExplanationDetail(): Promise<
+    "minimal" | "standard" | "detailed" | "comprehensive"
+  > {
+    try {
+      // 1단계: DB에서 실제 사용자 설정 조회 시도
+      const dbResult = await this.fetchUserSettingsFromDB();
+
+      if (dbResult.success && dbResult.settings) {
+        const userProfile = this.convertDBSettingsToUserProfile(
+          dbResult.settings
+        );
+        const dbDetail = userProfile.explanationStyle;
+
+        // DB 스타일을 API 타입으로 매핑
+        const styleMapping: Record<
+          string,
+          "brief" | "standard" | "detailed" | "educational"
+        > = {
+          brief: "brief",
+          standard: "standard",
+          detailed: "detailed",
+          educational: "educational",
+        };
+
+        const mappedStyle = styleMapping[dbDetail] || "standard";
+        console.log(
+          "✅ BaseWebviewProvider: DB에서 설명 상세도 사용:",
+          `${dbDetail} → ${mappedStyle}`
+        );
+        return mappedStyle as
+          | "minimal"
+          | "standard"
+          | "detailed"
+          | "comprehensive";
+      }
+
+      // 2단계: DB 조회 실패 시 로컬 VSCode 설정 사용 (fallback)
+      console.log("⚠️ BaseWebviewProvider: DB 조회 실패, 로컬 설정 사용");
+      const config = vscode.workspace.getConfiguration("hapa");
+      const localStyle = config.get("userProfile.explanationStyle", "standard");
+
+      // 로컬 설정도 API 타입으로 매핑
+      const styleMapping: Record<
+        string,
+        "brief" | "standard" | "detailed" | "educational"
+      > = {
+        brief: "brief",
+        standard: "standard",
+        detailed: "detailed",
+        educational: "educational",
+      };
+
+      return (styleMapping[localStyle as string] || "standard") as
+        | "minimal"
+        | "standard"
+        | "detailed"
+        | "comprehensive";
+    } catch (error) {
+      console.error(
+        "❌ BaseWebviewProvider getUserExplanationDetail 오류:",
+        error
+      );
+      return "standard";
+    }
+  }
+
+  /**
+   * 개선된 사용자 프로젝트 컨텍스트 가져오기 (JWT + DB 우선, 로컬 fallback)
+   */
+  protected async getUserProjectContext(): Promise<string> {
+    try {
+      // 1단계: DB에서 실제 사용자 설정 조회 시도
+      const dbResult = await this.fetchUserSettingsFromDB();
+
+      if (dbResult.success && dbResult.settings) {
+        const userProfile = this.convertDBSettingsToUserProfile(
+          dbResult.settings
+        );
+        const dbContext = userProfile.projectContext;
+
+        // 프로젝트 컨텍스트를 문자열로 변환
+        const contextMap: Record<string, string> = {
+          web_development: "웹 개발",
+          data_science: "데이터 사이언스",
+          automation: "자동화",
+          general_purpose: "범용",
+          academic: "학술/연구",
+          enterprise: "기업용 개발",
+        };
+
+        const mappedContext = contextMap[dbContext] || "범용";
+        console.log(
+          "✅ BaseWebviewProvider: DB에서 프로젝트 컨텍스트 사용:",
+          `${dbContext} → ${mappedContext}`
+        );
+        return mappedContext;
+      }
+
+      // 2단계: DB 조회 실패 시 로컬 VSCode 설정 사용 (fallback)
+      console.log("⚠️ BaseWebviewProvider: DB 조회 실패, 로컬 설정 사용");
+      const config = vscode.workspace.getConfiguration("hapa");
+      const projectContext = config.get(
+        "userProfile.projectContext",
+        "general_purpose"
+      );
+
+      const contextMap: Record<string, string> = {
+        web_development: "웹 개발",
+        data_science: "데이터 사이언스",
+        automation: "자동화",
+        general_purpose: "범용",
+        academic: "학술/연구",
+        enterprise: "기업용 개발",
+      };
+
+      return contextMap[projectContext as string] || "범용";
+    } catch (error) {
+      console.error(
+        "❌ BaseWebviewProvider getUserProjectContext 오류:",
+        error
+      );
+      return "범용";
     }
   }
 }

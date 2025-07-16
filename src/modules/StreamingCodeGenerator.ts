@@ -28,7 +28,7 @@ const PERFORMANCE_LOGGING = true;
 // 타임아웃 설정
 const VLLM_API_TIMEOUT = 300000; // 5분
 const CONNECTION_TIMEOUT = 30000; // 30초
-const CHUNK_TIMEOUT = 10000; // 10초 청크 타임아웃
+const CHUNK_TIMEOUT = 60000; // 60초 청크 타임아웃 (10초 → 60초로 증가)
 
 /**
  * 스트리밍 코드 생성기 클래스
@@ -209,12 +209,15 @@ export class StreamingCodeGenerator {
               cleanLine = cleanLine.substring(6);
             }
 
-            // 강화된 [DONE] 신호 감지 및 종료 토큰 처리
+            // **강화된 스탑 태그 감지** (업데이트된 태그 포함)
             if (
               cleanLine === "[DONE]" ||
               cleanLine.trim() === "[DONE]" ||
               cleanLine === "data: [DONE]" ||
-              cleanLine.includes("[END_OF_GENERATION]")
+              cleanLine.includes("[END_OF_GENERATION]") ||
+              cleanLine.includes("<|EOT|>") ||
+              cleanLine.includes("# --- Generation Complete ---") ||
+              cleanLine.includes("</c>")
             ) {
               isStreamComplete = true;
               if (chunkTimeoutId) {
@@ -226,8 +229,20 @@ export class StreamingCodeGenerator {
                 console.log(`🏁 스트리밍 완료: 총 ${chunkCount}개 청크 처리`);
               }
 
-              // 종료 신호에 따른 다른 처리
-              if (cleanLine.includes("[END_OF_GENERATION]")) {
+              // **종료 신호별 구체적 처리**
+              if (cleanLine.includes("<|EOT|>")) {
+                if (DEBUG_MODE) {
+                  console.log("🔚 EOT 태그 감지 - 텍스트 종료");
+                }
+              } else if (cleanLine.includes("# --- Generation Complete ---")) {
+                if (DEBUG_MODE) {
+                  console.log("✅ Generation Complete 마커 감지 - 정상 완료");
+                }
+              } else if (cleanLine.includes("</c>")) {
+                if (DEBUG_MODE) {
+                  console.log("🔚 vLLM 종료 태그 감지 - 컨텍스트 종료");
+                }
+              } else if (cleanLine.includes("[END_OF_GENERATION]")) {
                 if (DEBUG_MODE) {
                   console.log("🛑 AI 모델 종료 토큰 감지 - 조기 완료");
                 }

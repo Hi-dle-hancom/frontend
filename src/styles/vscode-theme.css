@@ -441,3 +441,431 @@
   background-color: var(--hapa-list-active-selection-background);
   color: var(--hapa-list-active-selection-foreground);
 }
+
+/* ============================================================================
+   AI 응답 UI 스타일링 (개선된 분리 구조)
+   ============================================================================ */
+
+.ai-response-container {
+  background-color: var(--hapa-panel-background);
+  border: 1px solid var(--hapa-panel-border);
+  border-radius: 8px;
+  margin: 16px 0;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+}
+
+.ai-response-container:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* 설명 섹션 */
+.explanation-section {
+  background-color: var(--hapa-editor-background);
+  border-bottom: 1px solid var(--hapa-panel-border);
+  padding: 16px;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--hapa-foreground);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.explanation-content {
+  color: var(--hapa-foreground);
+  font-size: 13px;
+  line-height: 1.6;
+  font-family: var(--vscode-font-family);
+}
+
+.explanation-content p {
+  margin: 8px 0;
+}
+
+.explanation-content p:first-child {
+  margin-top: 0;
+}
+
+.explanation-content p:last-child {
+  margin-bottom: 0;
+}
+
+.explanation-content strong {
+  font-weight: 600;
+  color: var(--hapa-accent-foreground);
+}
+
+.explanation-content em {
+  font-style: italic;
+  color: var(--hapa-secondary-foreground);
+}
+
+.explanation-content .inline-code {
+  background-color: var(--hapa-input-background);
+  color: var(--hapa-accent-foreground);
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-family: var(--vscode-editor-font-family);
+  font-size: 0.9em;
+}
+
+/* 코드 섹션 */
+.code-section {
+  background-color: var(--hapa-editor-background);
+  border-bottom: 1px solid var(--hapa-panel-border);
+}
+
+.code-info {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.language-tag {
+  background-color: var(--hapa-button-background);
+  color: var(--hapa-button-foreground);
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.lines-count {
+  color: var(--hapa-secondary-foreground);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.code-container {
+  background-color: var(--hapa-editor-background);
+  border-radius: 0;
+  margin: 0;
+  overflow-x: auto;
+}
+
+.code-block {
+  margin: 0;
+  padding: 16px;
+  background-color: var(--hapa-editor-background);
+  color: var(--hapa-editor-foreground);
+  font-family: var(--vscode-editor-font-family);
+  font-size: var(--vscode-editor-font-size);
+  line-height: 1.5;
+  white-space: pre;
+  overflow-x: auto;
+  border: none;
+}
+
+.code-block code {
+  background: none;
+  padding: 0;
+  margin: 0;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* 메타데이터 섹션 */
+.metadata-section {
+  background-color: var(--hapa-panel-background);
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--hapa-panel-border);
+}
+
+.meta-items {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.meta-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--hapa-secondary-foreground);
+  font-size: 12px;
+}
+
+.meta-icon {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.meta-text {
+  font-weight: 500;
+}
+
+/* 액션 버튼 섹션 */
+.action-section {
+  background-color: var(--hapa-panel-background);
+  padding: 12px 16px;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.action-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 1px solid var(--hapa-button-border);
+  border-radius: 6px;
+  background-color: var(--hapa-button-background);
+  color: var(--hapa-button-foreground);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+  outline: none;
+}
+
+.action-button:hover {
+  background-color: var(--hapa-button-hover-background);
+  border-color: var(--hapa-accent-border);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.action-button:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.button-icon {
+  font-size: 12px;
+}
+
+.button-text {
+  font-weight: 500;
+}
+
+.copy-button {
+  background-color: var(--hapa-button-secondary-background);
+  color: var(--hapa-button-secondary-foreground);
+}
+
+.copy-button:hover {
+  background-color: var(--hapa-button-secondary-hover-background);
+}
+
+.insert-button {
+  background-color: var(--hapa-accent-background);
+  color: var(--hapa-accent-foreground);
+  border-color: var(--hapa-accent-border);
+}
+
+.insert-button:hover {
+  background-color: var(--hapa-accent-hover-background);
+}
+
+/* 반응형 디자인 */
+@media (max-width: 480px) {
+  .section-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .code-info {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .meta-items {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .action-section {
+    flex-direction: column;
+  }
+
+  .action-button {
+    justify-content: center;
+  }
+}
+
+/* 다크/라이트 테마 호환성 */
+[data-vscode-theme-kind="vscode-dark"] .ai-response-container {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+[data-vscode-theme-kind="vscode-light"] .ai-response-container {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+[data-vscode-theme-kind="vscode-high-contrast"] .ai-response-container {
+  border-width: 2px;
+  box-shadow: none;
+}
+
+/* ============================================================================
+   Syntax Highlighting 스타일링
+   ============================================================================ */
+
+/* Python Syntax Highlighting */
+.language-python .keyword {
+  color: #569cd6; /* Blue */
+  font-weight: 600;
+}
+
+.language-python .string {
+  color: #ce9178; /* Orange */
+}
+
+.language-python .number {
+  color: #b5cea8; /* Light Green */
+}
+
+.language-python .comment {
+  color: #6a9955; /* Green */
+  font-style: italic;
+}
+
+.language-python .function {
+  color: #dcdcaa; /* Yellow */
+}
+
+.language-python .builtin {
+  color: #4ec9b0; /* Cyan */
+}
+
+/* JavaScript Syntax Highlighting */
+.language-javascript .keyword {
+  color: #569cd6; /* Blue */
+  font-weight: 600;
+}
+
+.language-javascript .string {
+  color: #ce9178; /* Orange */
+}
+
+.language-javascript .number {
+  color: #b5cea8; /* Light Green */
+}
+
+.language-javascript .comment {
+  color: #6a9955; /* Green */
+  font-style: italic;
+}
+
+.language-javascript .function {
+  color: #dcdcaa; /* Yellow */
+}
+
+/* SQL Syntax Highlighting */
+.language-sql .keyword {
+  color: #569cd6; /* Blue */
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.language-sql .string {
+  color: #ce9178; /* Orange */
+}
+
+.language-sql .number {
+  color: #b5cea8; /* Light Green */
+}
+
+.language-sql .comment {
+  color: #6a9955; /* Green */
+  font-style: italic;
+}
+
+/* 일반 코드 하이라이팅 */
+.language-code .keyword,
+.language-text .keyword {
+  color: #569cd6;
+  font-weight: 600;
+}
+
+.language-code .string,
+.language-text .string {
+  color: #ce9178;
+}
+
+.language-code .number,
+.language-text .number {
+  color: #b5cea8;
+}
+
+.language-code .comment,
+.language-text .comment {
+  color: #6a9955;
+  font-style: italic;
+}
+
+/* 라이트 테마 오버라이드 */
+[data-vscode-theme-kind="vscode-light"] .keyword {
+  color: #0000ff; /* Blue */
+}
+
+[data-vscode-theme-kind="vscode-light"] .string {
+  color: #a31515; /* Red */
+}
+
+[data-vscode-theme-kind="vscode-light"] .number {
+  color: #098658; /* Green */
+}
+
+[data-vscode-theme-kind="vscode-light"] .comment {
+  color: #008000; /* Green */
+}
+
+[data-vscode-theme-kind="vscode-light"] .function {
+  color: #795e26; /* Brown */
+}
+
+[data-vscode-theme-kind="vscode-light"] .builtin {
+  color: #267f99; /* Teal */
+}
+
+/* 하이 컨트라스트 테마 오버라이드 */
+[data-vscode-theme-kind="vscode-high-contrast"] .keyword {
+  color: #569cd6;
+  font-weight: bold;
+}
+
+[data-vscode-theme-kind="vscode-high-contrast"] .string {
+  color: #ce9178;
+  font-weight: bold;
+}
+
+[data-vscode-theme-kind="vscode-high-contrast"] .number {
+  color: #b5cea8;
+  font-weight: bold;
+}
+
+[data-vscode-theme-kind="vscode-high-contrast"] .comment {
+  color: #6a9955;
+  font-weight: bold;
+}
+
+[data-vscode-theme-kind="vscode-high-contrast"] .function {
+  color: #dcdcaa;
+  font-weight: bold;
+}
+
+[data-vscode-theme-kind="vscode-high-contrast"] .builtin {
+  color: #4ec9b0;
+  font-weight: bold;
+}

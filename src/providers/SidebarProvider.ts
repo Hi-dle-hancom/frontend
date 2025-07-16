@@ -4,20 +4,24 @@ import { TriggerDetector, TriggerEvent } from "../modules/triggerDetector";
 import { ExtractedPrompt } from "../modules/promptExtractor";
 import { CodeGenerationRequest } from "../modules/apiClient";
 import { SidebarHtmlGenerator } from "../templates/SidebarHtmlGenerator";
-import {
-  apiClient,
-  StreamingChunk,
-} from "../modules/apiClient";
+import { apiClient, StreamingChunk } from "../modules/apiClient";
 import { VLLMModelType } from "../modules/apiClient";
 import { ConfigService } from "../services/ConfigService";
 
 /**
- * 사이드바 대시보드 웹뷰 프로바이더 클래스
+ * 개선된 사이드바 대시보드 웹뷰 프로바이더 클래스
+ * - JWT 토큰 기반 실제 사용자 설정 조회
+ * - DB 연동된 사용자 컨텍스트 사용
  */
 export class SidebarProvider extends BaseWebviewProvider {
   private triggerDetector: TriggerDetector;
   private selectedModel: string | undefined;
   private configService: ConfigService;
+
+  // 캐시된 사용자 설정 (성능 최적화)
+  private cachedUserSettings: any = null;
+  private settingsLastFetch: number = 0;
+  private readonly SETTINGS_CACHE_TTL = 5 * 60 * 1000; // 5분 캐시
 
   /**
    * 패널 타입 반환
@@ -30,7 +34,7 @@ export class SidebarProvider extends BaseWebviewProvider {
    * 패널 제목 반환
    */
   protected getPanelTitle(): string {
-    return "HAPA Assistant";
+    return "HAPA";
   }
 
   // 히스토리 상태 관리를 위한 속성들 추가
@@ -89,23 +93,33 @@ export class SidebarProvider extends BaseWebviewProvider {
 
       // 사이드바에 전송
       if (this._view?.webview) {
-        this._view.webview.postMessage({
-          command: "syncHistory",
-          history: historyData,
-        }).then(undefined, (error) => {
-          console.error("❌ 사이드바 히스토리 동기화 메시지 전송 실패:", error);
-        });
+        this._view.webview
+          .postMessage({
+            command: "syncHistory",
+            history: historyData,
+          })
+          .then(undefined, (error) => {
+            console.error(
+              "❌ 사이드바 히스토리 동기화 메시지 전송 실패:",
+              error
+            );
+          });
       }
 
       // 모든 expand 패널에 전송
       this.expandedPanels.forEach((panel, index) => {
         if (panel.webview) {
-          panel.webview.postMessage({
-            command: "syncHistory",
-            history: historyData,
-          }).then(undefined, (error) => {
-            console.error(`❌ 확장 패널 ${index} 히스토리 동기화 메시지 전송 실패:`, error);
-          });
+          panel.webview
+            .postMessage({
+              command: "syncHistory",
+              history: historyData,
+            })
+            .then(undefined, (error) => {
+              console.error(
+                `❌ 확장 패널 ${index} 히스토리 동기화 메시지 전송 실패:`,
+                error
+              );
+            });
         }
       });
     } catch (error) {
@@ -114,9 +128,9 @@ export class SidebarProvider extends BaseWebviewProvider {
   }
 
   /**
-   * 히스토리에 새 항목 추가
+   * 히스토리에 새 항목 추가 (로컬 + DB 동시 저장)
    */
-  private addToHistory(question: string, response: string) {
+  private async addToHistory(question: string, response: string) {
     console.log("📚 히스토리 저장 시도:", {
       question_preview: question.substring(0, 50) + "...",
       response_length: response.length,
@@ -132,7 +146,7 @@ export class SidebarProvider extends BaseWebviewProvider {
       );
 
     if (recentSameQuestions.length < 3) {
-      // 새로운 히스토리 항목 추가
+      // 1단계: 로컬 히스토리 저장 (기존 방식)
       this.questionHistory.unshift({
         question: question,
         timestamp: new Date().toLocaleString("ko-KR"),
@@ -147,18 +161,169 @@ export class SidebarProvider extends BaseWebviewProvider {
         );
       }
 
-      // 저장 및 동기화
+      // 로컬 저장 및 동기화
       this.saveHistory();
 
-      console.log("✅ 히스토리 저장 완료:", {
+      console.log("✅ 로컬 히스토리 저장 완료:", {
         total_count: this.questionHistory.length,
         saved_timestamp: new Date().toLocaleString("ko-KR"),
+      });
+
+      // 2단계: 백엔드 DB 저장 (비동기)
+      this.saveHistoryToDB(question, response).catch((error) => {
+        console.error("❌ DB 히스토리 저장 실패:", error);
+        // DB 저장 실패해도 로컬 저장은 유지됨
       });
     } else {
       console.log("⚠️ 히스토리 저장 스킵 (중복 질문 제한):", {
         duplicate_count: recentSameQuestions.length,
         question_preview: question.substring(0, 50) + "...",
       });
+    }
+  }
+
+  /**
+   * 백엔드 DB에 히스토리 저장
+   */
+  private async saveHistoryToDB(
+    question: string,
+    response: string
+  ): Promise<void> {
+    try {
+      // JWT 토큰 확인
+      const accessToken = this.getJWTToken();
+      if (!accessToken) {
+        console.log("⚠️ JWT 토큰이 없어 DB 히스토리 저장을 건너뜁니다.");
+        return;
+      }
+
+      const config = vscode.workspace.getConfiguration("hapa");
+      const apiBaseURL =
+        config.get<string>("apiBaseURL") || "http://3.13.240.111:8000/api/v1";
+
+      console.log("🔄 DB 히스토리 저장 시작...");
+
+      // 1단계: 세션 생성 또는 기존 세션 사용
+      const sessionId = await this.getOrCreateSession(apiBaseURL, accessToken);
+
+      if (!sessionId) {
+        throw new Error("세션 생성 실패");
+      }
+
+      // 2단계: 질문 엔트리 추가
+      const questionEntry = {
+        session_id: sessionId,
+        conversation_type: "question",
+        content: question,
+        language: "python",
+        code_snippet: null,
+        file_name: null,
+        line_number: null,
+        response_time: null,
+        confidence_score: null,
+      };
+
+      const questionResponse = await fetch(`${apiBaseURL}/history/entries`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(questionEntry),
+        timeout: 10000,
+      } as any);
+
+      if (!questionResponse.ok) {
+        throw new Error(`질문 저장 실패: ${questionResponse.status}`);
+      }
+
+      // 3단계: 응답 엔트리 추가
+      const answerEntry = {
+        session_id: sessionId,
+        conversation_type: "answer",
+        content: response,
+        language: "python",
+        code_snippet: response.includes("```") ? response : null,
+        file_name: null,
+        line_number: null,
+        response_time: null,
+        confidence_score: null,
+      };
+
+      const answerResponse = await fetch(`${apiBaseURL}/history/entries`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(answerEntry),
+        timeout: 10000,
+      } as any);
+
+      if (!answerResponse.ok) {
+        throw new Error(`응답 저장 실패: ${answerResponse.status}`);
+      }
+
+      console.log("✅ DB 히스토리 저장 완료:", {
+        session_id: sessionId,
+        question_length: question.length,
+        response_length: response.length,
+      });
+    } catch (error) {
+      console.error("❌ DB 히스토리 저장 중 예외 발생:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * 세션 생성 또는 기존 세션 반환
+   */
+  private async getOrCreateSession(
+    apiBaseURL: string,
+    accessToken: string
+  ): Promise<string | null> {
+    try {
+      // 현재 세션 ID 캐시 (클래스 변수로 관리)
+      if ((this as any).currentSessionId) {
+        return (this as any).currentSessionId;
+      }
+
+      // 새 세션 생성
+      const sessionData = {
+        session_title: `HAPA Session ${new Date().toLocaleDateString("ko-KR")}`,
+        primary_language: "python",
+        tags: ["vscode", "hapa"],
+        project_name: vscode.workspace.name || "Unknown Project",
+      };
+
+      const response = await fetch(`${apiBaseURL}/history/sessions`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(sessionData),
+        timeout: 10000,
+      } as any);
+
+      if (!response.ok) {
+        throw new Error(`세션 생성 실패: ${response.status}`);
+      }
+
+      const result = await response.json();
+      const sessionId = result.session_id;
+
+      // 세션 ID 캐시 (5분간 유지)
+      (this as any).currentSessionId = sessionId;
+      setTimeout(() => {
+        (this as any).currentSessionId = null;
+      }, 5 * 60 * 1000);
+
+      console.log("✅ 새 세션 생성:", sessionId);
+      return sessionId;
+    } catch (error) {
+      console.error("❌ 세션 생성 실패:", error);
+      return null;
     }
   }
 
@@ -253,23 +418,27 @@ export class SidebarProvider extends BaseWebviewProvider {
 
       // 사이드바에 코드 맥락 정보 전송
       if (this._view?.webview) {
-        this._view.webview.postMessage({
-          command: "updateCodeContext",
-          context: contextInfo,
-        }).then(undefined, (error) => {
-          console.error("❌ 사이드바 코드 맥락 메시지 전송 실패:", error);
-        });
+        this._view.webview
+          .postMessage({
+            command: "updateCodeContext",
+            context: contextInfo,
+          })
+          .then(undefined, (error) => {
+            console.error("❌ 사이드바 코드 맥락 메시지 전송 실패:", error);
+          });
       }
 
       // 모든 expand 패널에 코드 맥락 정보 전송
       this.expandedPanels.forEach((panel) => {
         if (panel.webview) {
-          panel.webview.postMessage({
-            command: "updateCodeContext",
-            context: contextInfo,
-          }).then(undefined, (error) => {
-            console.error("❌ 확장 패널 코드 맥락 메시지 전송 실패:", error);
-          });
+          panel.webview
+            .postMessage({
+              command: "updateCodeContext",
+              context: contextInfo,
+            })
+            .then(undefined, (error) => {
+              console.error("❌ 확장 패널 코드 맥락 메시지 전송 실패:", error);
+            });
         }
       });
     } catch (error) {
@@ -416,12 +585,16 @@ export class SidebarProvider extends BaseWebviewProvider {
         return;
       case "generateCodeStreaming":
         console.log("🔔 [SidebarProvider] generateCodeStreaming 메시지 수신");
-        
+
         try {
           // 메시지 정규화 - question 또는 prompt 필드 지원
           const prompt = message.question || message.prompt;
-          const modelType = message.modelType || message.model_type || this.selectedModel || "autocomplete";
-          
+          const modelType =
+            message.modelType ||
+            message.model_type ||
+            this.selectedModel ||
+            "autocomplete";
+
           if (!prompt || prompt.trim().length === 0) {
             console.error("❌ 빈 질문/프롬프트 수신");
             this.sendErrorToWebview("질문을 입력해주세요.");
@@ -431,10 +604,22 @@ export class SidebarProvider extends BaseWebviewProvider {
           console.log("✅ 정규화된 요청:", {
             prompt: prompt.substring(0, 100) + "...",
             modelType,
-            promptLength: prompt.length
+            promptLength: prompt.length,
           });
 
-          await this.handleStreamingCodeGeneration(prompt, modelType);
+          // 두 가지 모드 모두 지원: 스트리밍 및 동기식
+          const preferSync = message.preferSync || false;
+
+          if (preferSync) {
+            console.log("🔄 동기식 모드로 처리");
+            await this.handleSyncCodeGeneration(
+              prompt,
+              this.mapModelToVLLMType(modelType)
+            );
+          } else {
+            console.log("🔄 스트리밍 모드로 처리");
+            await this.handleStreamingCodeGeneration(prompt, modelType);
+          }
         } catch (error) {
           console.error("❌ generateCodeStreaming 처리 오류:", error);
           this.sendErrorToWebview("요청 처리 중 오류가 발생했습니다.");
@@ -454,7 +639,9 @@ export class SidebarProvider extends BaseWebviewProvider {
         return;
       case "addToHistory":
         // 히스토리 추가 요청 처리
-        this.addToHistory(message.question, message.response);
+        this.addToHistory(message.question, message.response).catch((error) => {
+          console.error("❌ 히스토리 저장 실패:", error);
+        });
         return;
       case "getHistory":
         // 히스토리 요청 처리
@@ -737,7 +924,11 @@ ${previousContent}
         });
 
         // 히스토리에 추가 (이어가기 요청도 저장)
-        this.addToHistory(continuePrompt, finalCleanedContent);
+        this.addToHistory(continuePrompt, finalCleanedContent).catch(
+          (error) => {
+            console.error("❌ 히스토리 저장 실패:", error);
+          }
+        );
 
         resolve();
       } catch (error) {
@@ -842,7 +1033,7 @@ ${previousContent}
     // 스트리밍 완료 후 최종 응답 저장용 변수
     let finalStreamingContent = "";
 
-    // 버그 수정 전용 API 요청 구성
+    // 버그 수정 전용 API 요청 구성 (DB 연동 개선)
     const bugFixRequest = {
       prompt: question,
       context: codeContext || "",
@@ -851,13 +1042,13 @@ ${previousContent}
       temperature: 0.3,
       top_p: 0.95,
       max_tokens: 1024,
-      programming_level: "intermediate",
-      explanation_detail: "standard",
+      programming_level: await this.getUserProgrammingLevel(),
+      explanation_detail: await this.getUserExplanationDetail(),
       code_style: "pythonic",
       include_comments: true,
       include_docstring: true,
       include_type_hints: true,
-      project_context: "",
+      project_context: await this.getUserProjectContext(),
     };
 
     console.log("🚀 ERROR 모드 API 요청 데이터:", {
@@ -881,20 +1072,23 @@ ${previousContent}
       },
 
       onChunk: (chunk: StreamingChunk) => {
+        // Backend 호환성: text 필드도 지원
+        const chunkContent = (chunk as any).text || chunk.content || "";
+
         console.log("📦 스트리밍 청크 수신:", {
           chunkType: chunk.type,
-          chunkContentLength: chunk.content?.length || 0,
+          chunkContentLength: chunkContent.length,
           chunkSequence: chunk.sequence,
           hasWebview: !!this._view?.webview,
-          chunkContent: chunk.content?.substring(0, 50) + "..." || "empty",
+          chunkContent: chunkContent.substring(0, 50) + "..." || "empty",
         });
 
         if (this._view?.webview) {
           // [DONE] 신호 감지 - 스트리밍 종료 처리
           if (
-            chunk.content === "[DONE]" ||
-            (typeof chunk.content === "string" &&
-              chunk.content.trim() === "[DONE]") ||
+            chunkContent === "[DONE]" ||
+            (typeof chunkContent === "string" &&
+              chunkContent.trim() === "[DONE]") ||
             chunk.type === "done" ||
             chunk.is_complete === true
           ) {
@@ -920,7 +1114,7 @@ ${previousContent}
             command: "streamingChunk",
             chunk: {
               type: chunk.type || "text",
-              content: chunk.content || "",
+              content: chunkContent || "",
               sequence: chunk.sequence || 0,
               timestamp: chunk.timestamp || Date.now(),
               is_complete: chunk.is_complete || false,
@@ -942,7 +1136,9 @@ ${previousContent}
         }
 
         // 히스토리에 추가 (질문과 현재까지 누적된 응답)
-        this.addToHistory(question.trim(), "AI 생성 코드");
+        this.addToHistory(question.trim(), "AI 생성 코드").catch((error) => {
+          console.error("❌ 히스토리 저장 실패:", error);
+        });
       },
 
       onError: (error: Error) => {
@@ -1057,7 +1253,7 @@ ${previousContent}
     let streamingStartTime = Date.now();
     let chunkCount = 0;
     let lastChunkTime = Date.now();
-    
+
     // 청크 번들링을 위한 변수들
     let chunkBuffer = "";
     let lastBundleTime = Date.now();
@@ -1086,41 +1282,160 @@ ${previousContent}
           chunkCount++;
           lastChunkTime = Date.now();
 
-          // im_end 태그 감지 및 조기 종료
-          if (chunk.content && chunk.content.includes('<|im_end|>')) {
-            console.log("🔚 im_end 태그 감지 - 스트리밍 종료");
-            // im_end 태그 전까지의 내용만 추가
-            const contentBeforeEnd = chunk.content.split('<|im_end|>')[0];
-            if (contentBeforeEnd.trim()) {
-              finalStreamingContent += contentBeforeEnd;
-              
-              // 마지막 청크 전송
-              if (this._view?.webview) {
-                this._view.webview.postMessage({
-                  command: "streamingChunk",
-                  chunk: {
-                    ...chunk,
-                    content: contentBeforeEnd,
-                    type: "final"
-                  },
-                  chunkNumber: chunkCount,
-                  isLast: true
-                });
+          // 현재 청크 내용 추출
+          const currentChunkContent =
+            (chunk as any).text || chunk.content || "";
+
+          // 🚀 강화된 조기 종료 로직 - 간단한 요청 감지
+          if (currentChunkContent) {
+            // 1. 실제 vLLM stop token 감지 - FIM 토큰 포함
+            const stopTokens = [
+              "\n# --- Generation Complete ---", // vLLM 완료 마커
+              "", // FIM 시작 토큰
+              "", // FIM 종료 토큰
+              "<|endoftext|>", // GPT 스타일 종료
+              "<|im_end|>", // 백업용 ChatML 종료
+              "</s>", // 백업용 시퀀스 종료
+              "[DONE]", // 백업용 완료 신호
+            ];
+
+            let detectedStopToken: string | null = null;
+            let contentBeforeStop = currentChunkContent;
+
+            for (const stopToken of stopTokens) {
+              if (currentChunkContent.includes(stopToken)) {
+                console.log(
+                  `🔚 실제 vLLM stop token 감지: ${stopToken} - 스트리밍 종료`
+                );
+                detectedStopToken = stopToken;
+                contentBeforeStop = currentChunkContent.split(stopToken)[0];
+                break;
               }
             }
-            
-            // 스트리밍 완료 호출
-            setTimeout(() => {
-              if (this._view?.webview) {
-                this._view.webview.postMessage({
-                  command: "streamingComplete",
-                  finalContent: this.cleanAIResponse(finalStreamingContent),
-                  totalChunks: chunkCount,
-                  duration: lastChunkTime - streamingStartTime
-                });
+
+            if (detectedStopToken) {
+              // Stop token 앞부분만 추가
+              if (contentBeforeStop.trim()) {
+                finalStreamingContent += contentBeforeStop;
+
+                // 웹뷰에 최종 청크 전송
+                if (this._view?.webview) {
+                  this._view.webview.postMessage({
+                    command: "streamingChunk",
+                    chunk: {
+                      ...chunk,
+                      content: contentBeforeStop,
+                      type: "final",
+                    },
+                    chunkNumber: chunkCount,
+                    isLast: true,
+                  });
+                }
               }
-            }, 50);
-            return;
+
+              // 스트리밍 완료 처리
+              setTimeout(() => {
+                if (this._view?.webview) {
+                  this._view.webview.postMessage({
+                    command: "streamingComplete",
+                    finalContent: this.cleanAIResponse(finalStreamingContent),
+                    totalChunks: chunkCount,
+                    duration: lastChunkTime - streamingStartTime,
+                    terminationReason: `vllm_stop_token_detected:${detectedStopToken}`,
+                  });
+                }
+              }, 30); // 더 빠른 종료
+              return;
+            }
+
+            // 태그가 없는 경우에만 내용 추가
+            finalStreamingContent += currentChunkContent;
+
+            // 🎯 2. 강화된 간단한 print문 완성 감지 (즉시 종료)
+            const printPatterns = [
+              /print\s*\(\s*["'][^"']*["']\s*\)/, // print("text")
+              /print\s*\(\s*["'][^"']*["']\s*\)\s*$/, // print("text") 완전 종료
+              /print\s*\(\s*f?["'][^"']*["']\s*\)\s*[;\n]*$/, // f-string 포함
+              /console\.log\s*\(\s*["'][^"']*["']\s*\)/, // console.log("text")
+              /puts\s+["'][^"']*["']/, // Ruby puts
+              /echo\s+["'][^"']*["']/, // PHP/Shell echo
+            ];
+
+            const isSimpleRequest =
+              question.toLowerCase().includes("출력") ||
+              question.toLowerCase().includes("print") ||
+              question.toLowerCase().includes("hello") ||
+              question.toLowerCase().includes("world") ||
+              question.toLowerCase().includes("jay") ||
+              question.length < 50;
+
+            // 🔥 더 적극적인 조기 종료 - 완전한 출력문이 감지되면 즉시 종료
+            if (isSimpleRequest && finalStreamingContent.length > 5) {
+              const hasCompleteOutput = printPatterns.some((pattern) =>
+                pattern.test(finalStreamingContent)
+              );
+
+              // 간단한 변수 할당도 감지
+              const simpleAssignmentPattern =
+                /^\s*\w+\s*=\s*["'][^"']*["']\s*$/;
+              const hasSimpleAssignment = simpleAssignmentPattern.test(
+                finalStreamingContent.trim()
+              );
+
+              if (hasCompleteOutput || hasSimpleAssignment) {
+                console.log("🎯 간단한 출력/할당 완성 감지 - 즉시 종료");
+                console.log("📝 최종 내용:", finalStreamingContent.trim());
+
+                // 즉시 스트리밍 완료 처리
+                setTimeout(() => {
+                  if (this._view?.webview) {
+                    this._view.webview.postMessage({
+                      command: "streamingComplete",
+                      finalContent: this.cleanAIResponse(finalStreamingContent),
+                      totalChunks: chunkCount,
+                      duration: lastChunkTime - streamingStartTime,
+                      earlyTermination: "simple_output_detected",
+                    });
+                  }
+                }, 50); // 더 빠른 종료
+                return;
+              }
+            }
+
+            // 🎯 3. 과도한 내용 감지 시 조기 종료
+            if (finalStreamingContent.length > 100 && isSimpleRequest) {
+              const hasExcessiveContent =
+                finalStreamingContent.includes('"""') ||
+                finalStreamingContent.includes("def ") ||
+                finalStreamingContent.includes("class ") ||
+                finalStreamingContent.includes("This is") ||
+                finalStreamingContent.includes("basic");
+
+              if (hasExcessiveContent) {
+                console.log("⚠️ 간단한 요청에 과도한 응답 감지 - 조기 종료");
+
+                // print 문만 추출
+                const printMatch =
+                  finalStreamingContent.match(/print\s*\([^)]+\)/);
+                if (printMatch) {
+                  const cleanedContent = printMatch[0];
+                  console.log("✂️ print 문만 추출:", cleanedContent);
+
+                  setTimeout(() => {
+                    if (this._view?.webview) {
+                      this._view.webview.postMessage({
+                        command: "streamingComplete",
+                        finalContent: cleanedContent,
+                        totalChunks: chunkCount,
+                        duration: lastChunkTime - streamingStartTime,
+                        earlyTermination: "excessive_content_trimmed",
+                      });
+                    }
+                  }, 100);
+                  return;
+                }
+              }
+            }
           }
 
           console.log("📦 스트리밍 청크 수신:", {
@@ -1129,7 +1444,7 @@ ${previousContent}
             contentLength: chunk.content?.length || 0,
             chunkNumber: chunkCount,
             timeSinceStart: lastChunkTime - streamingStartTime,
-            hasImEnd: chunk.content?.includes('<|im_end|>') || false,
+            hasImEnd: currentChunkContent?.includes("<|im_end|>") || false,
           });
 
           // 웹뷰 상태 확인
@@ -1152,19 +1467,20 @@ ${previousContent}
             });
           } else if (chunk.type === "token" || chunk.type === "code") {
             // 콘텐츠 청크 - 안전성 검증
-            if (chunk.content && typeof chunk.content === "string") {
+            const chunkText = (chunk as any).text || chunk.content || "";
+            if (chunkText && typeof chunkText === "string") {
               // 콘텐츠 정리 및 누적
-              const cleanedContent = this.cleanStreamingContent(chunk.content);
+              const cleanedContent = this.cleanStreamingContent(chunkText);
               if (cleanedContent.trim()) {
                 finalStreamingContent += cleanedContent;
                 chunkBuffer += cleanedContent;
 
                 // 청크 번들링 로직
                 const currentTime = Date.now();
-                const shouldSendBundle = 
-                  chunkBuffer.length >= MIN_BUNDLE_SIZE || 
-                  (currentTime - lastBundleTime) >= BUNDLE_INTERVAL ||
-                  cleanedContent.includes('\n'); // 줄바꿈이 있으면 즉시 전송
+                const shouldSendBundle =
+                  chunkBuffer.length >= MIN_BUNDLE_SIZE ||
+                  currentTime - lastBundleTime >= BUNDLE_INTERVAL ||
+                  cleanedContent.includes("\n"); // 줄바꿈이 있으면 즉시 전송
 
                 if (shouldSendBundle && chunkBuffer.trim()) {
                   // 번들된 청크 전송
@@ -1183,7 +1499,7 @@ ${previousContent}
                   // 전송된 번들 크기 로깅
                   const bundleSize = chunkBuffer.length;
                   console.log(`📦 번들 청크 전송 (${bundleSize}자)`);
-                  
+
                   // 버퍼 초기화
                   chunkBuffer = "";
                   lastBundleTime = currentTime;
@@ -1194,10 +1510,11 @@ ${previousContent}
             }
           } else if (chunk.type === "error") {
             // 오류 청크
-            console.error("❌ 스트리밍 오류 청크:", chunk.content);
+            const errorContent = (chunk as any).text || chunk.content || "";
+            console.error("❌ 스트리밍 오류 청크:", errorContent);
             this._view.webview.postMessage({
               command: "streamingError",
-              error: chunk.content || "스트리밍 중 오류 발생",
+              error: errorContent || "스트리밍 중 오류 발생",
               timestamp: chunk.timestamp,
             });
           }
@@ -1219,7 +1536,7 @@ ${previousContent}
       onComplete: () => {
         try {
           const totalDuration = Date.now() - streamingStartTime;
-          
+
           // 남은 버퍼가 있으면 마지막으로 전송
           if (chunkBuffer.trim() && this._view?.webview) {
             console.log("📦 마지막 번들 청크 전송:", chunkBuffer.length);
@@ -1236,7 +1553,7 @@ ${previousContent}
             });
             chunkBuffer = "";
           }
-          
+
           console.log("✅ 스트리밍 완료:", {
             totalChunks: chunkCount,
             duration: totalDuration,
@@ -1308,7 +1625,9 @@ ${previousContent}
           });
 
           // 히스토리에 추가 (정리된 콘텐츠로 저장)
-          this.addToHistory(question, finalCleanedContent);
+          this.addToHistory(question, finalCleanedContent).catch((error) => {
+            console.error("❌ 히스토리 저장 실패:", error);
+          });
 
           console.log("✅ 스트리밍 완료 처리 및 응답 정리 완료:", {
             original_length: finalStreamingContent.length,
@@ -1414,10 +1733,13 @@ ${previousContent}
       // 모델별 특화된 설정 가져오기
       const modelConfig = this.getModelConfiguration(modelType);
 
+      // 프롬프트 최적화 및 전처리
+      const optimizedPrompt = this.optimizePrompt(question.trim(), modelType);
+
       // 백엔드 API 스키마에 맞춘 요청 구성
       const request = {
         // 핵심 요청 정보
-        prompt: question.trim(),
+        prompt: optimizedPrompt,
         model_type: vllmModelType,
         context: codeContext || "",
 
@@ -1426,9 +1748,9 @@ ${previousContent}
         top_p: modelConfig.top_p || 0.95,
         max_tokens: modelConfig.max_tokens || 1024,
 
-        // 사용자 개인화 옵션 (ConfigService에서 가져오기)
-        programming_level: this.getUserProgrammingLevel(),
-        explanation_detail: this.getUserExplanationDetail(),
+        // 사용자 개인화 옵션 (DB 연동으로 개선)
+        programming_level: await this.getUserProgrammingLevel(),
+        explanation_detail: await this.getUserExplanationDetail(),
         code_style: "pythonic" as const,
         include_comments: modelConfig.include_comments !== false,
         include_docstring: modelConfig.include_docstring !== false,
@@ -1436,7 +1758,7 @@ ${previousContent}
 
         // 추가 메타데이터
         language: "python",
-        project_context: this.getUserProjectContext(),
+        project_context: await this.getUserProjectContext(),
       };
 
       // 요청 검증
@@ -1489,65 +1811,6 @@ ${previousContent}
   }
 
   /**
-   * 사용자 프로그래밍 레벨 가져오기
-   */
-  private getUserProgrammingLevel():
-    | "beginner"
-    | "intermediate"
-    | "advanced"
-    | "expert" {
-    try {
-      const config = vscode.workspace.getConfiguration("hapa");
-      return config.get("userProfile.pythonSkillLevel", "intermediate") as any;
-    } catch {
-      return "intermediate";
-    }
-  }
-
-  /**
-   * 사용자 설명 세부사항 레벨 가져오기
-   */
-  private getUserExplanationDetail():
-    | "minimal"
-    | "standard"
-    | "detailed"
-    | "comprehensive" {
-    try {
-      const config = vscode.workspace.getConfiguration("hapa");
-      return config.get("userProfile.explanationStyle", "standard") as any;
-    } catch {
-      return "standard";
-    }
-  }
-
-  /**
-   * 사용자 프로젝트 컨텍스트 가져오기
-   */
-  private getUserProjectContext(): string {
-    try {
-      const config = vscode.workspace.getConfiguration("hapa");
-      const projectContext = config.get(
-        "userProfile.projectContext",
-        "general_purpose"
-      );
-
-      // 프로젝트 컨텍스트를 문자열로 변환
-      const contextMap: Record<string, string> = {
-        web_development: "웹 개발",
-        data_science: "데이터 사이언스",
-        automation: "자동화",
-        general_purpose: "범용",
-        academic: "학술/연구",
-        enterprise: "기업용 개발",
-      };
-
-      return contextMap[projectContext as string] || "범용";
-    } catch {
-      return "범용";
-    }
-  }
-
-  /**
    * 생성된 코드를 활성 편집기에 삽입
    */
   private async insertCodeToActiveEditor(code: string) {
@@ -1589,14 +1852,14 @@ ${previousContent}
 
     // im_end 태그 제거
     let cleaned = content.replace(/<\|im_end\|>/g, "");
-    
+
     // 기타 특수 태그들 제거
     cleaned = cleaned.replace(/<\|.*?\|>/g, "");
-    
+
     // 과도한 공백 정리
     cleaned = cleaned.replace(/\n\s*\n\s*\n/g, "\n\n");
     cleaned = cleaned.trim();
-    
+
     return cleaned;
   }
 
@@ -1709,25 +1972,32 @@ ${previousContent}
   private sendErrorToWebview(errorMessage: string): void {
     try {
       if (this._view?.webview) {
-        this._view.webview.postMessage({
-          command: "streamingError",
-          error: errorMessage,
-          timestamp: new Date().toISOString()
-        }).then(undefined, (error) => {
-          console.error("❌ 에러 메시지 전송 실패:", error);
-        });
+        this._view.webview
+          .postMessage({
+            command: "streamingError",
+            error: errorMessage,
+            timestamp: new Date().toISOString(),
+          })
+          .then(undefined, (error) => {
+            console.error("❌ 에러 메시지 전송 실패:", error);
+          });
       }
 
       // 모든 확장 패널에도 전송
       this.expandedPanels.forEach((panel, index) => {
         if (panel.webview) {
-          panel.webview.postMessage({
-            command: "streamingError", 
-            error: errorMessage,
-            timestamp: new Date().toISOString()
-          }).then(undefined, (error) => {
-            console.error(`❌ 확장 패널 ${index} 에러 메시지 전송 실패:`, error);
-          });
+          panel.webview
+            .postMessage({
+              command: "streamingError",
+              error: errorMessage,
+              timestamp: new Date().toISOString(),
+            })
+            .then(undefined, (error) => {
+              console.error(
+                `❌ 확장 패널 ${index} 에러 메시지 전송 실패:`,
+                error
+              );
+            });
         }
       });
     } catch (error) {
@@ -1738,7 +2008,10 @@ ${previousContent}
   /**
    * 확장된 뷰의 메시지 처리
    */
-  private async handleExpandedViewMessage(message: any, panel: vscode.WebviewPanel) {
+  private async handleExpandedViewMessage(
+    message: any,
+    panel: vscode.WebviewPanel
+  ) {
     switch (message.command) {
       case "generateCodeStreaming":
         this.handleExpandedStreamingCodeGeneration(message.question, panel);
@@ -1771,7 +2044,9 @@ ${previousContent}
         return;
       case "addToHistory":
         // 히스토리 추가 요청 처리
-        this.addToHistory(message.question, message.response);
+        this.addToHistory(message.question, message.response).catch((error) => {
+          console.error("❌ 히스토리 저장 실패:", error);
+        });
         return;
       case "getHistory":
         // 히스토리 요청 처리
@@ -1867,7 +2142,7 @@ ${previousContent}
       codeContext = activeEditor.document.getText(activeEditor.selection);
     }
 
-    // 버그 수정 전용 API 요청 구성
+    // 버그 수정 전용 API 요청 구성 (DB 연동 개선)
     const bugFixRequest = {
       prompt: question,
       context: codeContext || "",
@@ -1876,13 +2151,13 @@ ${previousContent}
       temperature: 0.3,
       top_p: 0.95,
       max_tokens: 1024,
-      programming_level: "intermediate",
-      explanation_detail: "standard",
+      programming_level: await this.getUserProgrammingLevel(),
+      explanation_detail: await this.getUserExplanationDetail(),
       code_style: "pythonic",
       include_comments: true,
       include_docstring: true,
       include_type_hints: true,
-      project_context: "",
+      project_context: await this.getUserProjectContext(),
     };
 
     // 스트리밍 콜백 설정
@@ -2558,13 +2833,73 @@ ${previousContent}
   /**
    * 모델별 특화 설정 반환
    */
+  /**
+   * 프롬프트 최적화 및 전처리
+   * 사용자 요청을 분석하여 더 명확하고 구체적인 프롬프트로 변환
+   */
+  private optimizePrompt(userPrompt: string, modelType: string): string {
+    const prompt = userPrompt.toLowerCase().trim();
+
+    // 간단한 출력 요청 감지 및 최적화
+    if (prompt.includes("출력") || prompt.includes("print")) {
+      // "jay를 출력하는 코드" → 명확한 파이썬 요청
+      if (prompt.includes("jay")) {
+        return 'Python에서 "jay"를 출력하는 간단한 코드 한 줄만 작성해주세요. print() 함수를 사용하세요.';
+      }
+
+      // 다른 출력 요청들
+      const outputMatch = prompt.match(
+        /['"]([^'"]+)['"].*출력|출력.*['"]([^'"]+)['"]/
+      );
+      if (outputMatch) {
+        const text = outputMatch[1] || outputMatch[2];
+        return `Python에서 "${text}"를 출력하는 간단한 코드 한 줄만 작성해주세요. print() 함수를 사용하세요.`;
+      }
+
+      // 일반적인 출력 요청
+      return `Python에서 텍스트를 출력하는 간단한 코드 한 줄만 작성해주세요. print() 함수를 사용하세요.`;
+    }
+
+    // 변수 관련 요청 최적화
+    if (prompt.includes("변수")) {
+      return `Python에서 ${userPrompt
+        .replace(/변수|를|을|만들|생성|작성/g, "")
+        .trim()}에 대한 간단한 변수 정의 코드만 작성해주세요.`;
+    }
+
+    // 함수 관련 요청 최적화
+    if (prompt.includes("함수")) {
+      return `Python에서 ${userPrompt
+        .replace(/함수|를|을|만들|생성|작성/g, "")
+        .trim()}에 대한 간단한 함수 정의만 작성해주세요.`;
+    }
+
+    // 모델 타입별 최적화
+    switch (modelType) {
+      case "code_generation":
+      case "prompt":
+        return `Python으로 다음 요청을 간단하고 명확하게 구현해주세요: ${userPrompt}. 불필요한 주석이나 설명 없이 핵심 코드만 작성해주세요.`;
+
+      case "code_explanation":
+      case "comment":
+        return `다음 코드나 개념에 대해 간단히 설명해주세요: ${userPrompt}`;
+
+      case "bug_fix":
+      case "error_fix":
+        return `다음 코드의 문제점을 찾아 수정해주세요: ${userPrompt}`;
+
+      default:
+        return `Python으로 간단하게 구현해주세요: ${userPrompt}`;
+    }
+  }
+
   private getModelConfiguration(modelType: string) {
     const configs = {
       autocomplete: {
         model: "claude-3-haiku-20240307",
         temperature: 0.1, // 자동완성은 낮은 창의성
         top_p: 0.9,
-        max_tokens: 512,
+        max_tokens: 100, // 자동완성은 짧게 (512 → 100)
         prompt: undefined, // 원본 프롬프트 사용
         include_comments: false, // 자동완성은 주석 최소화
         include_docstring: false,
@@ -2572,32 +2907,32 @@ ${previousContent}
       },
       prompt: {
         model: "claude-3-haiku-20240307",
-        temperature: 0.3, // 일반적인 창의성
-        top_p: 0.95,
-        max_tokens: 1024,
+        temperature: 0.2, // 더 결정론적 응답 (과도한 복잡성 방지)
+        top_p: 0.9, // 더 집중된 응답
+        max_tokens: 150, // 간단한 코드 생성에 충분 (1024 → 150)
         prompt: undefined, // 원본 프롬프트 사용
-        include_comments: true,
-        include_docstring: true,
-        include_type_hints: true,
+        include_comments: false, // 간단한 코드는 주석 최소화
+        include_docstring: false, // 간단한 코드는 독스트링 생략
+        include_type_hints: false, // 간단한 코드는 타입 힌트 생략
       },
       comment: {
         model: "claude-3-haiku-20240307",
         temperature: 0.2, // 설명은 일관성 중요
         top_p: 0.9,
-        max_tokens: 800,
+        max_tokens: 300, // 간결한 설명 (800 → 300)
         prompt: undefined, // 원본 프롬프트 사용 (주석/설명 요청)
         include_comments: true,
-        include_docstring: true,
-        include_type_hints: true,
+        include_docstring: false, // 설명에서는 독스트링 생략
+        include_type_hints: false,
       },
       error_fix: {
         model: "claude-3-haiku-20240307",
         temperature: 0.1, // 버그 수정은 정확성 최우선
         top_p: 0.9,
-        max_tokens: 1024,
+        max_tokens: 400, // 집중된 수정 (1024 → 400)
         prompt: undefined, // 원본 프롬프트 사용
         include_comments: true, // 수정 이유 설명
-        include_docstring: true,
+        include_docstring: false, // 수정에서는 독스트링 생략
         include_type_hints: true,
       },
     };
@@ -2606,5 +2941,406 @@ ${previousContent}
     const defaultConfig = configs.prompt;
 
     return configs[modelType as keyof typeof configs] || defaultConfig;
+  }
+
+  /**
+   * 동기식 코드 생성 처리 (새로운 메서드)
+   */
+  private async handleSyncCodeGeneration(
+    question: string,
+    modelType: string = "code_generation"
+  ) {
+    if (!this._view?.webview) {
+      return;
+    }
+
+    try {
+      console.log("🔄 동기식 코드 생성 시작:", {
+        question: question.substring(0, 100) + "...",
+        modelType,
+      });
+
+      // 로딩 상태 표시
+      this._view.webview.postMessage({
+        command: "showLoading",
+        message: "AI가 응답을 생성하고 있습니다...",
+      });
+
+      // 현재 활성 편집기의 컨텍스트 가져오기
+      const activeEditor = vscode.window.activeTextEditor;
+      let codeContext: string | undefined = undefined;
+
+      if (
+        activeEditor &&
+        activeEditor.selection &&
+        !activeEditor.selection.isEmpty
+      ) {
+        codeContext = activeEditor.document.getText(activeEditor.selection);
+      }
+
+      // API 요청 구성
+      const request: CodeGenerationRequest = {
+        prompt: question,
+        context: codeContext || "",
+        model_type: this.mapModelToVLLMType(modelType),
+        language: "python",
+        temperature: 0.3,
+        max_tokens: 1024,
+      };
+
+      console.log("📡 API 요청:", {
+        prompt_length: request.prompt.length,
+        model_type: request.model_type,
+        has_context: !!request.context,
+      });
+
+      // API 호출
+      const response = await apiClient.generateCode(request);
+
+      console.log("📡 API 응답:", {
+        success: response.success,
+        code_length: response.generated_code?.length || 0,
+        has_error: !!response.error_message,
+      });
+
+      if (response.success && response.generated_code) {
+        // 성공 응답 처리
+        const cleanedCode = this.cleanAIResponse(response.generated_code);
+
+        this._view.webview.postMessage({
+          command: "addAIResponse",
+          response: {
+            generated_code: cleanedCode,
+            explanation: response.explanation || "AI가 생성한 코드입니다.",
+            originalQuestion: question,
+            success: true,
+            processingTime: response.processing_time || 0,
+          },
+        });
+
+        // 응답 확인을 위한 추가 메시지
+        setTimeout(() => {
+          if (this._view?.webview) {
+            this._view.webview.postMessage({
+              command: "ensureResponseVisible",
+              data: {
+                generated_code: cleanedCode,
+                explanation: response.explanation || "AI가 생성한 코드입니다.",
+                originalQuestion: question,
+                success: true,
+              },
+            });
+          }
+        }, 100);
+
+        // 히스토리에 추가
+        this.addToHistory(question.trim(), cleanedCode).catch((error) => {
+          console.error("❌ 히스토리 저장 실패:", error);
+        });
+
+        console.log("✅ 동기식 코드 생성 완료");
+      } else {
+        // 오류 응답 처리
+        console.error("❌ 동기식 코드 생성 실패:", response.error_message);
+
+        this._view.webview.postMessage({
+          command: "showError",
+          error: response.error_message || "코드 생성에 실패했습니다.",
+        });
+      }
+    } catch (error) {
+      console.error("❌ 동기식 코드 생성 오류:", error);
+
+      if (this._view?.webview) {
+        this._view.webview.postMessage({
+          command: "showError",
+          error:
+            error instanceof Error
+              ? error.message
+              : "알 수 없는 오류가 발생했습니다.",
+        });
+      }
+    }
+  }
+
+  /**
+   * 모델 타입 매핑 (새로운 메서드)
+   */
+  private mapModelToVLLMType(modelType: string): VLLMModelType {
+    const mapping: { [key: string]: VLLMModelType } = {
+      autocomplete: VLLMModelType.CODE_COMPLETION,
+      prompt: VLLMModelType.CODE_GENERATION,
+      comment: VLLMModelType.CODE_EXPLANATION,
+      error_fix: VLLMModelType.BUG_FIX,
+      code_generation: VLLMModelType.CODE_GENERATION,
+      bug_fix: VLLMModelType.BUG_FIX,
+    };
+
+    return mapping[modelType] || VLLMModelType.CODE_GENERATION;
+  }
+
+  /**
+   * DB에서 실제 사용자 설정 조회 (캐시 포함)
+   */
+  protected async fetchUserSettingsFromDB(): Promise<{
+    success: boolean;
+    settings?: any[];
+    error?: string;
+  }> {
+    try {
+      // 캐시된 설정이 유효한지 확인
+      const now = Date.now();
+      if (
+        this.cachedUserSettings &&
+        now - this.settingsLastFetch < this.SETTINGS_CACHE_TTL
+      ) {
+        console.log("📋 SidebarProvider: 캐시된 사용자 설정 사용");
+        return { success: true, settings: this.cachedUserSettings };
+      }
+
+      const config = vscode.workspace.getConfiguration("hapa");
+      const apiBaseURL =
+        config.get<string>("apiBaseURL") || "http://3.13.240.111:8000/api/v1";
+      const accessToken = this.getJWTToken();
+
+      if (!accessToken) {
+        return {
+          success: false,
+          error: "JWT 토큰이 없습니다.",
+        };
+      }
+
+      console.log("⚙️ SidebarProvider: DB에서 사용자 설정 조회 시작");
+
+      const response = await fetch(`${apiBaseURL}/users/settings`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        timeout: 10000,
+      } as any);
+
+      if (!response.ok) {
+        console.error(
+          "❌ SidebarProvider 사용자 설정 조회 실패:",
+          response.status
+        );
+        return {
+          success: false,
+          error: `설정 조회 실패: ${response.status}`,
+        };
+      }
+
+      const settings = await response.json();
+
+      // 캐시 업데이트
+      this.cachedUserSettings = settings;
+      this.settingsLastFetch = now;
+
+      console.log("✅ SidebarProvider DB 사용자 설정 조회 성공:", {
+        settingsCount: settings.length,
+      });
+
+      return { success: true, settings };
+    } catch (error) {
+      console.error("❌ SidebarProvider 사용자 설정 조회 중 예외:", error);
+      return {
+        success: false,
+        error: "설정 조회 중 오류가 발생했습니다.",
+      };
+    }
+  }
+
+  /**
+   * DB 설정을 프론트엔드 설정으로 변환
+   */
+  protected convertDBSettingsToUserProfile(dbSettings: any[]): any {
+    try {
+      const userProfile = {
+        pythonSkillLevel: "intermediate",
+        explanationStyle: "standard",
+        projectContext: "general_purpose",
+      };
+
+      // DB 설정을 사용자 프로필로 매핑
+      dbSettings.forEach((setting) => {
+        switch (setting.setting_type) {
+          case "python_skill_level":
+            userProfile.pythonSkillLevel = setting.option_value;
+            break;
+          case "explanation_style":
+            userProfile.explanationStyle = setting.option_value;
+            break;
+          // 다른 설정들도 매핑 가능
+        }
+      });
+
+      console.log("🔄 SidebarProvider DB 설정 변환 완료:", userProfile);
+      return userProfile;
+    } catch (error) {
+      console.error("❌ SidebarProvider DB 설정 변환 실패:", error);
+      return {
+        pythonSkillLevel: "intermediate",
+        explanationStyle: "standard",
+        projectContext: "general_purpose",
+      };
+    }
+  }
+
+  /**
+   * 개선된 사용자 프로그래밍 레벨 가져오기 (JWT + DB 우선, 로컬 fallback)
+   */
+  protected async getUserProgrammingLevel(): Promise<
+    "beginner" | "intermediate" | "advanced" | "expert"
+  > {
+    try {
+      // 1단계: DB에서 실제 사용자 설정 조회 시도
+      const dbResult = await this.fetchUserSettingsFromDB();
+
+      if (dbResult.success && dbResult.settings) {
+        const userProfile = this.convertDBSettingsToUserProfile(
+          dbResult.settings
+        );
+        const dbLevel = userProfile.pythonSkillLevel;
+
+        if (
+          ["beginner", "intermediate", "advanced", "expert"].includes(dbLevel)
+        ) {
+          console.log(
+            "✅ SidebarProvider: DB에서 Python 스킬 레벨 사용:",
+            dbLevel
+          );
+          return dbLevel as any;
+        }
+      }
+
+      // 2단계: DB 조회 실패 시 로컬 VSCode 설정 사용 (fallback)
+      console.log("⚠️ SidebarProvider: DB 조회 실패, 로컬 설정 사용");
+      const config = vscode.workspace.getConfiguration("hapa");
+      return config.get("userProfile.pythonSkillLevel", "intermediate") as any;
+    } catch (error) {
+      console.error("❌ SidebarProvider getUserProgrammingLevel 오류:", error);
+      return "intermediate";
+    }
+  }
+
+  /**
+   * 개선된 사용자 설명 세부사항 레벨 가져오기 (JWT + DB 우선, 로컬 fallback)
+   */
+  protected async getUserExplanationDetail(): Promise<
+    "minimal" | "standard" | "detailed" | "comprehensive"
+  > {
+    try {
+      // 1단계: DB에서 실제 사용자 설정 조회 시도
+      const dbResult = await this.fetchUserSettingsFromDB();
+
+      if (dbResult.success && dbResult.settings) {
+        const userProfile = this.convertDBSettingsToUserProfile(
+          dbResult.settings
+        );
+        const dbStyle = userProfile.explanationStyle;
+
+        // DB 값을 API 형식으로 매핑
+        const styleMapping: Record<
+          string,
+          "minimal" | "standard" | "detailed" | "comprehensive"
+        > = {
+          brief: "minimal",
+          standard: "standard",
+          detailed: "detailed",
+          educational: "comprehensive",
+        };
+
+        const mappedStyle = styleMapping[dbStyle] || "standard";
+        console.log(
+          "✅ SidebarProvider: DB에서 설명 스타일 사용:",
+          `${dbStyle} → ${mappedStyle}`
+        );
+        return mappedStyle;
+      }
+
+      // 2단계: DB 조회 실패 시 로컬 VSCode 설정 사용 (fallback)
+      console.log("⚠️ SidebarProvider: DB 조회 실패, 로컬 설정 사용");
+      const config = vscode.workspace.getConfiguration("hapa");
+      const localStyle = config.get(
+        "userProfile.explanationStyle",
+        "standard"
+      ) as string;
+
+      // 로컬 설정도 매핑
+      const styleMapping: Record<
+        string,
+        "minimal" | "standard" | "detailed" | "comprehensive"
+      > = {
+        brief: "minimal",
+        minimal: "minimal",
+        standard: "standard",
+        detailed: "detailed",
+        comprehensive: "comprehensive",
+        educational: "comprehensive",
+      };
+
+      return styleMapping[localStyle] || "standard";
+    } catch (error) {
+      console.error("❌ SidebarProvider getUserExplanationDetail 오류:", error);
+      return "standard";
+    }
+  }
+
+  /**
+   * 개선된 사용자 프로젝트 컨텍스트 가져오기 (JWT + DB 우선, 로컬 fallback)
+   */
+  protected async getUserProjectContext(): Promise<string> {
+    try {
+      // 1단계: DB에서 실제 사용자 설정 조회 시도
+      const dbResult = await this.fetchUserSettingsFromDB();
+
+      if (dbResult.success && dbResult.settings) {
+        const userProfile = this.convertDBSettingsToUserProfile(
+          dbResult.settings
+        );
+        const dbContext = userProfile.projectContext;
+
+        // 프로젝트 컨텍스트를 문자열로 변환
+        const contextMap: Record<string, string> = {
+          web_development: "웹 개발",
+          data_science: "데이터 사이언스",
+          automation: "자동화",
+          general_purpose: "범용",
+          academic: "학술/연구",
+          enterprise: "기업용 개발",
+        };
+
+        const mappedContext = contextMap[dbContext] || "범용";
+        console.log(
+          "✅ SidebarProvider: DB에서 프로젝트 컨텍스트 사용:",
+          `${dbContext} → ${mappedContext}`
+        );
+        return mappedContext;
+      }
+
+      // 2단계: DB 조회 실패 시 로컬 VSCode 설정 사용 (fallback)
+      console.log("⚠️ SidebarProvider: DB 조회 실패, 로컬 설정 사용");
+      const config = vscode.workspace.getConfiguration("hapa");
+      const projectContext = config.get(
+        "userProfile.projectContext",
+        "general_purpose"
+      );
+
+      const contextMap: Record<string, string> = {
+        web_development: "웹 개발",
+        data_science: "데이터 사이언스",
+        automation: "자동화",
+        general_purpose: "범용",
+        academic: "학술/연구",
+        enterprise: "기업용 개발",
+      };
+
+      return contextMap[projectContext as string] || "범용";
+    } catch (error) {
+      console.error("❌ SidebarProvider getUserProjectContext 오류:", error);
+      return "범용";
+    }
   }
 }

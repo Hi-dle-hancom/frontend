@@ -2,7 +2,10 @@ import * as vscode from "vscode";
 import { BaseWebviewProvider } from "./BaseWebviewProvider";
 
 /**
- * 사용자 설정 웹뷰 프로바이더
+ * 개선된 사용자 설정 웹뷰 프로바이더
+ * - JWT 토큰 기반 실제 사용자 정보 조회
+ * - DB 설정 동기화
+ * - 하드코딩된 값 제거
  */
 export class SettingsProvider extends BaseWebviewProvider {
   constructor(extensionUri: vscode.Uri) {
@@ -80,14 +83,131 @@ export class SettingsProvider extends BaseWebviewProvider {
   }
 
   /**
-   * 설정 저장 (이메일 변경 시 자동 API 키 발급 옵션 포함)
+   * 백엔드에서 실제 사용자 정보 조회
+   */
+  private async fetchRealUserInfo(): Promise<{
+    success: boolean;
+    userInfo?: any;
+    error?: string;
+  }> {
+    try {
+      const config = vscode.workspace.getConfiguration("hapa");
+      const apiBaseURL =
+        config.get<string>("apiBaseURL") || "http://3.13.240.111:8000/api/v1";
+      const accessToken = this.getJWTToken();
+
+      if (!accessToken) {
+        return {
+          success: false,
+          error: "JWT 토큰이 없습니다. 온보딩을 통해 로그인해주세요.",
+        };
+      }
+
+      console.log("👤 실제 사용자 정보 조회 시작:", {
+        hasToken: !!accessToken,
+        apiBaseURL,
+      });
+
+      const response = await fetch(`${apiBaseURL}/users/me`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        timeout: 10000,
+      } as any);
+
+      if (!response.ok) {
+        console.error(
+          "❌ 사용자 정보 조회 실패:",
+          response.status,
+          response.statusText
+        );
+
+        if (response.status === 401) {
+          return {
+            success: false,
+            error: "인증이 만료되었습니다. 다시 로그인해주세요.",
+          };
+        }
+
+        return {
+          success: false,
+          error: `서버 오류: ${response.status}`,
+        };
+      }
+
+      const userInfo = await response.json();
+      console.log("✅ 실제 사용자 정보 조회 성공:", {
+        email: userInfo.email,
+        username: userInfo.username,
+        id: userInfo.id,
+      });
+
+      return { success: true, userInfo };
+    } catch (error) {
+      console.error("❌ 사용자 정보 조회 중 예외:", error);
+      return {
+        success: false,
+        error: "네트워크 오류가 발생했습니다.",
+      };
+    }
+  }
+
+  /**
+   * DB 설정을 프론트엔드 설정으로 변환
+   */
+  private convertDBSettingsToFrontend(dbSettings: any[]): any {
+    try {
+      const frontendSettings = {
+        pythonSkillLevel: "intermediate",
+        codeOutputStructure: "standard",
+        explanationStyle: "standard",
+        projectContext: "general_purpose",
+        errorHandlingPreference: "basic",
+        preferredLanguageFeatures: ["type_hints"],
+      };
+
+      // DB 설정을 프론트엔드 설정으로 매핑
+      dbSettings.forEach((setting) => {
+        switch (setting.setting_type) {
+          case "python_skill_level":
+            frontendSettings.pythonSkillLevel = setting.option_value;
+            break;
+          case "code_output_structure":
+            frontendSettings.codeOutputStructure = setting.option_value;
+            break;
+          case "explanation_style":
+            frontendSettings.explanationStyle = setting.option_value;
+            break;
+        }
+      });
+
+      console.log("🔄 DB 설정 변환 완료:", frontendSettings);
+      return frontendSettings;
+    } catch (error) {
+      console.error("❌ DB 설정 변환 실패:", error);
+      // 기본값 반환
+      return {
+        pythonSkillLevel: "intermediate",
+        codeOutputStructure: "standard",
+        explanationStyle: "standard",
+        projectContext: "general_purpose",
+        errorHandlingPreference: "basic",
+        preferredLanguageFeatures: ["type_hints"],
+      };
+    }
+  }
+
+  /**
+   * 개선된 설정 저장 (DB 동기화 포함)
    */
   private async saveSettings(settings: any) {
     try {
-      console.log("💾 설정 저장 시작:", settings);
+      console.log("💾 개선된 설정 저장 시작:", settings);
       const config = vscode.workspace.getConfiguration("hapa");
 
-      // 사용자 프로필 설정
+      // 1단계: 로컬 VSCode 설정 저장
       if (settings.userProfile) {
         await config.update(
           "userProfile.email",
@@ -193,13 +313,29 @@ export class SettingsProvider extends BaseWebviewProvider {
         );
       }
 
-      console.log("✅ 설정 저장 성공");
+      console.log("✅ 로컬 설정 저장 완료");
+
+      // 2단계: DB에 설정 동기화 (JWT 토큰 필요)
+      const syncResult = await this.syncSettingsToDB(settings.userProfile);
+
+      if (syncResult.success) {
+        console.log("✅ DB 설정 동기화 완료");
+      } else {
+        console.warn(
+          "⚠️ DB 동기화 실패, 로컬 설정만 저장됨:",
+          syncResult.error
+        );
+      }
 
       // 성공 메시지 전송
       if (this._view) {
         this._view.webview.postMessage({
           command: "settingsSaved",
           success: true,
+          dbSynced: syncResult.success,
+          message: syncResult.success
+            ? "설정이 저장되고 모든 기기에 동기화되었습니다."
+            : "설정이 로컬에 저장되었습니다. (DB 동기화 실패)",
         });
       }
     } catch (error) {
@@ -212,6 +348,121 @@ export class SettingsProvider extends BaseWebviewProvider {
           error: (error as Error).message,
         });
       }
+    }
+  }
+
+  /**
+   * 설정을 DB에 동기화
+   */
+  private async syncSettingsToDB(
+    userProfile: any
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const accessToken = this.getJWTToken();
+      if (!accessToken) {
+        return { success: false, error: "JWT 토큰이 없습니다." };
+      }
+
+      // 프론트엔드 설정을 DB option_ids로 변환
+      const optionIds = this.convertFrontendSettingsToDBIds(userProfile);
+
+      if (optionIds.length === 0) {
+        return { success: false, error: "변환할 설정이 없습니다." };
+      }
+
+      const config = vscode.workspace.getConfiguration("hapa");
+      const apiBaseURL =
+        config.get<string>("apiBaseURL") || "http://3.13.240.111:8000/api/v1";
+
+      console.log("🔄 DB 설정 동기화 시작:", {
+        optionIds,
+        hasToken: !!accessToken,
+      });
+
+      const response = await fetch(`${apiBaseURL}/users/settings`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ option_ids: optionIds }),
+        timeout: 10000,
+      } as any);
+
+      if (!response.ok) {
+        console.error("❌ DB 설정 동기화 실패:", response.status);
+        return { success: false, error: `DB 동기화 실패: ${response.status}` };
+      }
+
+      console.log("✅ DB 설정 동기화 성공");
+      return { success: true };
+    } catch (error) {
+      console.error("❌ DB 설정 동기화 중 예외:", error);
+      return { success: false, error: "DB 동기화 중 오류가 발생했습니다." };
+    }
+  }
+
+  /**
+   * 프론트엔드 설정을 DB option_ids로 변환
+   */
+  private convertFrontendSettingsToDBIds(userProfile: any): number[] {
+    const optionIds: number[] = [];
+
+    try {
+      // python_skill_level 매핑
+      if (userProfile.pythonSkillLevel) {
+        switch (userProfile.pythonSkillLevel) {
+          case "beginner":
+            optionIds.push(1);
+            break;
+          case "intermediate":
+            optionIds.push(2);
+            break;
+        }
+      }
+
+      // code_output_structure 매핑
+      if (userProfile.codeOutputStructure) {
+        switch (userProfile.codeOutputStructure) {
+          case "minimal":
+            optionIds.push(3);
+            break;
+          case "standard":
+            optionIds.push(4);
+            break;
+          case "detailed":
+            optionIds.push(5);
+            break;
+        }
+      }
+
+      // explanation_style 매핑
+      if (userProfile.explanationStyle) {
+        switch (userProfile.explanationStyle) {
+          case "brief":
+            optionIds.push(6);
+            break;
+          case "standard":
+            optionIds.push(7);
+            break;
+          case "detailed":
+            optionIds.push(8);
+            break;
+          case "educational":
+            optionIds.push(9);
+            break;
+        }
+      }
+
+      console.log("🔄 설정 변환 완료:", {
+        frontend: userProfile,
+        dbIds: optionIds,
+      });
+
+      return optionIds;
+    } catch (error) {
+      console.error("❌ 설정 변환 실패:", error);
+      return [];
     }
   }
 
@@ -242,7 +493,7 @@ export class SettingsProvider extends BaseWebviewProvider {
         },
         body: JSON.stringify({
           email: email,
-          username: username || "CompleteUser",
+          username: username || email.split("@")[0],
         }),
       });
 
@@ -410,45 +661,81 @@ export class SettingsProvider extends BaseWebviewProvider {
   }
 
   /**
-   * 현재 설정 로드 및 웹뷰로 전송
+   * 개선된 현재 설정 로드 및 웹뷰로 전송 (하드코딩 제거, DB 연동)
    */
-  private loadAndSendSettings() {
+  private async loadAndSendSettings() {
     try {
-      console.log("⚙️ VSCode 설정 로드 시작...");
+      console.log(
+        "⚙️ 개선된 설정 로드 시작 - JWT 토큰 기반 실제 사용자 정보 조회"
+      );
       const config = vscode.workspace.getConfiguration("hapa");
 
-      const currentSettings = {
-        userProfile: {
-          email: config.get("userProfile.email") || "complete.test@email.com",
-          username: config.get("userProfile.username") || "CompleteUser",
+      // 1단계: 실제 사용자 정보 조회
+      const userResult = await this.fetchRealUserInfo();
+
+      // 2단계: DB에서 사용자 설정 조회
+      const settingsResult = await this.fetchUserSettingsFromDB();
+
+      // 3단계: 설정 구성
+      let userProfile: any;
+
+      if (userResult.success && userResult.userInfo) {
+        // 실제 사용자 정보 + DB 설정 사용
+        const dbSettings = settingsResult.success
+          ? settingsResult.settings
+          : [];
+        const convertedSettings = this.convertDBSettingsToFrontend(
+          dbSettings || []
+        );
+
+        userProfile = {
+          email: userResult.userInfo.email,
+          username: userResult.userInfo.username,
+          ...convertedSettings,
+        };
+
+        console.log("✅ 실제 사용자 정보 + DB 설정 로드 완료:", {
+          email: userProfile.email,
+          username: userProfile.username,
+          dbSettingsCount: dbSettings?.length || 0,
+        });
+      } else {
+        // JWT 토큰이 없거나 사용자 정보 조회 실패 시 로컬 설정 사용
+        console.log("⚠️ JWT 토큰 없음 - 로컬 설정 사용:", userResult.error);
+
+        userProfile = {
+          email: config.get("userProfile.email") || "",
+          username: config.get("userProfile.username") || "",
           pythonSkillLevel:
             config.get("userProfile.pythonSkillLevel") || "intermediate",
           codeOutputStructure:
-            config.get("userProfile.codeOutputStructure") || "minimal",
+            config.get("userProfile.codeOutputStructure") || "standard",
           explanationStyle:
-            config.get("userProfile.explanationStyle") || "brief",
+            config.get("userProfile.explanationStyle") || "standard",
           projectContext:
-            config.get("userProfile.projectContext") || "web_development",
+            config.get("userProfile.projectContext") || "general_purpose",
           errorHandlingPreference:
             config.get("userProfile.errorHandlingPreference") || "basic",
           preferredLanguageFeatures: config.get(
             "userProfile.preferredLanguageFeatures"
           ) || ["type_hints"],
-        },
+        };
+      }
+
+      const currentSettings = {
+        userProfile,
         api: {
           apiBaseURL:
             config.get("apiBaseURL") || "http://3.13.240.111:8000/api/v1",
-          apiKey:
-            config.get("apiKey") || "hapa_demo_20241228_secure_key_for_testing",
+          apiKey: config.get("apiKey") || "",
           apiTimeout: config.get("apiTimeout") || 30000,
         },
         commentTrigger: {
           resultDisplayMode:
-            config.get("commentTrigger.resultDisplayMode") ||
-            "immediate_insert",
+            config.get("commentTrigger.resultDisplayMode") || "sidebar",
           autoInsertDelay: config.get("commentTrigger.autoInsertDelay") || 0,
           showNotification:
-            config.get("commentTrigger.showNotification") || false,
+            config.get("commentTrigger.showNotification") ?? true,
         },
         features: {
           autoComplete: config.get("autoComplete") ?? true,
@@ -456,16 +743,19 @@ export class SettingsProvider extends BaseWebviewProvider {
           enableLogging: config.get("enableLogging") || false,
           enableCodeAnalysis: config.get("enableCodeAnalysis") ?? true,
         },
+        meta: {
+          isAuthenticated: userResult.success,
+          authError: userResult.error,
+          dbSynced: settingsResult.success,
+          hasJWTToken: !!this.getJWTToken(),
+        },
       };
 
-      console.log("📋 로드된 설정:", {
+      console.log("📋 최종 로드된 설정:", {
         email: currentSettings.userProfile.email,
-        apiKey:
-          currentSettings.api.apiKey &&
-          typeof currentSettings.api.apiKey === "string"
-            ? currentSettings.api.apiKey.substring(0, 10) + "..."
-            : "없음",
-        apiBaseURL: currentSettings.api.apiBaseURL,
+        isAuthenticated: currentSettings.meta.isAuthenticated,
+        dbSynced: currentSettings.meta.dbSynced,
+        hasApiKey: !!currentSettings.api.apiKey,
       });
 
       if (this._view) {
@@ -481,36 +771,42 @@ export class SettingsProvider extends BaseWebviewProvider {
     } catch (error) {
       console.error("❌ 설정 로드 실패:", error);
 
-      // 오류 발생 시에도 기본 설정으로 응답
+      // 오류 발생 시 최소한의 기본 설정으로 응답 (하드코딩 제거)
       if (this._view) {
         this._view.webview.postMessage({
           command: "settingsLoaded",
           settings: {
             userProfile: {
-              email: "complete.test@email.com",
-              username: "CompleteUser",
+              email: "",
+              username: "",
               pythonSkillLevel: "intermediate",
-              codeOutputStructure: "minimal",
-              explanationStyle: "brief",
-              projectContext: "web_development",
+              codeOutputStructure: "standard",
+              explanationStyle: "standard",
+              projectContext: "general_purpose",
               errorHandlingPreference: "basic",
               preferredLanguageFeatures: ["type_hints"],
             },
             api: {
               apiBaseURL: "http://3.13.240.111:8000/api/v1",
-              apiKey: "hapa_demo_20241228_secure_key_for_testing",
+              apiKey: "",
               apiTimeout: 30000,
             },
             commentTrigger: {
-              resultDisplayMode: "immediate_insert",
+              resultDisplayMode: "sidebar",
               autoInsertDelay: 0,
-              showNotification: false,
+              showNotification: true,
             },
             features: {
               autoComplete: true,
               maxSuggestions: 5,
               enableLogging: false,
               enableCodeAnalysis: true,
+            },
+            meta: {
+              isAuthenticated: false,
+              authError: (error as Error).message,
+              dbSynced: false,
+              hasJWTToken: false,
             },
           },
           error: (error as Error).message,

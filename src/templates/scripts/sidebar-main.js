@@ -9,6 +9,106 @@
 const vscode = acquireVsCodeApi();
 
 // ============================================================================
+// EventDeduplicator 클래스 정의
+// ============================================================================
+
+class EventDeduplicator {
+  constructor() {
+    this.eventCache = new Map();
+    this.sessionEvents = new Map();
+    this.maxCacheSize = 1000;
+    this.defaultTtl = 5000; // 5초
+  }
+
+  shouldProcessEvent(eventType, eventKey, eventData = null) {
+    const cacheKey = `${eventType}_${eventKey}`;
+    const now = Date.now();
+
+    if (this.eventCache.has(cacheKey)) {
+      const cached = this.eventCache.get(cacheKey);
+
+      // TTL 체크
+      if (now - cached.timestamp < this.defaultTtl) {
+        // 동일한 데이터인 경우 중복으로 처리
+        if (cached.data === eventData) {
+          return false;
+        }
+      }
+    }
+
+    // 캐시 크기 관리
+    if (this.eventCache.size >= this.maxCacheSize) {
+      const oldestKey = this.eventCache.keys().next().value;
+      this.eventCache.delete(oldestKey);
+    }
+
+    // 새 이벤트 캐시
+    this.eventCache.set(cacheKey, {
+      timestamp: now,
+      data: eventData,
+    });
+
+    return true;
+  }
+
+  clearSession(sessionId) {
+    if (sessionId) {
+      this.sessionEvents.delete(sessionId);
+    }
+  }
+
+  reset() {
+    this.eventCache.clear();
+    this.sessionEvents.clear();
+  }
+}
+
+// ============================================================================
+// ChunkProcessingQueue 클래스 정의
+// ============================================================================
+
+class ChunkProcessingQueue {
+  constructor() {
+    this.chunks = [];
+    this.isProcessing = false;
+    this.maxQueueSize = 200;
+  }
+
+  enqueue(chunk) {
+    if (this.chunks.length >= this.maxQueueSize) {
+      this.chunks.shift(); // 오래된 청크 제거
+    }
+    this.chunks.push(chunk);
+  }
+
+  async processAll() {
+    if (this.isProcessing) return;
+
+    this.isProcessing = true;
+    while (this.chunks.length > 0) {
+      const chunk = this.chunks.shift();
+      await this.processChunk(chunk);
+    }
+    this.isProcessing = false;
+  }
+
+  async processChunk(chunk) {
+    // 청크 처리 로직은 기존 함수에서 처리
+    if (
+      typeof messageHandler !== "undefined" &&
+      messageHandler.handleStreamingChunk
+    ) {
+      await messageHandler.handleStreamingChunk(chunk);
+    }
+  }
+
+  clear() {
+    this.chunks = [];
+    this.isProcessing = false;
+  }
+}
+
+// ============================================================================
 // 전역 상태 변수들 및 스트리밍 상태 관리
 // ============================================================================
 
@@ -22,9 +122,75 @@ const StreamingState = {
   ERROR: "error",
 };
 
+// 허용된 상태 전환 규칙
+const ALLOWED_STATE_TRANSITIONS = {
+  [StreamingState.IDLE]: [StreamingState.STARTING, StreamingState.ERROR],
+  [StreamingState.STARTING]: [
+    StreamingState.ACTIVE,
+    StreamingState.ERROR,
+    StreamingState.IDLE,
+  ],
+  [StreamingState.ACTIVE]: [
+    StreamingState.FINISHING,
+    StreamingState.ERROR,
+    StreamingState.IDLE,
+  ],
+  [StreamingState.FINISHING]: [
+    StreamingState.COMPLETED,
+    StreamingState.ERROR,
+    StreamingState.IDLE,
+  ],
+  [StreamingState.COMPLETED]: [StreamingState.IDLE],
+  [StreamingState.ERROR]: [StreamingState.IDLE],
+};
+
+// 성능 제한 상수 (최적화된 설정)
+const PERFORMANCE_LIMITS = {
+  maxChunks: 50, // 200 → 50 (75% 감소)
+  hardLimit: 100, // 500 → 100 (80% 감소)
+  warningThreshold: 30, // 100 → 30 (70% 감소)
+  emergencyThreshold: 80, // 800 → 80 (90% 감소)
+  maxBytes: 512 * 1024, // 1MB → 512KB (50% 감소)
+  maxProcessingTime: 30000, // 백엔드 최적화 완료까지 충분한 시간 (30초)
+  minChunkSize: 10, // 최소 청크 크기 (너무 작은 청크 병합)
+  batchSize: 5, // 배치 처리 크기 증대
+};
+
+// 청크 성능 통계 객체
+const chunkPerformanceStats = {
+  totalProcessed: 0,
+  totalBytes: 0,
+  smallChunks: 0,
+  largeChunks: 0,
+  lastProcessTime: 0,
+  batchCount: 0,
+
+  reset() {
+    this.totalProcessed = 0;
+    this.totalBytes = 0;
+    this.smallChunks = 0;
+    this.largeChunks = 0;
+    this.lastProcessTime = 0;
+    this.batchCount = 0;
+  },
+
+  shouldTerminate() {
+    return this.totalProcessed >= PERFORMANCE_LIMITS.hardLimit;
+  },
+};
+
 // 전역 인스턴스들
 const eventDeduplicator = new EventDeduplicator();
 const chunkQueue = new ChunkProcessingQueue();
+
+// 스트리밍 관련 전역 변수들
+let streamingTimeout = null;
+let batchProcessingTimer = null;
+let healthCheckInterval = null;
+let chunkBatchBuffer = [];
+let streamingBuffer = "";
+let currentStreamingContent = "";
+let streamingAbortController = null;
 
 // 강화된 스트리밍 상태 관리 객체
 const streamingManager = {
@@ -348,9 +514,9 @@ const streamingManager = {
       return;
     }
 
-    // 버퍼에 추가
+    // ✅ 수정: 통합된 버퍼 관리 (중복 제거)
     streamingBuffer += content;
-    currentStreamingContent += content;
+    currentStreamingContent = streamingBuffer; // 동기화
 
     // UI 업데이트는 messageHandler에 위임
     if (
@@ -483,7 +649,7 @@ function syncLegacyState() {
 
     // 전역 스트리밍 변수들을 globalState와 동기화
     streamingBuffer = globalState.streamingBuffer || "";
-    currentStreamingContent = globalState.streamingContent || "";
+    currentStreamingContent = streamingBuffer; // ✅ 수정: streamingBuffer와 동기화
     streamingSequence = globalState.streamingSequence || 0;
 
     // 타이머 동기화
@@ -710,7 +876,25 @@ const messageQueue = {
       });
     }
 
+    // 새로운 메시지 로깅
+    if (command === "addAIResponse" || command === "ensureResponseVisible") {
+      console.log(`🔍 [${command}] 메시지 구조:`, {
+        hasCommand: !!message.command,
+        hasResponse: !!message.response,
+        hasData: !!message.data,
+        messageKeys: Object.keys(message),
+        responseKeys: message.response ? Object.keys(message.response) : null,
+        dataKeys: message.data ? Object.keys(message.data) : null,
+      });
+    }
+
     switch (command) {
+      case "addAIResponse":
+        await this.handleAIResponse(message);
+        break;
+      case "ensureResponseVisible":
+        await this.ensureResponseVisible(message);
+        break;
       case "streamingChunk":
         // 청크 데이터 구조 처리
         let chunkData = null;
@@ -741,6 +925,12 @@ const messageQueue = {
       case "streamingStarted":
         await this.handleStreamingStarted(message);
         break;
+      case "showLoading":
+        await this.handleShowLoading(message);
+        break;
+      case "showError":
+        await this.handleShowError(message);
+        break;
       case "syncHistory":
         // 히스토리 동기화 처리
         if (message.history) {
@@ -752,13 +942,9 @@ const messageQueue = {
           // 히스토리 UI 업데이트 로직 추가 가능
         }
         break;
-      case "initializeEmptyStates":
-        // 빈 상태 초기화 처리
-        console.log("🔄 빈 상태 초기화 완료");
-        // 필요시 UI 초기화 로직 추가
-        break;
       default:
-        console.warn("⚠️ 알 수 없는 메시지 명령:", command);
+        console.warn(`⚠️ 처리되지 않은 명령: ${command}`);
+        break;
     }
   },
 
@@ -868,6 +1054,18 @@ const messageQueue = {
 
       // 강제 UI 업데이트 추가
       forceUpdateUI();
+
+      // 스트리밍 타임아웃 설정 (10초로 단축)
+      streamingTimeout = setTimeout(() => {
+        console.warn("⏱️ 스트리밍 타임아웃 발생 (성능 최적화)");
+        this.handleStreamingTimeout();
+      }, PERFORMANCE_LIMITS.maxProcessingTime); // 10초
+
+      console.log(
+        `✅ 스트리밍 타임아웃 설정 완료 (${
+          PERFORMANCE_LIMITS.maxProcessingTime / 1000
+        }초)`
+      );
     } catch (error) {
       console.error("❌ 스트리밍 시작 처리 오류:", error);
       streamingManager.setState(StreamingState.ERROR, { error: error.message });
@@ -878,6 +1076,17 @@ const messageQueue = {
 
   async handleStreamingChunk(chunk) {
     const startTime = Date.now();
+
+    // 🚫 중복 세션 방지 - 최우선 체크
+    if (
+      streamingManager.currentState === StreamingState.IDLE ||
+      streamingManager.currentState === StreamingState.COMPLETED
+    ) {
+      console.warn(
+        `⚠️ 지연 청크 무시: 현재 상태 ${streamingManager.currentState} - 중복 세션 방지`
+      );
+      return; // 즉시 반환하여 처리 중단
+    }
 
     // 성능 모니터링 - 절대 한계선 확인 (즉시 중단)
     if (chunkPerformanceStats.totalProcessed >= PERFORMANCE_LIMITS.hardLimit) {
@@ -902,26 +1111,41 @@ const messageQueue = {
       return;
     }
 
-    // 성능 모니터링 - 청크 제한 확인
+    // 성능 모니터링 - 청크 제한 확인 (성능 최적화된 조기 완료)
     if (chunkPerformanceStats.totalProcessed >= PERFORMANCE_LIMITS.maxChunks) {
-      console.warn(
-        `⚠️ 청크 수 제한 도달: ${chunkPerformanceStats.totalProcessed}개`
-      );
+      console.warn(`⚠️ 간단한 요청에 과도한 응답 감지 - 조기 종료`);
 
-      // VSCode Extension에 중단 메시지 전송
+      // 스트리밍을 정상 완료로 처리
+      streamingManager.setState(StreamingState.FINISHING, {
+        reason: "performance_optimization",
+        chunkCount: chunkPerformanceStats.totalProcessed,
+      });
+
+      // VSCode Extension에 완료 메시지 전송
       try {
         vscode.postMessage({
-          command: "stopStreaming",
-          reason: "maxChunks",
+          command: "streamingComplete",
+          reason: "performance_optimization",
           chunkCount: chunkPerformanceStats.totalProcessed,
+          finalContent: streamingBuffer,
+          success: true,
         });
       } catch (error) {
-        console.error("❌ 중단 메시지 전송 실패:", error);
+        console.error("❌ 완료 메시지 전송 실패:", error);
       }
 
-      messageQueue.handleStreamingError({
-        error: `청크 수가 제한(${PERFORMANCE_LIMITS.maxChunks})을 초과했습니다.`,
+      messageQueue.handleStreamingComplete({
+        success: true,
+        finalContent: streamingBuffer,
+        metadata: {
+          optimizedCompletion: true,
+          chunkLimit: PERFORMANCE_LIMITS.maxChunks,
+          actualChunks: chunkPerformanceStats.totalProcessed,
+        },
       });
+
+      // 즉시 상태를 COMPLETED로 변경하여 중복 세션 완전 차단
+      streamingManager.setState(StreamingState.COMPLETED);
       return;
     }
 
@@ -950,12 +1174,15 @@ const messageQueue = {
       syncLegacyState();
       // 스트리밍이 정상적으로 시작되었으므로 에러 메시지 정리
       streamingManager.clearErrorMessages();
-    } else if (streamingManager.currentState === StreamingState.IDLE) {
-      console.warn("⚠️ IDLE 상태에서 청크 수신됨 - ACTIVE로 전환");
-      streamingManager.setState(StreamingState.ACTIVE);
-      syncLegacyState();
-      // 스트리밍이 재개되었으므로 에러 메시지 정리
-      streamingManager.clearErrorMessages();
+    } else if (
+      streamingManager.currentState === StreamingState.IDLE ||
+      streamingManager.currentState === StreamingState.COMPLETED
+    ) {
+      console.warn(
+        `⚠️ ${streamingManager.currentState} 상태에서 청크 수신됨 - 무시하여 중복 세션 방지`
+      );
+      console.log("🚫 이미 완료된 스트리밍의 지연 청크로 판단되어 무시됨");
+      return; // 중복 세션 방지를 위해 청크 무시
     }
 
     try {
@@ -975,18 +1202,113 @@ const messageQueue = {
         isComplete: chunkData?.is_complete,
       });
 
+      // 🎯 새로운 구조화된 청크 타입 처리
+      const chunkType = chunkData?.type || "token";
+      console.log(`🔍 청크 타입 감지: ${chunkType}`);
+
+      // 구조화된 스트리밍 시작 시 UI 초기화
+      if (chunkType === "explanation" || chunkType === "code") {
+        if (!document.getElementById("structured-response")) {
+          console.log("🎨 구조화된 UI 초기화 시작");
+          realtimeDOMUpdater.createStructuredUI();
+          structuredStreamingManager.reset();
+        }
+      }
+
       // 콘텐츠 추출 (다양한 필드 시도)
       let content = "";
       if (chunkData?.content !== undefined && chunkData.content !== null) {
         content = String(chunkData.content);
-        console.log("✅ content 필드 사용:", content.substring(0, 50) + "...");
+        console.log(
+          `✅ content 필드 사용 (${chunkType}):`,
+          content.substring(0, 50) + "..."
+        );
       } else if (chunkData?.text !== undefined && chunkData.text !== null) {
         content = String(chunkData.text);
-        console.log("✅ text 필드 사용:", content.substring(0, 50) + "...");
+        console.log(
+          `✅ text 필드 사용 (${chunkType}):`,
+          content.substring(0, 50) + "..."
+        );
       } else {
         console.warn("⚠️ 콘텐츠가 없는 청크:", chunkData);
         return;
       }
+
+      // 청크 타입별 처리
+      switch (chunkType) {
+        case "explanation":
+          structuredStreamingManager.processChunk(
+            "explanation",
+            content,
+            chunkData?.metadata || {}
+          );
+          realtimeDOMUpdater.updateExplanation(content);
+          realtimeDOMUpdater.updateMetadata(
+            structuredStreamingManager.state.metadata
+          );
+          return; // 기존 로직 건너뛰기
+
+        case "code":
+          structuredStreamingManager.processChunk(
+            "code",
+            content,
+            chunkData?.metadata || {}
+          );
+          realtimeDOMUpdater.updateCode(content, chunkData?.metadata || {});
+          realtimeDOMUpdater.updateMetadata(
+            structuredStreamingManager.state.metadata
+          );
+          realtimeDOMUpdater.showActionButtons();
+          return; // 기존 로직 건너뛰기
+
+        case "done":
+          console.log("🏁 구조화된 스트리밍 완료");
+          structuredStreamingManager.processChunk(
+            "done",
+            "",
+            chunkData?.metadata || {}
+          );
+          realtimeDOMUpdater.updateMetadata(
+            structuredStreamingManager.state.metadata
+          );
+
+          // 최종 상태 업데이트
+          streamingManager.setState(StreamingState.COMPLETED);
+          return; // 기존 로직 건너뛰기
+
+        case "token":
+          // 실시간 프리뷰용 토큰 - 기존 로직 계속 실행
+          console.log(`📦 실시간 토큰: ${content.substring(0, 30)}...`);
+          break;
+
+        default:
+          // 기존 방식 처리
+          console.log(`📦 기존 방식 청크: ${content.substring(0, 30)}...`);
+          break;
+      }
+
+      // **메타데이터 및 태그 정리 강화**
+      const cleanedContent = messageQueue.cleanChunkContent(content);
+
+      if (!cleanedContent || cleanedContent.trim().length === 0) {
+        console.log("ℹ️ 정리 후 빈 콘텐츠 무시:", content.substring(0, 30));
+        return;
+      }
+
+      // **end 태그 처리 - 태그 이전까지만 출력**
+      const processedContent = messageQueue.handleEndTags(cleanedContent);
+      if (processedContent === null) {
+        console.log("🔚 End 태그 감지로 스트리밍 종료");
+        messageQueue.handleStreamingComplete({
+          success: true,
+          finalContent: streamingBuffer,
+          reason: "end_tag_detected",
+        });
+        return;
+      }
+
+      // 처리된 콘텐츠 사용
+      content = processedContent;
 
       // 빈 콘텐츠 체크
       if (!content || content.trim().length === 0) {
@@ -1048,9 +1370,9 @@ const messageQueue = {
           processingReason: "적응형 조건 충족",
         });
 
-        // 스트리밍 버퍼에 추가
+        // ✅ 수정: 통합된 버퍼 관리 (중복 제거)
         streamingBuffer += batchContent;
-        currentStreamingContent += batchContent;
+        currentStreamingContent = streamingBuffer; // 동기화
 
         // 배치 처리 타이머 초기화
         if (batchProcessingTimer) {
@@ -1063,19 +1385,29 @@ const messageQueue = {
           clearTimeout(batchProcessingTimer);
         }
 
+        // 청크 수에 따른 적응적 타임아웃 (성능 최적화)
+        const adaptiveTimeout =
+          chunkPerformanceStats.totalProcessed >
+          PERFORMANCE_LIMITS.warningThreshold
+            ? 30 // 청크 수가 많으면 더 빠른 병합 (100ms → 30ms)
+            : 50; // 일반적인 경우 (100ms → 50ms)
+
         batchProcessingTimer = setTimeout(() => {
           if (content.length > 0) {
             const batchContent = content;
             const batchSize = content.length;
 
-            console.log("📊 타임아웃 배치 처리:", {
+            console.log("📊 최적화된 배치 처리:", {
               batchSize: batchSize,
               batchLength: batchContent.length,
-              reason: "타임아웃",
+              timeout: adaptiveTimeout,
+              totalChunks: chunkPerformanceStats.totalProcessed,
+              reason: "적응적_타임아웃",
             });
 
+            // ✅ 수정: 통합된 버퍼 관리 (중복 제거)
             streamingBuffer += batchContent;
-            currentStreamingContent += batchContent;
+            currentStreamingContent = streamingBuffer; // 동기화
 
             // 배치 처리 타이머 초기화
             if (batchProcessingTimer) {
@@ -1083,7 +1415,7 @@ const messageQueue = {
               batchProcessingTimer = null;
             }
           }
-        }, 100);
+        }, adaptiveTimeout);
       }
 
       // 처리 시간 기록
@@ -1119,15 +1451,24 @@ const messageQueue = {
       return;
     }
 
+    // 올바른 상태 전환 순서: starting → active → finishing
+    if (streamingManager.currentState === StreamingState.STARTING) {
+      streamingManager.setState(StreamingState.ACTIVE);
+      syncLegacyState();
+    }
+
     // 상태를 FINISHING으로 전환
-    streamingManager.setState(StreamingState.FINISHING);
+    if (streamingManager.currentState === StreamingState.ACTIVE) {
+      streamingManager.setState(StreamingState.FINISHING);
+    }
     syncLegacyState();
 
     // 남은 배치 처리 완료
     if (chunkBatchBuffer.length > 0) {
       const remainingContent = chunkBatchBuffer.join("");
+      // ✅ 수정: 통합된 버퍼 관리 (중복 제거)
       streamingBuffer += remainingContent;
-      currentStreamingContent += remainingContent;
+      currentStreamingContent = streamingBuffer; // 동기화
       chunkBatchBuffer = [];
       console.log("📦 남은 배치 처리:", remainingContent.length, "자");
     }
@@ -1227,6 +1568,151 @@ const messageQueue = {
     }
   },
 
+  /**
+   * 청크 콘텐츠 메타데이터 정리 메서드 (업데이트된 스탑 태그 포함)
+   */
+  cleanChunkContent(content) {
+    if (!content || typeof content !== "string") {
+      return "";
+    }
+
+    let cleaned = content;
+
+    // 1. **새로운 스탑 태그 패턴 정리**
+    cleaned = cleaned.replace(/<\|EOT\|>/g, ""); // <|EOT|> 제거
+    cleaned = cleaned.replace(/\n# --- Generation Complete ---/g, ""); // 완료 마커 제거
+    cleaned = cleaned.replace(/# --- Generation Complete ---/g, ""); // 완료 마커 제거 (줄바꿈 없이)
+
+    // 2. 기존 vLLM 메타데이터 제거
+    cleaned = cleaned.replace(/<\/c>/g, ""); // </c> 태그 제거
+    cleaned = cleaned.replace(/#---Gen/g, ""); // #---Gen 제거
+    cleaned = cleaned.replace(/erationComplete/g, ""); // erationComplete 제거
+    cleaned = cleaned.replace(/---/g, ""); // --- 구분자 제거
+
+    // 3. 기타 End 태그 패턴 제거
+    cleaned = cleaned.replace(/<\|im_end\|>/g, ""); // <|im_end|> 제거
+    cleaned = cleaned.replace(/\[DONE\]/g, ""); // [DONE] 제거
+    cleaned = cleaned.replace(/<\|endoftext\|>/g, ""); // <|endoftext|> 제거
+    cleaned = cleaned.replace(/###END###/g, ""); // ###END### 제거
+    cleaned = cleaned.replace(/<!-- END -->/g, ""); // <!-- END --> 제거
+    cleaned = cleaned.replace(/\[END_OF_GENERATION\]/g, ""); // [END_OF_GENERATION] 제거
+    cleaned = cleaned.replace(/\n\n# END/g, ""); // \n\n# END 제거
+
+    // 4. 기타 메타데이터 패턴 제거
+    cleaned = cleaned.replace(/GenGeneration/g, ""); // 중복 Gen 제거
+    cleaned = cleaned.replace(/ComComplete/g, ""); // ComComplete 제거
+    cleaned = cleaned.replace(/<\|.*?\|>/g, ""); // <|.*|> 패턴 제거 (단, 유효한 태그 제외)
+
+    // 5. ✅ 수정: 안전한 중복 문자 정리 (기존 복잡한 정규식 제거)
+    cleaned = cleaned.replace(/(.)\1{2,}/g, "$1$1"); // 3개 이상 반복 문자 → 2개로 제한
+    cleaned = cleaned.replace(/print\("([^"]+)\1+"\)/g, 'print("$1")'); // print 내 중복 제거
+    cleaned = cleaned.replace(
+      /print\("([^"]*)"[^"]*"([^"]*)"\)/g,
+      'print("$1$2")'
+    ); // 잘못된 따옴표 중복
+
+    // 6. 연속된 구분자 및 특수문자 정리
+    cleaned = cleaned.replace(/---+/g, ""); // 연속된 --- 제거
+    cleaned = cleaned.replace(/#+\s*$/gm, ""); // 줄 끝의 ### 제거
+    cleaned = cleaned.replace(/\s+/g, " "); // 연속 공백을 하나로
+    cleaned = cleaned.replace(/^\s*\n+/gm, ""); // 빈 줄 정리
+    cleaned = cleaned.trim();
+
+    // 7. 로깅 (변경이 있을 때만)
+    if (content !== cleaned) {
+      console.log("🧹 청크 정리:", {
+        원본: content.substring(0, 50) + "...",
+        정리됨: cleaned.substring(0, 50) + "...",
+        길이변화: `${content.length} → ${cleaned.length}`,
+        제거된내용: content.length - cleaned.length > 10 ? "상당량" : "소량",
+      });
+    }
+
+    return cleaned;
+  },
+
+  /**
+   * End 태그 처리 메서드 - 태그 이전까지만 출력 (업데이트된 스탑 태그 포함)
+   */
+  handleEndTags(content) {
+    if (!content || typeof content !== "string") {
+      return content;
+    }
+
+    // **업데이트된 End 태그들 정의** (우선순위 순서)
+    const endTags = [
+      // 새로운 주요 스탑 태그들
+      "<|EOT|>", // End of Text (최우선)
+      "\n# --- Generation Complete ---", // 완료 마커 (줄바꿈 포함)
+      "# --- Generation Complete ---", // 완료 마커 (줄바꿈 없이)
+
+      // 기존 vLLM 스탑 태그들
+      "</c>",
+      "<|im_end|>",
+      "[DONE]",
+      "<|endoftext|>",
+
+      // 기타 완료 신호들
+      "###END###",
+      "GenerationComplete",
+      "#---GenerationComplete",
+      "---GenerationComplete---",
+
+      // 추가 패턴들
+      "<!-- END -->",
+      "[END_OF_GENERATION]",
+      "\n\n# END",
+    ];
+
+    // End 태그 감지 (우선순위대로 검사)
+    for (let i = 0; i < endTags.length; i++) {
+      const endTag = endTags[i];
+      const endIndex = content.indexOf(endTag);
+
+      if (endIndex !== -1) {
+        console.log(
+          `🔚 End 태그 감지: "${endTag}" (위치: ${endIndex}, 우선순위: ${
+            i + 1
+          })`
+        );
+
+        // 태그 이전까지만 추출
+        let beforeTag = content.substring(0, endIndex);
+
+        // 특별 처리: 줄바꿈이 포함된 태그의 경우 추가 정리
+        if (endTag.startsWith("\n")) {
+          // 이미 줄바꿈 전까지 자른 상태이므로 trailing whitespace만 제거
+          beforeTag = beforeTag.trimEnd();
+        } else {
+          beforeTag = beforeTag.trim();
+        }
+
+        if (beforeTag.length > 0) {
+          console.log("✂️ 태그 이전 내용:", {
+            감지된태그: endTag,
+            원본길이: content.length,
+            처리된길이: beforeTag.length,
+            미리보기: beforeTag.substring(0, 50) + "...",
+            완전한내용:
+              beforeTag.length <= 100
+                ? beforeTag
+                : beforeTag.substring(0, 100) + "...",
+          });
+          return beforeTag;
+        } else {
+          // 태그 이전에 유효한 내용이 없으면 스트리밍 종료 신호
+          console.log(
+            `⚠️ End 태그 "${endTag}" 이전에 유효한 내용 없음 - 스트리밍 종료`
+          );
+          return null;
+        }
+      }
+    }
+
+    // End 태그가 없으면 원본 반환
+    return content;
+  },
+
   // 성능 통계 초기화
   resetPerformanceStats() {
     chunkPerformanceStats.totalProcessed = 0;
@@ -1303,7 +1789,7 @@ const messageQueue = {
         return;
       }
 
-      // 메인 요소에 콘텐츠 렌더링
+      // 메인 요소에 콘텐츠 렌더링 (전달받은 콘텐츠 사용)
       this.renderContentToElement(responseElement, content);
 
       // 강제 표시 설정
@@ -1424,6 +1910,20 @@ const messageQueue = {
       contentType: typeof content,
     });
 
+    // **최종 콘텐츠 정리**
+    let cleanedContent = content;
+    if (content && typeof content === "string") {
+      cleanedContent = messageQueue.cleanChunkContent(content);
+      cleanedContent =
+        messageQueue.handleEndTags(cleanedContent) || cleanedContent;
+
+      console.log("🧹 최종 콘텐츠 정리:", {
+        원본길이: content.length,
+        정리된길이: cleanedContent.length,
+        정리된내용: cleanedContent.substring(0, 50) + "...",
+      });
+    }
+
     // 응답 탭 강제 활성화
     this.activateResponseTab();
 
@@ -1447,24 +1947,23 @@ const messageQueue = {
       }
 
       try {
-        // 기존 내용 완전 제거
+        // 기존 내용 완전 제거 - 더 강력한 방법
         responseElement.innerHTML = "";
+        responseElement.textContent = "";
 
-        // 콘텐츠 정리 및 검증
-        const cleanedContent = this.cleanAIResponse(content);
-        if (!cleanedContent || cleanedContent.trim().length === 0) {
-          console.warn("⚠️ 정리 후 빈 콘텐츠");
-          responseElement.innerHTML = `
-            <div class="empty-response">
-              <p>❌ 응답 내용이 비어있습니다.</p>
-              <p>다시 시도해주세요.</p>
-            </div>
-          `;
-          return;
+        // 모든 자식 요소 제거
+        while (responseElement.firstChild) {
+          responseElement.removeChild(responseElement.firstChild);
         }
 
-        // 안전한 렌더링
-        const safeContent = this.renderCodeSafely(cleanedContent);
+        // 이미 위에서 정리된 cleanedContent 사용 (이중 정리 방지)
+        if (!cleanedContent || cleanedContent.trim().length === 0) {
+          console.warn("⚠️ 정리 후 빈 콘텐츠");
+          cleanedContent = "# 응답 내용이 비어있습니다.\n# 다시 시도해주세요.";
+        }
+
+        // 직접 HTML 생성 (안전한 방법)
+        const safeContent = messageQueue.createSafeHTML(cleanedContent);
         responseElement.innerHTML = safeContent;
 
         // 강제 표시 스타일 적용
@@ -1478,6 +1977,9 @@ const messageQueue = {
 
         // DOM 강제 업데이트
         responseElement.offsetHeight;
+
+        // 강제 UI 업데이트 호출
+        forceUpdateUI();
 
         // 최종 검증
         setTimeout(
@@ -1605,7 +2107,7 @@ const messageQueue = {
 
     if (!isVisible || !hasContent) {
       console.error("❌ 최종 표시 검증 실패 - 긴급 복구 시도");
-      this.emergencyDisplayRecovery(element, content);
+      this.emergencyDisplayRecovery(element, cleanedContent);
     } else {
       console.log("✅ 최종 표시 검증 성공");
     }
@@ -1651,6 +2153,89 @@ const messageQueue = {
       console.log("🔧 긴급 복구 완료");
     } catch (error) {
       console.error("❌ 긴급 복구도 실패:", error);
+    }
+  },
+
+  /**
+   * 안전한 HTML 생성 메서드
+   */
+  createSafeHTML(content) {
+    try {
+      // HTML 이스케이프 처리
+      const escapedContent = this.escapeHtml(content);
+
+      // 안전한 HTML 구조 생성
+      return `
+        <div style="
+          width: 100%;
+          padding: 16px;
+          background: #1e1e1e;
+          color: #d4d4d4;
+          border-radius: 8px;
+          font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+          font-size: 13px;
+          line-height: 1.5;
+          border: 1px solid #3c3c3c;
+          display: block !important;
+          visibility: visible !important;
+          opacity: 1 !important;
+          min-height: 100px;
+        ">
+          <div style="
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #3c3c3c;
+            color: #4fc3f7;
+            font-weight: 600;
+            font-size: 14px;
+          ">
+            🤖 HAPA AI 응답
+          </div>
+          <pre style="
+            margin: 0;
+            padding: 12px;
+            background: #2d2d2d;
+            border-radius: 6px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            overflow-x: auto;
+            border: 1px solid #404040;
+            color: #e6edf3;
+            font-family: inherit;
+            font-size: inherit;
+            line-height: inherit;
+          "><code>${escapedContent}</code></pre>
+          <div style="
+            margin-top: 12px;
+            padding: 8px;
+            background: rgba(79, 195, 247, 0.1);
+            border-radius: 4px;
+            border-left: 3px solid #4fc3f7;
+            font-size: 11px;
+            color: #94a3b8;
+          ">
+            💡 생성 시간: ${new Date().toLocaleString()} | 문자 수: ${
+        content.length
+      }
+          </div>
+        </div>
+      `;
+    } catch (error) {
+      console.error("❌ 안전한 HTML 생성 실패:", error);
+      // 폴백: 가장 기본적인 HTML
+      return `<pre style="
+        font-family: monospace;
+        white-space: pre-wrap;
+        padding: 10px;
+        background: #1e1e1e;
+        color: #d4d4d4;
+        border-radius: 4px;
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+             ">${this.escapeHtml(content)}</pre>`;
     }
   },
 
@@ -1854,7 +2439,7 @@ const messageQueue = {
         console.log("✅ streamingAbortController 정리 완료");
       }
 
-      // 전역 버퍼 정리
+      // ✅ 수정: 전역 버퍼 정리 (동기화)
       streamingBuffer = "";
       currentStreamingContent = "";
       streamingSequence = 0;
@@ -1881,7 +2466,7 @@ const messageQueue = {
     } catch (error) {
       console.error("❌ 스트리밍 정리 중 오류:", error);
 
-      // 긴급 정리 - 최소한의 정리라도 수행
+      // ✅ 수정: 긴급 정리 - 최소한의 정리라도 수행 (동기화)
       try {
         streamingBuffer = "";
         currentStreamingContent = "";
@@ -2154,6 +2739,614 @@ const messageQueue = {
       alert("시스템 오류가 발생했습니다. 페이지를 새로고침해주세요.");
     }
   },
+
+  /**
+   * AI 응답 처리 (새로운 메서드)
+   */
+  async handleAIResponse(message) {
+    console.log("🤖 AI 응답 처리 시작:", {
+      hasResponse: !!message.response,
+      responseKeys: message.response ? Object.keys(message.response) : null,
+    });
+
+    try {
+      const response = message.response;
+      if (!response || !response.generated_code) {
+        console.error("❌ 유효하지 않은 AI 응답:", response);
+        await this.handleShowError({
+          error: "응답 데이터가 유효하지 않습니다.",
+        });
+        return;
+      }
+
+      // 응답 탭 활성화
+      this.activateResponseTab();
+
+      // 응답 요소 안전하게 가져오기
+      const responseElement = await getResponseElementSafely();
+      if (!responseElement) {
+        console.error("❌ 응답 요소를 찾을 수 없음");
+        return;
+      }
+
+      // 응답 내용 렌더링
+      const renderedContent = this.renderAIResponse(response);
+      responseElement.innerHTML = renderedContent;
+
+      // 요소 강제 표시
+      this.forceElementVisibility(responseElement);
+
+      // 부모 컨테이너들 표시
+      this.ensureParentVisibility(responseElement);
+
+      // 복사 버튼 활성화
+      this.activateCopyButton(response.generated_code);
+
+      console.log("✅ AI 응답 표시 완료");
+    } catch (error) {
+      console.error("❌ AI 응답 처리 오류:", error);
+      await this.handleShowError({
+        error: "응답 처리 중 오류가 발생했습니다.",
+      });
+    }
+  },
+
+  /**
+   * 응답 가시성 확인 (새로운 메서드)
+   */
+  async ensureResponseVisible(message) {
+    console.log("👁️ 응답 가시성 확인 시작");
+
+    try {
+      const data = message.data || message.response;
+      if (!data || !data.generated_code) {
+        console.warn("⚠️ 가시성 확인할 데이터가 없음");
+        return;
+      }
+
+      // 응답 요소 확인
+      const responseElement = await getResponseElementSafely();
+      if (!responseElement) {
+        console.error("❌ 응답 요소를 찾을 수 없어 재생성 시도");
+
+        // 응답 재처리 시도
+        await this.handleAIResponse({ response: data });
+        return;
+      }
+
+      // 내용이 비어있는지 확인
+      if (
+        !responseElement.innerHTML.trim() ||
+        responseElement.innerHTML.includes("응답을 기다리는 중")
+      ) {
+        console.warn("⚠️ 응답 내용이 비어있음, 재렌더링 시도");
+
+        const renderedContent = this.renderAIResponse(data);
+        responseElement.innerHTML = renderedContent;
+        this.forceElementVisibility(responseElement);
+      }
+
+      // 가시성 검증
+      const isVisible =
+        responseElement.offsetHeight > 0 && responseElement.offsetWidth > 0;
+      console.log("📊 가시성 검증 결과:", {
+        isVisible,
+        offsetHeight: responseElement.offsetHeight,
+        offsetWidth: responseElement.offsetWidth,
+        display: responseElement.style.display,
+        visibility: responseElement.style.visibility,
+      });
+
+      if (!isVisible) {
+        console.warn("⚠️ 응답이 보이지 않음, 강제 표시");
+        this.forceElementVisibility(responseElement);
+        this.ensureParentVisibility(responseElement);
+      }
+
+      // 응답 탭 활성화
+      this.activateResponseTab();
+    } catch (error) {
+      console.error("❌ 응답 가시성 확인 오류:", error);
+    }
+  },
+
+  /**
+   * 로딩 상태 처리 (새로운 메서드)
+   */
+  async handleShowLoading(message) {
+    console.log("⏳ 로딩 상태 표시:", message.message);
+
+    try {
+      const responseElement = await getResponseElementSafely();
+      if (!responseElement) {
+        console.error("❌ 로딩 표시할 요소를 찾을 수 없음");
+        return;
+      }
+
+      // 로딩 UI 표시
+      responseElement.innerHTML = `
+        <div class="loading-response">
+          <div class="loading-animation">
+            <div class="spinner"></div>
+          </div>
+          <p>${message.message || "AI가 응답을 생성하고 있습니다..."}</p>
+        </div>
+      `;
+
+      this.forceElementVisibility(responseElement);
+      this.activateResponseTab();
+    } catch (error) {
+      console.error("❌ 로딩 상태 표시 오류:", error);
+    }
+  },
+
+  /**
+   * 에러 상태 처리 (새로운 메서드)
+   */
+  async handleShowError(message) {
+    console.log("❌ 에러 상태 표시:", message.error);
+
+    try {
+      const responseElement = await getResponseElementSafely();
+      if (!responseElement) {
+        console.error("❌ 에러 표시할 요소를 찾을 수 없음");
+        return;
+      }
+
+      // 에러 UI 표시
+      responseElement.innerHTML = `
+        <div class="error-response">
+          <div class="error-icon">⚠️</div>
+          <div class="error-message">
+            <h3>오류 발생</h3>
+            <p>${message.error || "알 수 없는 오류가 발생했습니다."}</p>
+            <button onclick="location.reload()" class="retry-button">다시 시도</button>
+          </div>
+        </div>
+      `;
+
+      this.forceElementVisibility(responseElement);
+      this.activateResponseTab();
+    } catch (error) {
+      console.error("❌ 에러 상태 표시 오류:", error);
+    }
+  },
+
+  /**
+   * AI 응답 렌더링 (개선된 분리 구조)
+   */
+  renderAIResponse(response) {
+    const timestamp = new Date().toLocaleTimeString();
+    const hasExplanation =
+      response.explanation && response.explanation.trim() !== "";
+    const hasCode =
+      response.generated_code && response.generated_code.trim() !== "";
+
+    // 메타데이터 생성
+    const metadata = this.generateResponseMetadata(response);
+
+    return `
+      <div class="ai-response-container">
+        ${
+          hasExplanation
+            ? this.renderExplanationSection(response.explanation)
+            : ""
+        }
+        ${
+          hasCode
+            ? this.renderCodeSection(response.generated_code, metadata)
+            : ""
+        }
+        ${this.renderMetadataSection(metadata, timestamp)}
+        ${hasCode ? this.renderActionButtons(response.generated_code) : ""}
+      </div>
+    `;
+  },
+
+  /**
+   * 설명 섹션 렌더링
+   */
+  renderExplanationSection(explanation) {
+    return `
+      <div class="explanation-section">
+        <div class="section-header">
+          <h4 class="section-title">📝 설명</h4>
+        </div>
+        <div class="explanation-content">
+          ${this.formatExplanationText(explanation)}
+        </div>
+      </div>
+    `;
+  },
+
+  /**
+   * 코드 섹션 렌더링
+   */
+  renderCodeSection(code, metadata) {
+    const languageClass = this.detectLanguageClass(code);
+    const highlightedCode = this.applySyntaxHighlighting(
+      code,
+      metadata.language
+    );
+    return `
+      <div class="code-section">
+        <div class="section-header">
+          <h4 class="section-title">💻 코드</h4>
+          <div class="code-info">
+            <span class="language-tag">${metadata.language}</span>
+            <span class="lines-count">${metadata.linesCount}줄</span>
+          </div>
+        </div>
+        <div class="code-container">
+          <pre class="code-block"><code class="${languageClass}">${highlightedCode}</code></pre>
+        </div>
+      </div>
+    `;
+  },
+
+  /**
+   * 메타데이터 섹션 렌더링
+   */
+  renderMetadataSection(metadata, timestamp) {
+    return `
+      <div class="metadata-section">
+        <div class="meta-items">
+          <span class="meta-item">
+            <i class="meta-icon">🕒</i>
+            <span class="meta-text">${timestamp}</span>
+          </span>
+          <span class="meta-item">
+            <i class="meta-icon">📊</i>
+            <span class="meta-text">${metadata.charCount}자</span>
+          </span>
+          ${
+            metadata.processingTime
+              ? `
+            <span class="meta-item">
+              <i class="meta-icon">⚡</i>
+              <span class="meta-text">${metadata.processingTime}ms</span>
+            </span>
+          `
+              : ""
+          }
+        </div>
+      </div>
+    `;
+  },
+
+  /**
+   * 액션 버튼 섹션 렌더링
+   */
+  renderActionButtons(code) {
+    return `
+      <div class="action-section">
+        <button onclick="copyToClipboard('${this.escapeForAttribute(
+          code
+        )}')" class="action-button copy-button">
+          <i class="button-icon">📋</i>
+          <span class="button-text">복사</span>
+        </button>
+        <button onclick="insertCode('${this.escapeForAttribute(
+          code
+        )}')" class="action-button insert-button">
+          <i class="button-icon">📝</i>
+          <span class="button-text">삽입</span>
+        </button>
+      </div>
+    `;
+  },
+
+  /**
+   * 응답 메타데이터 생성
+   */
+  generateResponseMetadata(response) {
+    const code = response.generated_code || "";
+    return {
+      charCount: code.length,
+      linesCount: code.split("\n").length,
+      language: this.detectLanguage(code),
+      processingTime:
+        response.processingTime || response.processing_time || null,
+    };
+  },
+
+  /**
+   * 설명 텍스트 포맷팅
+   */
+  formatExplanationText(explanation) {
+    if (!explanation) return "";
+
+    // 마크다운 스타일 텍스트 처리
+    return explanation
+      .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+      .replace(/\*(.*?)\*/g, "<em>$1</em>")
+      .replace(/`(.*?)`/g, '<code class="inline-code">$1</code>')
+      .replace(/\n\n/g, "</p><p>")
+      .replace(/^\s*/, "<p>")
+      .replace(/\s*$/, "</p>");
+  },
+
+  /**
+   * 언어 감지
+   */
+  detectLanguage(code) {
+    if (!code) return "text";
+
+    if (
+      code.includes("def ") ||
+      code.includes("import ") ||
+      code.includes("print(")
+    ) {
+      return "Python";
+    }
+    if (
+      code.includes("function ") ||
+      code.includes("const ") ||
+      code.includes("console.log")
+    ) {
+      return "JavaScript";
+    }
+    if (
+      code.includes("SELECT ") ||
+      code.includes("INSERT ") ||
+      code.includes("UPDATE ")
+    ) {
+      return "SQL";
+    }
+    return "Code";
+  },
+
+  /**
+   * CSS 클래스용 언어 감지
+   */
+  detectLanguageClass(code) {
+    const language = this.detectLanguage(code).toLowerCase();
+    return `language-${language}`;
+  },
+
+  /**
+   * 응답 탭 활성화 (새로운 메서드)
+   */
+  activateResponseTab() {
+    try {
+      const responseTab = document.querySelector('[data-tab="response"]');
+      const historyTab = document.querySelector('[data-tab="history"]');
+
+      if (responseTab && historyTab) {
+        responseTab.classList.add("active");
+        historyTab.classList.remove("active");
+      }
+
+      // 탭 내용 표시
+      const responseContent = document.querySelector(".response-content");
+      const historyContent = document.querySelector(".history-content");
+
+      if (responseContent) {
+        responseContent.style.display = "block";
+      }
+      if (historyContent) {
+        historyContent.style.display = "none";
+      }
+
+      console.log("✅ 응답 탭 활성화 완료");
+    } catch (error) {
+      console.error("❌ 응답 탭 활성화 오류:", error);
+    }
+  },
+
+  /**
+   * 요소 강제 표시 (새로운 메서드)
+   */
+  forceElementVisibility(element) {
+    if (!element) return;
+
+    element.style.display = "block";
+    element.style.visibility = "visible";
+    element.style.opacity = "1";
+    element.style.position = "relative";
+    element.style.zIndex = "1";
+  },
+
+  /**
+   * 부모 컨테이너 표시 (새로운 메서드)
+   */
+  ensureParentVisibility(element) {
+    if (!element) return;
+
+    let parent = element.parentElement;
+    while (parent && parent !== document.body) {
+      if (
+        parent.classList.contains("response-content") ||
+        parent.classList.contains("tab-content") ||
+        parent.classList.contains("response-section")
+      ) {
+        this.forceElementVisibility(parent);
+      }
+      parent = parent.parentElement;
+    }
+  },
+
+  /**
+   * 복사 버튼 활성화 (새로운 메서드)
+   */
+  activateCopyButton(code) {
+    try {
+      const copyButton = document.getElementById("copy-button");
+      if (copyButton) {
+        copyButton.style.display = "block";
+        copyButton.onclick = () => {
+          copyToClipboard(code);
+        };
+      }
+    } catch (error) {
+      console.error("❌ 복사 버튼 활성화 오류:", error);
+    }
+  },
+
+  /**
+   * HTML 이스케이프 (새로운 메서드)
+   */
+  escapeHtml(unsafe) {
+    return unsafe
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  },
+
+  /**
+   * 속성용 이스케이프 (새로운 메서드)
+   */
+  escapeForAttribute(unsafe) {
+    return unsafe
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;")
+      .replace(/\n/g, "\\n")
+      .replace(/\r/g, "\\r");
+  },
+
+  /**
+   * 간단한 Syntax Highlighting 적용
+   */
+  applySyntaxHighlighting(code, language) {
+    if (!code || !language) return this.escapeHtml(code);
+
+    const normalizedLanguage = language.toLowerCase();
+    let highlightedCode = this.escapeHtml(code);
+
+    switch (normalizedLanguage) {
+      case "python":
+        highlightedCode = this.highlightPython(highlightedCode);
+        break;
+      case "javascript":
+        highlightedCode = this.highlightJavaScript(highlightedCode);
+        break;
+      case "sql":
+        highlightedCode = this.highlightSQL(highlightedCode);
+        break;
+      default:
+        highlightedCode = this.highlightGeneric(highlightedCode);
+        break;
+    }
+
+    return highlightedCode;
+  },
+
+  /**
+   * Python 코드 하이라이팅
+   */
+  highlightPython(code) {
+    return (
+      code
+        // Python 키워드
+        .replace(
+          /\b(def|class|if|elif|else|while|for|try|except|finally|with|import|from|as|return|yield|lambda|and|or|not|in|is|None|True|False|pass|break|continue|global|nonlocal|async|await)\b/g,
+          '<span class="keyword">$1</span>'
+        )
+        // 내장 함수
+        .replace(
+          /\b(print|len|range|enumerate|zip|map|filter|sorted|sum|max|min|abs|round|type|str|int|float|bool|list|tuple|dict|set)\b(?=\s*\()/g,
+          '<span class="builtin">$1</span>'
+        )
+        // 함수 정의
+        .replace(
+          /def\s+<span class="keyword">def<\/span>\s+(\w+)/g,
+          'def <span class="function">$1</span>'
+        )
+        .replace(/def\s+(\w+)/g, 'def <span class="function">$1</span>')
+        // 문자열 (작은따옴표)
+        .replace(/'([^'\\]|\\.)*'/g, '<span class="string">$&</span>')
+        // 문자열 (큰따옴표)
+        .replace(/"([^"\\]|\\.)*"/g, '<span class="string">$&</span>')
+        // 숫자
+        .replace(/\b\d+\.?\d*\b/g, '<span class="number">$&</span>')
+        // 주석
+        .replace(/#.*/g, '<span class="comment">$&</span>')
+    );
+  },
+
+  /**
+   * JavaScript 코드 하이라이팅
+   */
+  highlightJavaScript(code) {
+    return (
+      code
+        // JavaScript 키워드
+        .replace(
+          /\b(function|var|let|const|if|else|while|for|try|catch|finally|return|break|continue|switch|case|default|class|extends|constructor|static|async|await|import|export|from|as|new|this|super|typeof|instanceof|in|of|delete|void|null|undefined|true|false)\b/g,
+          '<span class="keyword">$1</span>'
+        )
+        // 함수 선언
+        .replace(
+          /function\s+<span class="keyword">function<\/span>\s+(\w+)/g,
+          'function <span class="function">$1</span>'
+        )
+        .replace(
+          /function\s+(\w+)/g,
+          'function <span class="function">$1</span>'
+        )
+        // 화살표 함수
+        .replace(/(\w+)\s*=>\s*/g, '<span class="function">$1</span> => ')
+        // 문자열 (작은따옴표)
+        .replace(/'([^'\\]|\\.)*'/g, '<span class="string">$&</span>')
+        // 문자열 (큰따옴표)
+        .replace(/"([^"\\]|\\.)*"/g, '<span class="string">$&</span>')
+        // 템플릿 리터럴
+        .replace(/`([^`\\]|\\.)*`/g, '<span class="string">$&</span>')
+        // 숫자
+        .replace(/\b\d+\.?\d*\b/g, '<span class="number">$&</span>')
+        // 주석 (한 줄)
+        .replace(/\/\/.*/g, '<span class="comment">$&</span>')
+        // 주석 (여러 줄)
+        .replace(/\/\*[\s\S]*?\*\//g, '<span class="comment">$&</span>')
+    );
+  },
+
+  /**
+   * SQL 코드 하이라이팅
+   */
+  highlightSQL(code) {
+    return (
+      code
+        // SQL 키워드
+        .replace(
+          /\b(SELECT|FROM|WHERE|JOIN|INNER|LEFT|RIGHT|FULL|OUTER|ON|GROUP|BY|ORDER|HAVING|INSERT|INTO|VALUES|UPDATE|SET|DELETE|CREATE|TABLE|DATABASE|INDEX|ALTER|DROP|PRIMARY|KEY|FOREIGN|REFERENCES|NOT|NULL|UNIQUE|DEFAULT|AUTO_INCREMENT|VARCHAR|INT|INTEGER|BIGINT|FLOAT|DOUBLE|DECIMAL|DATE|TIME|DATETIME|TIMESTAMP|TEXT|BLOB|TRUE|FALSE)\b/gi,
+          '<span class="keyword">$&</span>'
+        )
+        // 문자열
+        .replace(/'([^'\\]|\\.)*'/g, '<span class="string">$&</span>')
+        .replace(/"([^"\\]|\\.)*"/g, '<span class="string">$&</span>')
+        // 숫자
+        .replace(/\b\d+\.?\d*\b/g, '<span class="number">$&</span>')
+        // 주석
+        .replace(/--.*$/gm, '<span class="comment">$&</span>')
+        .replace(/\/\*[\s\S]*?\*\//g, '<span class="comment">$&</span>')
+    );
+  },
+
+  /**
+   * 일반 코드 하이라이팅
+   */
+  highlightGeneric(code) {
+    return (
+      code
+        // 일반적인 키워드들
+        .replace(
+          /\b(if|else|while|for|function|class|return|import|export|var|let|const|def|try|catch|finally|switch|case|break|continue)\b/g,
+          '<span class="keyword">$1</span>'
+        )
+        // 문자열
+        .replace(/'([^'\\]|\\.)*'/g, '<span class="string">$&</span>')
+        .replace(/"([^"\\]|\\.)*"/g, '<span class="string">$&</span>')
+        // 숫자
+        .replace(/\b\d+\.?\d*\b/g, '<span class="number">$&</span>')
+        // 주석 패턴들
+        .replace(/#.*/g, '<span class="comment">$&</span>')
+        .replace(/\/\/.*/g, '<span class="comment">$&</span>')
+        .replace(/\/\*[\s\S]*?\*\//g, '<span class="comment">$&</span>')
+    );
+  },
 };
 
 // ============================================================================
@@ -2248,7 +3441,7 @@ function submitQuestion() {
   // 이전 에러 메시지 정리 (새로운 요청 시작 시)
   streamingManager.clearErrorMessages();
 
-  // 스트리밍 상태 초기화 (STARTING 상태는 handleStreamingStarted에서 설정)
+  // ✅ 수정: 스트리밍 상태 초기화 (STARTING 상태는 handleStreamingStarted에서 설정)
   requestStartTime = Date.now();
   currentStreamingContent = "";
   streamingSequence = 0;
@@ -2261,7 +3454,7 @@ function submitQuestion() {
     console.log("✅ 생성 버튼 비활성화됨");
   }
 
-  // 모델 타입 매핑
+  // 모델 타입 매핑 - Backend ModelType과 완전 일치
   const modelMapping = {
     autocomplete: "code_completion",
     prompt: "code_generation",
@@ -2334,6 +3527,15 @@ function submitQuestion() {
 
     alert("메시지 전송에 실패했습니다. 다시 시도해주세요.");
   }
+}
+
+/**
+ * 레거시 호환성을 위한 질문 제출 핸들러
+ * HTML에서 호출되는 handleQuestionSubmit 함수
+ */
+function handleQuestionSubmit() {
+  console.log("🔄 handleQuestionSubmit 호출됨 (submitQuestion으로 리다이렉트)");
+  return submitQuestion();
 }
 
 /**
@@ -2697,6 +3899,34 @@ function forceUpdateUI() {
     responseContent.style.height = "auto";
     responseContent.style.overflow = "auto";
     console.log("✅ 응답 콘텐츠 강제 표시");
+
+    // **중요: 누적된 스트리밍 버퍼 내용을 UI에 업데이트**
+    if (streamingBuffer && streamingBuffer.trim().length > 0) {
+      try {
+        // 스트리밍 버퍼 내용을 안전하게 렌더링
+        const cleanedBuffer = messageQueue.cleanChunkContent(streamingBuffer);
+        const processedBuffer = messageQueue.handleEndTags(cleanedBuffer);
+
+        if (processedBuffer && processedBuffer.trim().length > 0) {
+          const renderedContent =
+            messageQueue.renderCodeSafely(processedBuffer);
+          responseContent.innerHTML = renderedContent;
+          console.log("✅ 스트리밍 버퍼 내용 UI 반영 완료:", {
+            originalLength: streamingBuffer.length,
+            cleanedLength: cleanedBuffer.length,
+            processedLength: processedBuffer.length,
+            rendered: true,
+          });
+        }
+      } catch (error) {
+        console.error("❌ 스트리밍 버퍼 UI 반영 오류:", error);
+        // 폴백: 원본 내용을 안전하게 표시
+        responseContent.innerHTML = `<pre style="white-space: pre-wrap; word-wrap: break-word; font-family: 'Consolas', 'Monaco', monospace; font-size: 12px; line-height: 1.4; padding: 8px; background: #1e1e1e; color: #d4d4d4; border-radius: 4px; overflow-x: auto;">${messageQueue.escapeHtml(
+          streamingBuffer
+        )}</pre>`;
+        console.log("🔄 폴백으로 원본 버퍼 내용 표시");
+      }
+    }
   }
 
   // 부모 컨테이너들도 확인
@@ -3415,7 +4645,7 @@ const uiRecoveryManager = {
    */
   async resetStates() {
     try {
-      // 전역 상태 초기화
+      // ✅ 수정: 전역 상태 초기화 (동기화)
       streamingBuffer = "";
       currentStreamingContent = "";
       streamingSequence = 0;
@@ -3475,7 +4705,7 @@ const uiRecoveryManager = {
         clearInterval(i);
       }
 
-      // 전역 상태 강제 초기화
+      // ✅ 수정: 전역 상태 강제 초기화 (동기화)
       streamingBuffer = "";
       currentStreamingContent = "";
       streamingSequence = 0;
@@ -3910,4 +5140,560 @@ if (DEBUG_MODE) {
   setTimeout(() => {
     diagnoseSystemState();
   }, 1000);
+}
+
+// 유틸리티 함수들
+
+/**
+ * 클립보드 복사 함수
+ */
+function copyToClipboard(text) {
+  try {
+    if (navigator.clipboard) {
+      navigator.clipboard
+        .writeText(text)
+        .then(() => {
+          console.log("✅ 클립보드 복사 성공");
+          showNotification("클립보드에 복사되었습니다.", "success");
+        })
+        .catch((err) => {
+          console.error("❌ 클립보드 복사 실패:", err);
+          fallbackCopyToClipboard(text);
+        });
+    } else {
+      fallbackCopyToClipboard(text);
+    }
+  } catch (error) {
+    console.error("❌ 클립보드 복사 오류:", error);
+    fallbackCopyToClipboard(text);
+  }
+}
+
+/**
+ * 대체 클립보드 복사 함수
+ */
+function fallbackCopyToClipboard(text) {
+  try {
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    textArea.style.position = "fixed";
+    textArea.style.left = "-999999px";
+    textArea.style.top = "-999999px";
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+
+    const successful = document.execCommand("copy");
+    document.body.removeChild(textArea);
+
+    if (successful) {
+      console.log("✅ 대체 클립보드 복사 성공");
+      showNotification("클립보드에 복사되었습니다.", "success");
+    } else {
+      console.error("❌ 대체 클립보드 복사 실패");
+      showNotification("클립보드 복사에 실패했습니다.", "error");
+    }
+  } catch (error) {
+    console.error("❌ 대체 클립보드 복사 오류:", error);
+    showNotification("클립보드 복사에 실패했습니다.", "error");
+  }
+}
+
+/**
+ * 코드 삽입 함수
+ */
+function insertCode(code) {
+  try {
+    console.log("📝 코드 삽입 시도:", {
+      codeLength: code.length,
+      codePreview: code.substring(0, 50) + "...",
+    });
+
+    // VSCode Extension으로 코드 삽입 요청
+    vscode.postMessage({
+      command: "insertCode",
+      code: code,
+    });
+
+    showNotification("코드가 편집기에 삽입되었습니다.", "success");
+  } catch (error) {
+    console.error("❌ 코드 삽입 오류:", error);
+    showNotification("코드 삽입에 실패했습니다.", "error");
+  }
+}
+
+/**
+ * 탭 전환 함수
+ */
+function switchTab(tabName) {
+  try {
+    console.log("🔄 탭 전환:", tabName);
+
+    // 탭 버튼 상태 변경
+    const tabButtons = document.querySelectorAll(".tab-btn");
+    tabButtons.forEach((btn) => {
+      btn.classList.remove("active");
+      if (btn.dataset.tab === tabName) {
+        btn.classList.add("active");
+      }
+    });
+
+    // 탭 내용 표시/숨김
+    const responseContent = document.querySelector(".response-content");
+    const historyContent = document.querySelector(".history-content");
+
+    if (tabName === "response") {
+      if (responseContent) responseContent.style.display = "block";
+      if (historyContent) historyContent.style.display = "none";
+    } else if (tabName === "history") {
+      if (responseContent) responseContent.style.display = "none";
+      if (historyContent) historyContent.style.display = "block";
+    }
+
+    console.log("✅ 탭 전환 완료");
+  } catch (error) {
+    console.error("❌ 탭 전환 오류:", error);
+  }
+}
+
+/**
+ * 알림 표시 함수
+ */
+function showNotification(message, type = "info") {
+  try {
+    const notification = document.createElement("div");
+    notification.className = `notification notification-${type}`;
+    notification.textContent = message;
+    notification.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 12px 16px;
+      border-radius: 4px;
+      color: white;
+      z-index: 1000;
+      font-size: 14px;
+      max-width: 300px;
+      word-wrap: break-word;
+      animation: slideIn 0.3s ease-out;
+    `;
+
+    // 타입별 배경색
+    switch (type) {
+      case "success":
+        notification.style.backgroundColor = "#4caf50";
+        break;
+      case "error":
+        notification.style.backgroundColor = "#f44336";
+        break;
+      case "warning":
+        notification.style.backgroundColor = "#ff9800";
+        break;
+      default:
+        notification.style.backgroundColor = "#2196f3";
+    }
+
+    document.body.appendChild(notification);
+
+    // 3초 후 자동 제거
+    setTimeout(() => {
+      if (notification.parentNode) {
+        notification.style.animation = "slideOut 0.3s ease-in";
+        setTimeout(() => {
+          if (notification.parentNode) {
+            notification.parentNode.removeChild(notification);
+          }
+        }, 300);
+      }
+    }, 3000);
+  } catch (error) {
+    console.error("❌ 알림 표시 오류:", error);
+  }
+}
+
+// CSS 애니메이션 추가
+const style = document.createElement("style");
+style.textContent = `
+  @keyframes slideIn {
+    from {
+      transform: translateX(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+  
+  @keyframes slideOut {
+    from {
+      transform: translateX(0);
+      opacity: 1;
+    }
+    to {
+      transform: translateX(100%);
+      opacity: 0;
+    }
+  }
+  
+  .notification {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    border-left: 4px solid rgba(255,255,255,0.5);
+  }
+`;
+document.head.appendChild(style);
+
+// ============================================================================
+// 구조화된 응답 시스템
+// ============================================================================
+
+/**
+ * 구조화된 스트리밍 상태 관리자
+ * 설명과 코드를 분리하여 관리
+ */
+const structuredStreamingManager = {
+  // 분리된 콘텐츠 상태
+  state: {
+    explanation: {
+      content: "",
+      isComplete: false,
+      chunks: [],
+      lastUpdate: 0,
+    },
+    code: {
+      content: "",
+      isComplete: false,
+      chunks: [],
+      lastUpdate: 0,
+    },
+    metadata: {
+      parsing_confidence: 0,
+      total_chunks: 0,
+      complexity: "simple",
+      has_explanation: false,
+      has_code: false,
+    },
+  },
+
+  // 상태 초기화
+  reset() {
+    this.state.explanation = {
+      content: "",
+      isComplete: false,
+      chunks: [],
+      lastUpdate: 0,
+    };
+    this.state.code = {
+      content: "",
+      isComplete: false,
+      chunks: [],
+      lastUpdate: 0,
+    };
+    this.state.metadata = {
+      parsing_confidence: 0,
+      total_chunks: 0,
+      complexity: "simple",
+      has_explanation: false,
+      has_code: false,
+    };
+    console.log("✨ 구조화된 스트리밍 상태 초기화");
+  },
+
+  // 청크 타입별 처리
+  processChunk(chunkType, content, metadata = {}) {
+    const timestamp = Date.now();
+    this.state.metadata.total_chunks++;
+
+    switch (chunkType) {
+      case "explanation":
+        this.state.explanation.content = content;
+        this.state.explanation.chunks.push({
+          content,
+          timestamp,
+          metadata,
+        });
+        this.state.explanation.lastUpdate = timestamp;
+        this.state.explanation.isComplete = metadata.is_complete || false;
+        this.state.metadata.has_explanation = true;
+        break;
+
+      case "code":
+        this.state.code.content = content;
+        this.state.code.chunks.push({
+          content,
+          timestamp,
+          metadata,
+        });
+        this.state.code.lastUpdate = timestamp;
+        this.state.code.isComplete = metadata.is_complete || false;
+        this.state.metadata.has_code = true;
+        break;
+
+      case "token":
+        // 실시간 프리뷰용 토큰 (실제 상태는 업데이트하지 않음)
+        break;
+
+      case "done":
+        this.state.explanation.isComplete = true;
+        this.state.code.isComplete = true;
+        if (metadata.parsing_confidence) {
+          this.state.metadata.parsing_confidence = metadata.parsing_confidence;
+        }
+        break;
+    }
+
+    // 복잡도 및 메타데이터 업데이트
+    if (metadata.complexity) {
+      this.state.metadata.complexity = metadata.complexity;
+    }
+    if (metadata.parsing_confidence) {
+      this.state.metadata.parsing_confidence = metadata.parsing_confidence;
+    }
+
+    console.log(`📦 구조화된 청크 처리: ${chunkType}`, {
+      contentLength: content.length,
+      hasExplanation: this.state.metadata.has_explanation,
+      hasCode: this.state.metadata.has_code,
+      totalChunks: this.state.metadata.total_chunks,
+    });
+
+    return this.state;
+  },
+
+  // 현재 상태 조회
+  getState() {
+    return { ...this.state };
+  },
+
+  // 완성도 확인
+  isComplete() {
+    return this.state.explanation.isComplete && this.state.code.isComplete;
+  },
+
+  // UI 업데이트용 데이터 생성
+  generateUIData() {
+    return {
+      explanation: this.state.explanation.content,
+      generated_code: this.state.code.content,
+      metadata: {
+        ...this.state.metadata,
+        generatedAt: new Date().toISOString(),
+        charCount: this.state.code.content.length,
+        explanationLength: this.state.explanation.content.length,
+      },
+      success: true,
+      processingTime:
+        this.state.code.lastUpdate -
+        (this.state.explanation.lastUpdate || this.state.code.lastUpdate),
+    };
+  },
+};
+
+/**
+ * 실시간 DOM 업데이트 관리자
+ */
+const realtimeDOMUpdater = {
+  // DOM 요소 캐시
+  elements: {
+    responseContainer: null,
+    explanationSection: null,
+    codeSection: null,
+    metadataSection: null,
+  },
+
+  // 요소 초기화
+  initializeElements() {
+    this.elements.responseContainer =
+      document.querySelector(".response-content") ||
+      document.querySelector("#response-tab");
+    console.log("🎯 DOM 요소 초기화:", {
+      hasResponseContainer: !!this.elements.responseContainer,
+    });
+  },
+
+  // 구조화된 UI 생성
+  createStructuredUI() {
+    if (!this.elements.responseContainer) {
+      this.initializeElements();
+    }
+
+    if (!this.elements.responseContainer) {
+      console.error("❌ 응답 컨테이너를 찾을 수 없음");
+      return;
+    }
+
+    // 기존 내용 정리
+    this.elements.responseContainer.innerHTML = "";
+
+    // 구조화된 HTML 생성
+    const structuredHTML = `
+      <div class="ai-response-container structured-response" id="structured-response">
+        <div class="explanation-section" id="explanation-section" style="display: none;">
+          <div class="section-header">
+            <h4 class="section-title">📝 설명</h4>
+          </div>
+          <div class="explanation-content" id="explanation-content">
+            <div class="loading-placeholder">설명을 생성하고 있습니다...</div>
+          </div>
+        </div>
+        <div class="code-section" id="code-section" style="display: none;">
+          <div class="section-header">
+            <h4 class="section-title">💻 코드</h4>
+            <div class="code-info" id="code-info">
+              <span class="language-tag" id="language-tag">Python</span>
+              <span class="lines-count" id="lines-count">0줄</span>
+            </div>
+          </div>
+          <div class="code-container">
+            <pre class="code-block"><code class="language-python" id="code-content"><div class="loading-placeholder">코드를 생성하고 있습니다...</div></code></pre>
+          </div>
+        </div>
+        <div class="metadata-section" id="metadata-section" style="display: none;">
+          <div class="meta-items">
+            <span class="meta-item">
+              <i class="meta-icon">🕒</i>
+              <span class="meta-text" id="timestamp">생성 중...</span>
+            </span>
+            <span class="meta-item">
+              <i class="meta-icon">📊</i>
+              <span class="meta-text" id="char-count">0자</span>
+            </span>
+            <span class="meta-item">
+              <i class="meta-icon">🎯</i>
+              <span class="meta-text" id="confidence-score">신뢰도: 계산 중...</span>
+            </span>
+          </div>
+        </div>
+        <div class="action-section" id="action-section" style="display: none;">
+          <button onclick="copyStructuredCode()" class="action-button copy-button">
+            <i class="button-icon">📋</i>
+            <span class="button-text">복사</span>
+          </button>
+          <button onclick="insertStructuredCode()" class="action-button insert-button">
+            <i class="button-icon">📝</i>
+            <span class="button-text">삽입</span>
+          </button>
+        </div>
+      </div>
+    `;
+
+    this.elements.responseContainer.innerHTML = structuredHTML;
+
+    // 요소 캐시 업데이트
+    this.elements.explanationSection = document.getElementById(
+      "explanation-section"
+    );
+    this.elements.codeSection = document.getElementById("code-section");
+    this.elements.metadataSection = document.getElementById("metadata-section");
+
+    console.log("✨ 구조화된 UI 생성 완료");
+  },
+
+  // 설명 섹션 업데이트
+  updateExplanation(content) {
+    const explanationContent = document.getElementById("explanation-content");
+    const explanationSection = document.getElementById("explanation-section");
+
+    if (explanationContent && explanationSection) {
+      if (content && content.trim()) {
+        // 마크다운 스타일 포맷팅 적용
+        const formattedContent = this.formatExplanationText(content);
+        explanationContent.innerHTML = formattedContent;
+        explanationSection.style.display = "block";
+        console.log("📝 설명 섹션 업데이트:", content.substring(0, 50) + "...");
+      } else {
+        explanationSection.style.display = "none";
+      }
+    }
+  },
+
+  // 코드 섹션 업데이트
+  updateCode(content, metadata = {}) {
+    const codeContent = document.getElementById("code-content");
+    const codeSection = document.getElementById("code-section");
+    const languageTag = document.getElementById("language-tag");
+    const linesCount = document.getElementById("lines-count");
+
+    if (codeContent && codeSection) {
+      if (content && content.trim()) {
+        // 구문 강조 적용
+        const highlightedCode = messageQueue.applySyntaxHighlighting(
+          content,
+          "Python"
+        );
+        codeContent.innerHTML = highlightedCode;
+
+        // 메타데이터 업데이트
+        if (languageTag) languageTag.textContent = "Python";
+        if (linesCount)
+          linesCount.textContent = `${content.split("\n").length}줄`;
+
+        codeSection.style.display = "block";
+        console.log("💻 코드 섹션 업데이트:", content.substring(0, 50) + "...");
+      } else {
+        codeSection.style.display = "none";
+      }
+    }
+  },
+
+  // 메타데이터 섹션 업데이트
+  updateMetadata(metadata) {
+    const metadataSection = document.getElementById("metadata-section");
+    const timestamp = document.getElementById("timestamp");
+    const charCount = document.getElementById("char-count");
+    const confidenceScore = document.getElementById("confidence-score");
+
+    if (metadataSection) {
+      if (timestamp) {
+        timestamp.textContent = new Date().toLocaleTimeString();
+      }
+      if (charCount && metadata.charCount) {
+        charCount.textContent = `${metadata.charCount}자`;
+      }
+      if (confidenceScore && metadata.parsing_confidence) {
+        const confidence = Math.round(metadata.parsing_confidence * 100);
+        confidenceScore.textContent = `신뢰도: ${confidence}%`;
+      }
+
+      metadataSection.style.display = "block";
+    }
+  },
+
+  // 액션 버튼 표시
+  showActionButtons() {
+    const actionSection = document.getElementById("action-section");
+    if (actionSection) {
+      actionSection.style.display = "flex";
+    }
+  },
+
+  // 마크다운 스타일 텍스트 포맷팅
+  formatExplanationText(text) {
+    if (!text) return "";
+
+    return text
+      .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+      .replace(/\*(.*?)\*/g, "<em>$1</em>")
+      .replace(/`(.*?)`/g, '<code class="inline-code">$1</code>')
+      .replace(/\n\n/g, "</p><p>")
+      .replace(/^\s*/, "<p>")
+      .replace(/\s*$/, "</p>");
+  },
+};
+
+// 전역 함수들 (액션 버튼용)
+function copyStructuredCode() {
+  const state = structuredStreamingManager.getState();
+  if (state.code.content) {
+    copyToClipboard(state.code.content);
+    console.log("📋 구조화된 코드 복사 완료");
+  }
+}
+
+function insertStructuredCode() {
+  const state = structuredStreamingManager.getState();
+  if (state.code.content) {
+    insertCode(state.code.content);
+    console.log("📝 구조화된 코드 삽입 완료");
+  }
 }

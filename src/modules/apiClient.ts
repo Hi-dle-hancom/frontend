@@ -38,7 +38,7 @@ export {
 
 // 네트워크 설정 상수
 const VLLM_API_TIMEOUT = 300000; // 5분
-const CHUNK_TIMEOUT = 45000; // 45초
+const CHUNK_TIMEOUT = 60000; // 60초 (45초 → 60초로 증가)
 
 // 네트워크 모니터링 클래스
 class NetworkMonitor {
@@ -380,8 +380,26 @@ export class HAPAAPIClient {
           if (line.startsWith("data: ")) {
             const data = line.slice(6).trim();
 
-            if (data === "[DONE]") {
-              console.log("🏁 스트리밍 종료 신호 수신");
+            // **업데이트된 스탑 태그 감지**
+            if (
+              data === "[DONE]" ||
+              data.includes("<|EOT|>") ||
+              data.includes("# --- Generation Complete ---") ||
+              data.includes("</c>") ||
+              data.includes("[END_OF_GENERATION]")
+            ) {
+              console.log("🏁 스트리밍 종료 신호 수신:", {
+                신호타입: data.includes("<|EOT|>")
+                  ? "EOT"
+                  : data.includes("# --- Generation Complete ---")
+                  ? "Generation Complete"
+                  : data.includes("</c>")
+                  ? "vLLM 종료"
+                  : data.includes("[END_OF_GENERATION]")
+                  ? "모델 종료"
+                  : "[DONE]",
+                원본데이터: data.substring(0, 50) + "...",
+              });
 
               // 완료 청크 전송
               onChunk({
@@ -933,7 +951,8 @@ export class HAPAAPIClient {
     }
 
     // 전용 클래스들도 설정 업데이트
-    const finalBaseURL = baseURL || this.baseURL || "http://3.13.240.111:8000/api/v1";
+    const finalBaseURL =
+      baseURL || this.baseURL || "http://3.13.240.111:8000/api/v1";
     const finalApiKey = apiKey || this.apiKey || "";
     this.streamingGenerator.updateConfig(finalApiKey, finalBaseURL);
     this.completionProvider.updateConfig(finalApiKey, finalBaseURL);

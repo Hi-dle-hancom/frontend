@@ -171,16 +171,27 @@ export class PromptExtractor {
 
     // 언어별 코드 패턴
     if (language === "python") {
-      if (trimmedCode.startsWith("def ")) {return "function_definition";}
-      if (trimmedCode.startsWith("class ")) {return "class_definition";}
-      if (trimmedCode.includes("import ")) {return "import_statement";}
-      if (trimmedCode.includes("=") && !trimmedCode.includes("=="))
-        {return "assignment";}
-      if (trimmedCode.includes("if ")) {return "conditional";}
-      if (trimmedCode.includes("for ") || trimmedCode.includes("while "))
-        {return "loop";}
-      if (trimmedCode.includes("try:") || trimmedCode.includes("except:"))
-        {return "error_handling";}
+      if (trimmedCode.startsWith("def ")) {
+        return "function_definition";
+      }
+      if (trimmedCode.startsWith("class ")) {
+        return "class_definition";
+      }
+      if (trimmedCode.includes("import ")) {
+        return "import_statement";
+      }
+      if (trimmedCode.includes("=") && !trimmedCode.includes("==")) {
+        return "assignment";
+      }
+      if (trimmedCode.includes("if ")) {
+        return "conditional";
+      }
+      if (trimmedCode.includes("for ") || trimmedCode.includes("while ")) {
+        return "loop";
+      }
+      if (trimmedCode.includes("try:") || trimmedCode.includes("except:")) {
+        return "error_handling";
+      }
     }
 
     return "code_analysis";
