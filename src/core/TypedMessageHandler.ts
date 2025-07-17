@@ -210,6 +210,7 @@ export class TypedMessageHandler {
 
   private config: Required<TypedMessageHandlerConfig>;
   private disposables: vscode.Disposable[] = [];
+  private errorHandler: ((error: Error) => void) | null = null;
 
   constructor(config: TypedMessageHandlerConfig = {}) {
     this.config = {
@@ -223,7 +224,7 @@ export class TypedMessageHandler {
       processingTimeout: config.processingTimeout ?? 30000,
     };
 
-    this.setupGlobalErrorHandlers();
+    this.setupErrorHandling();
   }
 
   /**
@@ -275,7 +276,7 @@ export class TypedMessageHandler {
       return false;
     }
 
-    const startTime = performance.now();
+    const startTime = Date.now();
 
     try {
       // 메시지 검증
@@ -300,7 +301,7 @@ export class TypedMessageHandler {
       await this.webview.postMessage(enrichedMessage);
 
       this.messageStats.sent++;
-      this.updateProcessingTime(performance.now() - startTime);
+      this.updateProcessingTime(Date.now() - startTime);
 
       if (this.config.enableLogging) {
         console.log(`📤 메시지 전송: ${message.command}`, {
@@ -327,7 +328,7 @@ export class TypedMessageHandler {
    * 웹뷰에서 받은 메시지 처리
    */
   private async handleIncomingMessage(message: unknown): Promise<void> {
-    const startTime = performance.now();
+    const startTime = Date.now();
 
     try {
       // 메시지 검증
@@ -357,7 +358,7 @@ export class TypedMessageHandler {
         await (handler as MessageHandler<WebviewToExtensionMessage>)(
           typedMessage
         );
-        this.updateProcessingTime(performance.now() - startTime);
+        this.updateProcessingTime(Date.now() - startTime);
       } else {
         console.warn(`⚠️ 핸들러가 등록되지 않음: ${typedMessage.command}`);
       }
@@ -661,28 +662,29 @@ export class TypedMessageHandler {
    */
   private updateProcessingTime(processingTime: number): void {
     const totalMessages = this.messageStats.sent + this.messageStats.received;
-    this.messageStats.averageProcessingTime =
-      (this.messageStats.averageProcessingTime * (totalMessages - 1) +
-        processingTime) /
-      totalMessages;
+    if (totalMessages > 0) {
+      this.messageStats.averageProcessingTime =
+        (this.messageStats.averageProcessingTime * (totalMessages - 1) +
+          processingTime) /
+        totalMessages;
+    }
   }
 
   /**
-   * 전역 오류 핸들러 설정
+   * 오류 처리 설정
    */
-  private setupGlobalErrorHandlers(): void {
-    process.on("uncaughtException", (error) => {
+  private setupErrorHandling(): void {
+    this.errorHandler = (error: Error) => {
       console.error("❌ TypedMessageHandler 전역 오류:", error);
       this.messageStats.failed++;
-    });
+    };
+  }
 
-    process.on("unhandledRejection", (reason) => {
-      console.error(
-        "❌ TypedMessageHandler 처리되지 않은 Promise 거부:",
-        reason
-      );
-      this.messageStats.failed++;
-    });
+  /**
+   * 에러 핸들러 설정
+   */
+  public setErrorHandler(handler: (error: Error) => void): void {
+    this.errorHandler = handler;
   }
 
   /**
@@ -733,6 +735,7 @@ export class TypedMessageHandler {
     this.disposables = [];
     this.clearQueue();
     this.webview = null;
+    this.errorHandler = null;
 
     if (this.config.enableLogging) {
       console.log("🗑️ TypedMessageHandler 리소스 정리 완료");

@@ -468,32 +468,49 @@ export class UnifiedStateManager {
 
   // Private helper methods
   private getNestedValue(obj: any, path: string): any {
-    return path.split(".").reduce((current, key) => current?.[key], obj);
+    return path.split(".").reduce((current, key) => {
+      return current && typeof current === "object" && key in current 
+        ? current[key] 
+        : undefined;
+    }, obj);
   }
 
   private setNestedValue(obj: any, path: string, value: any): boolean {
-    const keys = path.split(".");
-    const lastKey = keys.pop()!;
-    const target = keys.reduce((current, key) => {
-      if (!current[key] || typeof current[key] !== "object") {
-        current[key] = {};
+    try {
+      const keys = path.split(".");
+      const lastKey = keys.pop();
+      
+      if (!lastKey) {
+        return false;
       }
-      return current[key];
-    }, obj);
 
-    if (target && typeof target === "object") {
-      target[lastKey] = value;
-      return true;
+      const target = keys.reduce((current, key) => {
+        if (!current || typeof current !== "object") {
+          return null;
+        }
+        if (!current[key] || typeof current[key] !== "object") {
+          current[key] = {};
+        }
+        return current[key];
+      }, obj);
+
+      if (target && typeof target === "object") {
+        target[lastKey] = value;
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error(`❌ setNestedValue 오류: ${path}`, error);
+      return false;
     }
-    return false;
   }
 
   private deepEquals(a: any, b: any): boolean {
     if (a === b) {
       return true;
     }
-    if (a === null || b === null) {
-      return false;
+    if (a === null || b === null || a === undefined || b === undefined) {
+      return a === b;
     }
     if (typeof a !== typeof b) {
       return false;
@@ -502,93 +519,117 @@ export class UnifiedStateManager {
       return false;
     }
 
-    const keysA = Object.keys(a);
-    const keysB = Object.keys(b);
-    if (keysA.length !== keysB.length) {
-      return false;
-    }
-
-    for (const key of keysA) {
-      if (!keysB.includes(key) || !this.deepEquals(a[key], b[key])) {
+    try {
+      const keysA = Object.keys(a);
+      const keysB = Object.keys(b);
+      if (keysA.length !== keysB.length) {
         return false;
       }
-    }
 
-    return true;
+      for (const key of keysA) {
+        if (!keysB.includes(key) || !this.deepEquals(a[key], b[key])) {
+          return false;
+        }
+      }
+
+      return true;
+    } catch (error) {
+      console.error("❌ deepEquals 비교 오류:", error);
+      return false;
+    }
   }
 
   private validateStateChange(path: string, value: any): boolean {
-    // 정확한 경로 매칭
-    const exactValidators = this.validators.get(path) || [];
-    for (const validator of exactValidators) {
-      if (!validator(path, value, this.state)) {
-        return false;
+    try {
+      // 정확한 경로 매칭
+      const exactValidators = this.validators.get(path) || [];
+      for (const validator of exactValidators) {
+        if (!validator(path, value, this.state)) {
+          return false;
+        }
       }
-    }
 
-    // 와일드카드 매칭
-    for (const [validatorPath, validators] of this.validators.entries()) {
-      if (this.matchesWildcard(path, validatorPath)) {
-        for (const validator of validators) {
-          if (!validator(path, value, this.state)) {
-            return false;
+      // 와일드카드 매칭
+      for (const [validatorPath, validators] of this.validators.entries()) {
+        if (this.matchesWildcard(path, validatorPath)) {
+          for (const validator of validators) {
+            if (!validator(path, value, this.state)) {
+              return false;
+            }
           }
         }
       }
-    }
 
-    return true;
+      return true;
+    } catch (error) {
+      console.error(`❌ 상태 검증 오류: ${path}`, error);
+      return false;
+    }
   }
 
   private matchesWildcard(path: string, pattern: string): boolean {
-    if (pattern.includes("*")) {
-      const regex = new RegExp("^" + pattern.replace(/\*/g, ".*") + "$");
-      return regex.test(path);
+    try {
+      if (pattern.includes("*")) {
+        const regex = new RegExp("^" + pattern.replace(/\*/g, ".*") + "$");
+        return regex.test(path);
+      }
+      return false;
+    } catch (error) {
+      console.error(`❌ 와일드카드 매칭 오류: ${path}, ${pattern}`, error);
+      return false;
     }
-    return false;
   }
 
   private notifyListeners(path: string, newValue: any, oldValue: any): void {
-    // 정확한 경로 매칭
-    const exactListeners = this.listeners.get(path) || [];
-    for (const listener of exactListeners) {
-      try {
-        listener(path, newValue, oldValue, this.state);
-      } catch (error) {
-        console.error(`❌ 리스너 실행 오류 (${path}):`, error);
+    try {
+      // 정확한 경로 매칭
+      const exactListeners = this.listeners.get(path) || [];
+      for (const listener of exactListeners) {
+        try {
+          listener(path, newValue, oldValue, this.state);
+        } catch (error) {
+          console.error(`❌ 리스너 실행 오류 (${path}):`, error);
+        }
       }
-    }
 
-    // 와일드카드 매칭
-    for (const [listenerPath, listeners] of this.listeners.entries()) {
-      if (this.matchesWildcard(path, listenerPath)) {
-        for (const listener of listeners) {
-          try {
-            listener(path, newValue, oldValue, this.state);
-          } catch (error) {
-            console.error(
-              `❌ 와일드카드 리스너 실행 오류 (${listenerPath}):`,
-              error
-            );
+      // 와일드카드 매칭
+      for (const [listenerPath, listeners] of this.listeners.entries()) {
+        if (this.matchesWildcard(path, listenerPath)) {
+          for (const listener of listeners) {
+            try {
+              listener(path, newValue, oldValue, this.state);
+            } catch (error) {
+              console.error(
+                `❌ 와일드카드 리스너 실행 오류 (${listenerPath}):`,
+                error
+              );
+            }
           }
         }
       }
+    } catch (error) {
+      console.error(`❌ notifyListeners 오류: ${path}`, error);
     }
   }
 
   private addToHistory(path: string, value: any): void {
-    this.stateHistory.push({
-      timestamp: Date.now(),
-      path,
-      value: JSON.parse(JSON.stringify(value)),
-    });
+    try {
+      this.stateHistory.push({
+        timestamp: Date.now(),
+        path,
+        value: JSON.parse(JSON.stringify(value)),
+      });
 
-    // 히스토리 크기 제한
-    if (this.stateHistory.length > this.maxHistorySize) {
-      this.stateHistory.splice(
-        0,
-        this.stateHistory.length - this.maxHistorySize
-      );
+      // 히스토리 크기 제한
+      if (this.stateHistory.length > this.maxHistorySize) {
+        this.stateHistory.splice(
+          0,
+          this.stateHistory.length - this.maxHistorySize
+        );
+      }
+    } catch (error) {
+      console.error(`❌ 히스토리 추가 오류: ${path}`, error);
+      // 히스토리 추가 실패는 치명적이지 않으므로 계속 진행
     }
   }
 }

@@ -82,7 +82,7 @@ class ChunkProcessingQueue {
   }
 
   async processAll() {
-    if (this.isProcessing) return;
+    if (this.isProcessing) {return;}
 
     this.isProcessing = true;
     while (this.chunks.length > 0) {
@@ -3054,7 +3054,7 @@ const messageQueue = {
    * 설명 텍스트 포맷팅
    */
   formatExplanationText(explanation) {
-    if (!explanation) return "";
+    if (!explanation) {return "";}
 
     // 마크다운 스타일 텍스트 처리
     return explanation
@@ -3070,7 +3070,7 @@ const messageQueue = {
    * 언어 감지
    */
   detectLanguage(code) {
-    if (!code) return "text";
+    if (!code) {return "text";}
 
     if (
       code.includes("def ") ||
@@ -3138,7 +3138,7 @@ const messageQueue = {
    * 요소 강제 표시 (새로운 메서드)
    */
   forceElementVisibility(element) {
-    if (!element) return;
+    if (!element) {return;}
 
     element.style.display = "block";
     element.style.visibility = "visible";
@@ -3151,7 +3151,7 @@ const messageQueue = {
    * 부모 컨테이너 표시 (새로운 메서드)
    */
   ensureParentVisibility(element) {
-    if (!element) return;
+    if (!element) {return;}
 
     let parent = element.parentElement;
     while (parent && parent !== document.body) {
@@ -3210,7 +3210,7 @@ const messageQueue = {
    * 간단한 Syntax Highlighting 적용
    */
   applySyntaxHighlighting(code, language) {
-    if (!code || !language) return this.escapeHtml(code);
+    if (!code || !language) {return this.escapeHtml(code);}
 
     const normalizedLanguage = language.toLowerCase();
     let highlightedCode = this.escapeHtml(code);
@@ -3395,13 +3395,13 @@ function submitQuestion() {
     }))
   );
 
-  // 질문 검증 로직 개선
-  if (!question || question.length < 3) {
-    console.warn("⚠️ 유효하지 않은 질문 - 사용자에게 알림");
+  // 질문 검증 로직 개선 (더 관대한 검증)
+  if (!question || question.trim().length === 0) {
+    console.warn("⚠️ 빈 질문 - 사용자에게 알림");
     console.warn("⚠️ 검증 실패 상세:", {
       questionExists: !!question,
       questionLength: question.length,
-      minRequired: 3,
+      trimmedLength: question.trim().length,
       actualQuestion: `"${question}"`,
     });
 
@@ -3409,7 +3409,7 @@ function submitQuestion() {
     const messageDiv = document.createElement("div");
     messageDiv.style.cssText =
       "color: red; margin: 10px 0; padding: 10px; background: #fee; border: 1px solid #fcc; border-radius: 4px;";
-    messageDiv.textContent = "최소 3자 이상의 질문을 입력해주세요.";
+    messageDiv.textContent = "질문을 입력해주세요.";
 
     const formElement = questionInput
       ? questionInput.closest("form") || questionInput.parentElement
@@ -3427,6 +3427,12 @@ function submitQuestion() {
 
     return;
   }
+
+  console.log("✅ 질문 검증 통과:", {
+    question: question,
+    length: question.length,
+    trimmedLength: question.trim().length,
+  });
 
   // 이미 스트리밍 중인 경우 처리
   if (streamingManager.isActive()) {
@@ -4100,7 +4106,7 @@ async function debugCurrentState() {
 
       // 응답 콘텐츠 상세 상태
       responseState: (() => {
-        if (!responseElement) return "MISSING_ELEMENT";
+        if (!responseElement) {return "MISSING_ELEMENT";}
 
         const computedStyle = getComputedStyle(responseElement);
 
@@ -5243,11 +5249,11 @@ function switchTab(tabName) {
     const historyContent = document.querySelector(".history-content");
 
     if (tabName === "response") {
-      if (responseContent) responseContent.style.display = "block";
-      if (historyContent) historyContent.style.display = "none";
+      if (responseContent) {responseContent.style.display = "block";}
+      if (historyContent) {historyContent.style.display = "none";}
     } else if (tabName === "history") {
-      if (responseContent) responseContent.style.display = "none";
-      if (historyContent) historyContent.style.display = "block";
+      if (responseContent) {responseContent.style.display = "none";}
+      if (historyContent) {historyContent.style.display = "block";}
     }
 
     console.log("✅ 탭 전환 완료");
@@ -5624,9 +5630,9 @@ const realtimeDOMUpdater = {
         codeContent.innerHTML = highlightedCode;
 
         // 메타데이터 업데이트
-        if (languageTag) languageTag.textContent = "Python";
+        if (languageTag) {languageTag.textContent = "Python";}
         if (linesCount)
-          linesCount.textContent = `${content.split("\n").length}줄`;
+          {linesCount.textContent = `${content.split("\n").length}줄`;}
 
         codeSection.style.display = "block";
         console.log("💻 코드 섹션 업데이트:", content.substring(0, 50) + "...");
@@ -5669,7 +5675,7 @@ const realtimeDOMUpdater = {
 
   // 마크다운 스타일 텍스트 포맷팅
   formatExplanationText(text) {
-    if (!text) return "";
+    if (!text) {return "";}
 
     return text
       .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")

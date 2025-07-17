@@ -231,8 +231,8 @@
         },
         "hapa.apiKey": {
           "type": "string",
-          "default": "hapa_demo_20241228_secure_key_for_testing",
-          "description": "HAPA API 인증 키"
+          "default": "",
+          "description": "HAPA API 인증 키 (설정에서 입력 필요)"
         },
         "hapa.apiTimeout": {
           "type": "number",
@@ -523,13 +523,19 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile && npm run copy-assets",
+    "vscode:prepublish": "npm run clean && npm run compile && npm run copy-assets",
     "compile": "tsc -p ./ && npm run copy-assets",
     "copy-assets": "cp -r src/templates/scripts/*.js out/templates/scripts/ 2>/dev/null || true",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src",
-    "test": "vscode-test"
+    "lint:fix": "eslint src --fix",
+    "test": "vscode-test",
+    "clean": "rm -rf out/",
+    "type-check": "tsc --noEmit",
+    "format": "prettier --write src/**/*.{ts,js,json}",
+    "format:check": "prettier --check src/**/*.{ts,js,json}",
+    "security-audit": "npm audit --audit-level=moderate"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
@@ -540,7 +546,8 @@
     "@vscode/test-cli": "^0.0.10",
     "@vscode/test-electron": "^2.5.2",
     "eslint": "^9.25.1",
-    "typescript": "^4.9.5"
+    "prettier": "^3.4.2",
+    "typescript": "^5.8.3"
   },
   "dependencies": {
     "axios": "^1.10.0"

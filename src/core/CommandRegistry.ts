@@ -413,50 +413,51 @@ export class CommandRegistry {
   }
 
   private async resetOnboarding(): Promise<void> {
-    // ConfigService를 통해 온보딩 설정 초기화
-    const { configService } = await import("../services/ConfigService");
+    try {
+      // ConfigService 초기화 확인
+      await this.configService.update(
+        "userProfile.isOnboardingCompleted",
+        false,
+        true
+      );
+      await this.configService.update(
+        "userProfile.pythonSkillLevel",
+        "intermediate",
+        true
+      );
+      await this.configService.update(
+        "userProfile.codeOutputStructure",
+        "standard",
+        true
+      );
+      await this.configService.update(
+        "userProfile.explanationStyle",
+        "standard",
+        true
+      );
+      await this.configService.update(
+        "userProfile.projectContext",
+        "general_purpose",
+        true
+      );
+      await this.configService.update(
+        "userProfile.errorHandlingPreference",
+        "basic",
+        true
+      );
 
-    await configService.update(
-      "userProfile.isOnboardingCompleted",
-      false,
-      true
-    );
-    await configService.update(
-      "userProfile.pythonSkillLevel",
-      "intermediate",
-      true
-    );
-    await configService.update(
-      "userProfile.codeOutputStructure",
-      "standard",
-      true
-    );
-    await configService.update(
-      "userProfile.explanationStyle",
-      "standard",
-      true
-    );
-    await configService.update(
-      "userProfile.projectContext",
-      "general_purpose",
-      true
-    );
-    await configService.update(
-      "userProfile.errorHandlingPreference",
-      "basic",
-      true
-    );
-
-    vscode.window
-      .showInformationMessage(
+      const selection = await vscode.window.showInformationMessage(
         "온보딩 설정이 초기화되었습니다. 이제 온보딩을 다시 시작할 수 있습니다.",
         "온보딩 시작하기"
-      )
-      .then((selection) => {
-        if (selection === "온보딩 시작하기") {
-          this.showOnboarding();
-        }
-      });
+      );
+      
+      if (selection === "온보딩 시작하기") {
+        await this.showOnboarding();
+      }
+    } catch (error) {
+      console.error("❌ 온보딩 초기화 실패:", error);
+      vscode.window.showErrorMessage("온보딩 설정 초기화 중 오류가 발생했습니다.");
+    }
   }
 
   private async analyzeCurrentFile(): Promise<void> {
@@ -603,183 +604,293 @@ export class CommandRegistry {
 
   // 고급 기능 핸들러들
   private async showPerformanceReport(): Promise<void> {
-    const { PerformanceOptimizer } = await import(
-      "../services/PerformanceOptimizer"
-    );
-    const report =
-      PerformanceOptimizer.getInstance().generatePerformanceReport();
-    vscode.window.showInformationMessage(`HAPA 성능 보고서: ${report}`);
+    try {
+      const { PerformanceOptimizer } = await import(
+        "../services/PerformanceOptimizer"
+      );
+      const report =
+        PerformanceOptimizer.getInstance().generatePerformanceReport();
+      vscode.window.showInformationMessage(`HAPA 성능 보고서: ${report}`);
+    } catch (error) {
+      console.error("❌ 성능 보고서 생성 실패:", error);
+      vscode.window.showErrorMessage("성능 보고서를 생성할 수 없습니다.");
+    }
   }
 
   private async showOfflineStatus(): Promise<void> {
-    const { OfflineService } = await import("../services/OfflineService");
-    const status = OfflineService.getInstance().getStatus();
-    vscode.window.showInformationMessage(
-      `HAPA 오프라인 상태: ${status.isOnline ? "온라인" : "오프라인"}`
-    );
+    try {
+      const { OfflineService } = await import("../services/OfflineService");
+      const status = OfflineService.getInstance().getStatus();
+      vscode.window.showInformationMessage(
+        `HAPA 오프라인 상태: ${status.isOnline ? "온라인" : "오프라인"}`
+      );
+    } catch (error) {
+      console.error("❌ 오프라인 상태 확인 실패:", error);
+      vscode.window.showErrorMessage("오프라인 상태를 확인할 수 없습니다.");
+    }
   }
 
   private async validateConfigs(): Promise<void> {
-    const { ConfigValidationService } = await import(
-      "../services/ConfigValidationService"
-    );
-    const isValid = ConfigValidationService.getInstance().validateAllConfigs();
-    vscode.window.showInformationMessage(
-      `HAPA 설정 검증: ${isValid ? "유효" : "오류 발견"}`
-    );
+    try {
+      const { ConfigValidationService } = await import(
+        "../services/ConfigValidationService"
+      );
+      const isValid = ConfigValidationService.getInstance().validateAllConfigs();
+      vscode.window.showInformationMessage(
+        `HAPA 설정 검증: ${isValid ? "유효" : "오류 발견"}`
+      );
+    } catch (error) {
+      console.error("❌ 설정 검증 실패:", error);
+      vscode.window.showErrorMessage("설정을 검증할 수 없습니다.");
+    }
   }
 
   private async clearOfflineCache(): Promise<void> {
-    const { OfflineService } = await import("../services/OfflineService");
-    OfflineService.getInstance().clearCache();
-    vscode.window.showInformationMessage(
-      "HAPA 오프라인 캐시가 삭제되었습니다."
-    );
+    try {
+      const { OfflineService } = await import("../services/OfflineService");
+      OfflineService.getInstance().clearCache();
+      vscode.window.showInformationMessage(
+        "HAPA 오프라인 캐시가 삭제되었습니다."
+      );
+    } catch (error) {
+      console.error("❌ 오프라인 캐시 삭제 실패:", error);
+      vscode.window.showErrorMessage("오프라인 캐시를 삭제할 수 없습니다.");
+    }
   }
 
   private async resetPerformanceMetrics(): Promise<void> {
-    const { PerformanceOptimizer } = await import(
-      "../services/PerformanceOptimizer"
-    );
-    PerformanceOptimizer.getInstance().clearMetrics();
-    vscode.window.showInformationMessage(
-      "HAPA 성능 메트릭이 초기화되었습니다."
-    );
+    try {
+      const { PerformanceOptimizer } = await import(
+        "../services/PerformanceOptimizer"
+      );
+      PerformanceOptimizer.getInstance().clearMetrics();
+      vscode.window.showInformationMessage(
+        "HAPA 성능 메트릭이 초기화되었습니다."
+      );
+    } catch (error) {
+      console.error("❌ 성능 메트릭 초기화 실패:", error);
+      vscode.window.showErrorMessage("성능 메트릭을 초기화할 수 없습니다.");
+    }
   }
 
   private async showUsageReport(): Promise<void> {
-    const { TelemetryService } = await import("../services/TelemetryService");
-    const report = TelemetryService.getInstance().generateUsageReport();
-    vscode.window.showInformationMessage(`HAPA 사용 통계: ${report}`);
+    try {
+      const { TelemetryService } = await import("../services/TelemetryService");
+      const report = TelemetryService.getInstance().generateUsageReport();
+      vscode.window.showInformationMessage(`HAPA 사용 통계: ${report}`);
+    } catch (error) {
+      console.error("❌ 사용 통계 생성 실패:", error);
+      vscode.window.showErrorMessage("사용 통계를 생성할 수 없습니다.");
+    }
   }
 
   private async showTelemetryStats(): Promise<void> {
-    const { TelemetryService } = await import("../services/TelemetryService");
-    const stats = TelemetryService.getInstance().getStatistics();
-    vscode.window.showInformationMessage(
-      `HAPA 텔레메트리: ${JSON.stringify(stats)}`
-    );
+    try {
+      const { TelemetryService } = await import("../services/TelemetryService");
+      const stats = TelemetryService.getInstance().getStatistics();
+      vscode.window.showInformationMessage(
+        `HAPA 텔레메트리: ${JSON.stringify(stats)}`
+      );
+    } catch (error) {
+      console.error("❌ 텔레메트리 상태 확인 실패:", error);
+      vscode.window.showErrorMessage("텔레메트리 상태를 확인할 수 없습니다.");
+    }
   }
 
   private async toggleTelemetry(): Promise<void> {
-    const { TelemetryService } = await import("../services/TelemetryService");
-    const telemetryService = TelemetryService.getInstance();
-    const stats = telemetryService.getStatistics();
-    const currentState = stats.isEnabled || false;
-    telemetryService.setEnabled(!currentState);
-    vscode.window.showInformationMessage(
-      "HAPA 텔레메트리 설정이 변경되었습니다."
-    );
+    try {
+      const { TelemetryService } = await import("../services/TelemetryService");
+      const telemetryService = TelemetryService.getInstance();
+      const stats = telemetryService.getStatistics();
+      const currentState = stats.isEnabled || false;
+      telemetryService.setEnabled(!currentState);
+      vscode.window.showInformationMessage(
+        "HAPA 텔레메트리 설정이 변경되었습니다."
+      );
+    } catch (error) {
+      console.error("❌ 텔레메트리 설정 변경 실패:", error);
+      vscode.window.showErrorMessage("텔레메트리 설정을 변경할 수 없습니다.");
+    }
   }
 
   // 접근성 핸들러들
   private async showAccessibilityReport(): Promise<void> {
-    const { AccessibilityService } = await import(
-      "../services/AccessibilityService"
-    );
-    const report =
-      AccessibilityService.getInstance().generateAccessibilityReport();
-    vscode.window.showInformationMessage(`HAPA 접근성 보고서: ${report}`);
+    try {
+      const { AccessibilityService } = await import(
+        "../services/AccessibilityService"
+      );
+      const report =
+        AccessibilityService.getInstance().generateAccessibilityReport();
+      vscode.window.showInformationMessage(`HAPA 접근성 보고서: ${report}`);
+    } catch (error) {
+      console.error("❌ 접근성 보고서 생성 실패:", error);
+      vscode.window.showErrorMessage("접근성 보고서를 생성할 수 없습니다.");
+    }
   }
 
   private async announceStatus(): Promise<void> {
-    const { AccessibilityService } = await import(
-      "../services/AccessibilityService"
-    );
-    AccessibilityService.getInstance().announceCurrentStatus();
+    try {
+      const { AccessibilityService } = await import(
+        "../services/AccessibilityService"
+      );
+      AccessibilityService.getInstance().announceCurrentStatus();
+    } catch (error) {
+      console.error("❌ 상태 안내 실패:", error);
+      vscode.window.showErrorMessage("상태를 안내할 수 없습니다.");
+    }
   }
 
   private async readSelection(): Promise<void> {
-    const { AccessibilityService } = await import(
-      "../services/AccessibilityService"
-    );
-    AccessibilityService.getInstance().readSelection();
+    try {
+      const { AccessibilityService } = await import(
+        "../services/AccessibilityService"
+      );
+      AccessibilityService.getInstance().readSelection();
+    } catch (error) {
+      console.error("❌ 선택 텍스트 읽기 실패:", error);
+      vscode.window.showErrorMessage("선택된 텍스트를 읽을 수 없습니다.");
+    }
   }
 
   private async increaseFontSize(): Promise<void> {
-    const { AccessibilityService } = await import(
-      "../services/AccessibilityService"
-    );
-    AccessibilityService.getInstance().adjustFontSize(2);
+    try {
+      const { AccessibilityService } = await import(
+        "../services/AccessibilityService"
+      );
+      AccessibilityService.getInstance().adjustFontSize(2);
+    } catch (error) {
+      console.error("❌ 폰트 크기 증가 실패:", error);
+      vscode.window.showErrorMessage("폰트 크기를 조정할 수 없습니다.");
+    }
   }
 
   private async decreaseFontSize(): Promise<void> {
-    const { AccessibilityService } = await import(
-      "../services/AccessibilityService"
-    );
-    AccessibilityService.getInstance().adjustFontSize(-2);
+    try {
+      const { AccessibilityService } = await import(
+        "../services/AccessibilityService"
+      );
+      AccessibilityService.getInstance().adjustFontSize(-2);
+    } catch (error) {
+      console.error("❌ 폰트 크기 감소 실패:", error);
+      vscode.window.showErrorMessage("폰트 크기를 조정할 수 없습니다.");
+    }
   }
 
   private async toggleHighContrast(): Promise<void> {
-    const { AccessibilityService } = await import(
-      "../services/AccessibilityService"
-    );
-    AccessibilityService.getInstance().toggleFeature("high-contrast");
+    try {
+      const { AccessibilityService } = await import(
+        "../services/AccessibilityService"
+      );
+      AccessibilityService.getInstance().toggleFeature("high-contrast");
+    } catch (error) {
+      console.error("❌ 고대비 모드 토글 실패:", error);
+      vscode.window.showErrorMessage("고대비 모드를 변경할 수 없습니다.");
+    }
   }
 
   private async toggleKeyboardNavigation(): Promise<void> {
-    const { AccessibilityService } = await import(
-      "../services/AccessibilityService"
-    );
-    AccessibilityService.getInstance().toggleFeature("keyboard-navigation");
+    try {
+      const { AccessibilityService } = await import(
+        "../services/AccessibilityService"
+      );
+      AccessibilityService.getInstance().toggleFeature("keyboard-navigation");
+    } catch (error) {
+      console.error("❌ 키보드 네비게이션 토글 실패:", error);
+      vscode.window.showErrorMessage("키보드 네비게이션을 변경할 수 없습니다.");
+    }
   }
 
   private async toggleScreenReader(): Promise<void> {
-    const { AccessibilityService } = await import(
-      "../services/AccessibilityService"
-    );
-    AccessibilityService.getInstance().toggleFeature("screen-reader");
+    try {
+      const { AccessibilityService } = await import(
+        "../services/AccessibilityService"
+      );
+      AccessibilityService.getInstance().toggleFeature("screen-reader");
+    } catch (error) {
+      console.error("❌ 스크린 리더 모드 토글 실패:", error);
+      vscode.window.showErrorMessage("스크린 리더 모드를 변경할 수 없습니다.");
+    }
   }
 
   // 반응형 디자인 핸들러들
   private async showResponsiveReport(): Promise<void> {
-    const { ResponsiveDesignService } = await import(
-      "../services/ResponsiveDesignService"
-    );
-    const report =
-      ResponsiveDesignService.getInstance().generateResponsiveReport();
-    vscode.window.showInformationMessage(`HAPA 반응형 보고서: ${report}`);
+    try {
+      const { ResponsiveDesignService } = await import(
+        "../services/ResponsiveDesignService"
+      );
+      const report =
+        ResponsiveDesignService.getInstance().generateResponsiveReport();
+      vscode.window.showInformationMessage(`HAPA 반응형 보고서: ${report}`);
+    } catch (error) {
+      console.error("❌ 반응형 보고서 생성 실패:", error);
+      vscode.window.showErrorMessage("반응형 보고서를 생성할 수 없습니다.");
+    }
   }
 
   private async showResponsiveCSS(): Promise<void> {
-    const { ResponsiveDesignService } = await import(
-      "../services/ResponsiveDesignService"
-    );
-    const css = ResponsiveDesignService.getInstance().generateResponsiveCSS();
-    vscode.window.showInformationMessage(`HAPA 반응형 CSS: ${css}`);
+    try {
+      const { ResponsiveDesignService } = await import(
+        "../services/ResponsiveDesignService"
+      );
+      const css = ResponsiveDesignService.getInstance().generateResponsiveCSS();
+      vscode.window.showInformationMessage(`HAPA 반응형 CSS: ${css}`);
+    } catch (error) {
+      console.error("❌ 반응형 CSS 생성 실패:", error);
+      vscode.window.showErrorMessage("반응형 CSS를 생성할 수 없습니다.");
+    }
   }
 
   private async toggleResponsive(): Promise<void> {
-    const { ResponsiveDesignService } = await import(
-      "../services/ResponsiveDesignService"
-    );
-    const service = ResponsiveDesignService.getInstance();
-    const currentState = service.getCurrentState();
-    service.setResponsiveEnabled(!currentState.isEnabled);
-    vscode.window.showInformationMessage(
-      "HAPA 반응형 디자인이 토글되었습니다."
-    );
+    try {
+      const { ResponsiveDesignService } = await import(
+        "../services/ResponsiveDesignService"
+      );
+      const service = ResponsiveDesignService.getInstance();
+      const currentState = service.getCurrentState();
+      service.setResponsiveEnabled(!currentState.isEnabled);
+      vscode.window.showInformationMessage(
+        "HAPA 반응형 디자인이 토글되었습니다."
+      );
+    } catch (error) {
+      console.error("❌ 반응형 디자인 토글 실패:", error);
+      vscode.window.showErrorMessage("반응형 디자인을 변경할 수 없습니다.");
+    }
   }
 
   private async setBreakpointMobile(): Promise<void> {
-    const { ResponsiveDesignService } = await import(
-      "../services/ResponsiveDesignService"
-    );
-    ResponsiveDesignService.getInstance().setBreakpoint("mobile");
+    try {
+      const { ResponsiveDesignService } = await import(
+        "../services/ResponsiveDesignService"
+      );
+      ResponsiveDesignService.getInstance().setBreakpoint("mobile");
+    } catch (error) {
+      console.error("❌ 모바일 브레이크포인트 설정 실패:", error);
+      vscode.window.showErrorMessage("모바일 브레이크포인트를 설정할 수 없습니다.");
+    }
   }
 
   private async setBreakpointTablet(): Promise<void> {
-    const { ResponsiveDesignService } = await import(
-      "../services/ResponsiveDesignService"
-    );
-    ResponsiveDesignService.getInstance().setBreakpoint("tablet");
+    try {
+      const { ResponsiveDesignService } = await import(
+        "../services/ResponsiveDesignService"
+      );
+      ResponsiveDesignService.getInstance().setBreakpoint("tablet");
+    } catch (error) {
+      console.error("❌ 태블릿 브레이크포인트 설정 실패:", error);
+      vscode.window.showErrorMessage("태블릿 브레이크포인트를 설정할 수 없습니다.");
+    }
   }
 
   private async setBreakpointDesktop(): Promise<void> {
-    const { ResponsiveDesignService } = await import(
-      "../services/ResponsiveDesignService"
-    );
-    ResponsiveDesignService.getInstance().setBreakpoint("medium");
+    try {
+      const { ResponsiveDesignService } = await import(
+        "../services/ResponsiveDesignService"
+      );
+      ResponsiveDesignService.getInstance().setBreakpoint("medium");
+    } catch (error) {
+      console.error("❌ 데스크톱 브레이크포인트 설정 실패:", error);
+      vscode.window.showErrorMessage("데스크톱 브레이크포인트를 설정할 수 없습니다.");
+    }
   }
 
   // =============================================================================

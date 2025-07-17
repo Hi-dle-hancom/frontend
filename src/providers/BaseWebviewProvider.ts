@@ -381,6 +381,8 @@ export abstract class BaseWebviewProvider
       }
 
       console.log("⚙️ BaseWebviewProvider: DB에서 사용자 설정 조회 시작");
+      
+      console.log("JWT 토큰:", accessToken);
 
       const response = await fetch(`${apiBaseURL}/users/settings`, {
         method: "GET",

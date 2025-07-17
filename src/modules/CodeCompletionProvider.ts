@@ -10,6 +10,7 @@ import {
   CodeGenerationResponse,
 } from "./apiClient";
 import { ConfigService } from "../services/ConfigService";
+import * as vscode from "vscode";
 
 // 코드 완성 요청 인터페이스
 export interface CodeCompletionRequest {

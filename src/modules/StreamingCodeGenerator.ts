@@ -7,6 +7,7 @@ import axios, { AxiosResponse } from "axios";
 import { CodeGenerationRequest, StreamingChunk, VLLMModelType } from "../types";
 import { ConfigService } from "../services/ConfigService";
 import { StreamingCallbacks } from "../types";
+import * as vscode from "vscode";
 
 // API 에러 클래스 정의
 export class APIError extends Error {
@@ -126,20 +127,42 @@ export class StreamingCodeGenerator {
         controller?.abort();
       }, VLLM_API_TIMEOUT);
 
-      // 🌐 스트리밍 요청 전송
-      const headers = {
+      // 🌐 스트리밍 요청 전송 (JWT 토큰 지원 추가)
+      const headers: any = {
         "Content-Type": "application/json",
-        ...(this.apiKey && { "X-API-Key": this.apiKey }),
       };
+
+      // JWT 토큰이 있으면 Authorization Bearer 헤더로 전달
+      const config = vscode.workspace.getConfiguration("hapa");
+      const jwtToken: string | undefined = config.get<string>("auth.accessToken");
+      
+      if (jwtToken) {
+        headers["Authorization"] = `Bearer ${jwtToken}`;
+        if (DEBUG_MODE) {
+          console.log("🔑 JWT 토큰 인증 사용:", {
+            tokenPrefix: jwtToken.substring(0, 20) + "...",
+            headerSet: "Authorization Bearer"
+          });
+        }
+      } else if (this.apiKey) {
+        headers["X-API-Key"] = this.apiKey;
+        if (DEBUG_MODE) {
+          console.log("🔑 API Key 인증 사용:", {
+            apiKeyPrefix: this.apiKey.substring(0, 15) + "...",
+            headerSet: "X-API-Key"
+          });
+        }
+      } else {
+        console.warn("⚠️ 인증 정보가 없습니다. JWT 토큰 또는 API Key가 필요합니다.");
+      }
 
       // 환경별 조건부 로깅 - 요청 헤더 및 데이터
       if (DEBUG_MODE) {
         console.log("🔑 요청 헤더 및 데이터:", {
           url: `${this.baseURL}/code/generate/stream`,
+          hasJwtToken: !!jwtToken,
           hasApiKey: !!this.apiKey,
-          apiKeyPrefix: this.apiKey
-            ? this.apiKey.substring(0, 15) + "..."
-            : "없음",
+          authMethod: jwtToken ? "JWT Bearer" : (this.apiKey ? "API Key" : "none"),
           headers: Object.keys(headers),
           requestData: {
             prompt: safeRequest.prompt.substring(0, 50) + "...",
@@ -151,7 +174,7 @@ export class StreamingCodeGenerator {
       }
 
       const response = await axios.post(
-        `${this.baseURL}/code/generate/stream`,
+        `${this.baseURL}/code/generate/stream?enhanced=true`,  // Enhanced 모드 활성화
         safeRequest,
         {
           headers,

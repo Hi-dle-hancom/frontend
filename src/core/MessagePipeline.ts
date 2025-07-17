@@ -153,7 +153,7 @@ function normalizeToWebview(message: Message): Message {
         type: message.chunk.type || "text",
         content: message.chunk.content || "",
         sequence: Date.now(),
-        is_complete: message.chunk.is_complete,
+        is_complete: message.chunk.is_complete ?? false,
       };
     }
   }
@@ -444,8 +444,8 @@ export class MessagePipeline {
     const context: MessageContext = {
       message,
       direction,
-      source: source as any,
-      target: target as any,
+      source: source as "extension" | "webview" | "backend",
+      target: target as "extension" | "webview" | "backend", 
       startTime: Date.now(),
       metadata: {},
     };

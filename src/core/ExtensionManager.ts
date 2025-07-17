@@ -530,8 +530,10 @@ export class ExtensionManager {
       // 프로바이더 정리
       this.providerRegistry.dispose();
 
-      // 명령어 정리
-      this.commandRegistry.dispose();
+      // 명령어 정리 (commandRegistry가 초기화된 경우에만)
+      if (this.commandRegistry) {
+        this.commandRegistry.dispose();
+      }
 
       console.log("✅ 부분 정리 완료");
     } catch (cleanupError) {
@@ -568,8 +570,10 @@ export class ExtensionManager {
       this.eventDisposables.forEach((disposable) => disposable.dispose());
       this.eventDisposables = [];
 
-      // 명령어 정리
-      this.commandRegistry.dispose();
+      // 명령어 정리 (commandRegistry가 존재하는 경우에만)
+      if (this.commandRegistry) {
+        this.commandRegistry.dispose();
+      }
 
       // 프로바이더 정리
       this.providerRegistry.dispose();
@@ -632,7 +636,7 @@ export class ExtensionManager {
       isActivated: this.isActivated,
       serviceStatus: this.serviceManager.getServiceStatus(),
       providerStatus: this.providerRegistry.getProviderStatus(),
-      registeredCommands: this.commandRegistry.getRegisteredCommands().length,
+      registeredCommands: this.commandRegistry ? this.commandRegistry.getRegisteredCommands().length : 0,
       activeEventListeners: this.eventDisposables.length,
     };
   }
@@ -672,8 +676,8 @@ export class ExtensionManager {
         status: this.providerRegistry.getProviderStatus(),
       },
       commands: {
-        total: this.commandRegistry.getRegisteredCommands().length,
-        byCategory: {
+        total: this.commandRegistry ? this.commandRegistry.getRegisteredCommands().length : 0,
+        byCategory: this.commandRegistry ? {
           basic: this.commandRegistry.getCommandsByCategory("basic").length,
           analysis:
             this.commandRegistry.getCommandsByCategory("analysis").length,
@@ -685,6 +689,13 @@ export class ExtensionManager {
             this.commandRegistry.getCommandsByCategory("accessibility").length,
           responsive:
             this.commandRegistry.getCommandsByCategory("responsive").length,
+        } : {
+          basic: 0,
+          analysis: 0,
+          settings: 0,
+          advanced: 0,
+          accessibility: 0,
+          responsive: 0,
         },
       },
       events: {

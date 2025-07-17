@@ -811,15 +811,26 @@ ${previousContent}
           project_context: "",
         };
 
-        // ConfigService에서 설정 가져오기
+        // ConfigService에서 설정 가져오기 + JWT 토큰 우선 사용
         const apiConfig = this.configService.getAPIConfig();
+        const jwtToken = this.getJWTToken();
 
-        const headers = {
+        const headers: any = {
           "Content-Type": "application/json",
-          "X-API-Key": apiConfig.apiKey,
         };
 
-        const streamUrl = `${apiConfig.baseURL}/code/generate/stream`;
+        // JWT 토큰이 있으면 Authorization Bearer 헤더로 전달 (개인화 지원)
+        if (jwtToken) {
+          headers["Authorization"] = `Bearer ${jwtToken}`;
+          console.log("🔑 JWT 토큰 인증 사용 (Enhanced 모드)");
+        } else if (apiConfig.apiKey) {
+          headers["X-API-Key"] = apiConfig.apiKey;
+          console.log("🔑 API Key 인증 사용 (기본 모드)");
+        } else {
+          console.warn("⚠️ 인증 정보가 없습니다.");
+        }
+
+        const streamUrl = `${apiConfig.baseURL}/code/generate/stream?enhanced=true`;
 
         console.log("🌊 이어가기 스트리밍 요청:", {
           url: streamUrl,
