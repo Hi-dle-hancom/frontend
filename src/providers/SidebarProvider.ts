@@ -23,6 +23,13 @@ export class SidebarProvider extends BaseWebviewProvider {
   private settingsLastFetch: number = 0;
   private readonly SETTINGS_CACHE_TTL = 5 * 60 * 1000; // 5분 캐시
 
+  // 현재 응답 상태 저장 (웹뷰 재생성 시 복원용)
+  private currentResponseState: {
+    response?: any;
+    timestamp?: number;
+    isValid?: boolean;
+  } = {};
+
   /**
    * 패널 타입 반환
    */
@@ -54,21 +61,50 @@ export class SidebarProvider extends BaseWebviewProvider {
     this.triggerDetector = new TriggerDetector();
     this.triggerDetector.onTrigger(this.handleTriggerEvent.bind(this));
 
-    // 히스토리 로드
-    this.loadHistory();
+    // 히스토리 로드 (비동기)
+    this.loadHistory().catch(error => {
+      console.error("❌ 초기 히스토리 로드 실패:", error);
+    });
   }
 
   /**
-   * 히스토리 로드 (VSCode globalState에서)
+   * 히스토리 로드 (DB 우선, 로컬 fallback)
    */
-  private loadHistory() {
-    const context = this.getContext();
-    const savedHistory =
-      context?.globalState.get<
-        Array<{ question: string; response: string; timestamp: string }>
-      >("hapaHistory");
-    if (savedHistory) {
-      this.questionHistory = savedHistory;
+  private async loadHistory() {
+    try {
+      // 1단계: DB에서 히스토리 로드 시도
+      const dbHistory = await this.loadHistoryFromDB();
+      if (dbHistory.success && dbHistory.history && dbHistory.history.length > 0) {
+        this.questionHistory = dbHistory.history;
+        console.log("✅ DB에서 히스토리 로드 성공:", dbHistory.history.length, "개 항목");
+        
+        // DB 히스토리를 로컬에도 동기화 (캐시 목적)
+        this.syncDBToLocalHistory(dbHistory.history);
+        return;
+      }
+      
+      // 2단계: DB 로드 실패 시 로컬 저장소에서 로드
+      console.log("⚠️ DB 히스토리 로드 실패, 로컬 저장소 사용");
+      const context = this.getContext();
+      const savedHistory =
+        context?.globalState.get<
+          Array<{ question: string; response: string; timestamp: string }>
+        >("hapaHistory");
+      if (savedHistory) {
+        this.questionHistory = savedHistory;
+        console.log("✅ 로컬 저장소에서 히스토리 로드:", savedHistory.length, "개 항목");
+      }
+    } catch (error) {
+      console.error("❌ 히스토리 로드 실패:", error);
+      // 에러 시 로컬 저장소 fallback
+      const context = this.getContext();
+      const savedHistory =
+        context?.globalState.get<
+          Array<{ question: string; response: string; timestamp: string }>
+        >("hapaHistory");
+      if (savedHistory) {
+        this.questionHistory = savedHistory;
+      }
     }
   }
 
@@ -89,9 +125,19 @@ export class SidebarProvider extends BaseWebviewProvider {
    */
   private broadcastHistoryUpdate() {
     try {
+      console.log("📚 히스토리 업데이트 브로드캐스트 시작:", {
+        historyCount: this.questionHistory.length,
+        historyPreview: this.questionHistory.slice(0, 2).map(h => ({
+          question: h.question.substring(0, 30) + '...',
+          timestamp: h.timestamp
+        }))
+      });
+      
       const historyData = JSON.stringify(this.questionHistory);
+      const messageId = Date.now().toString();
+      console.log("📚 히스토리 데이터 JSON 길이:", historyData.length);
 
-      // 사이드바에 전송
+      // 사이드바에 전송 (확인 가능한 메시지)
       if (this._view?.webview) {
         this._view.webview
           .postMessage({
@@ -174,6 +220,9 @@ export class SidebarProvider extends BaseWebviewProvider {
         console.error("❌ DB 히스토리 저장 실패:", error);
         // DB 저장 실패해도 로컬 저장은 유지됨
       });
+
+      // 3단계: 히스토리 UI 업데이트
+      this.broadcastHistoryUpdate();
     } else {
       console.log("⚠️ 히스토리 저장 스킵 (중복 질문 제한):", {
         duplicate_count: recentSameQuestions.length,
@@ -223,7 +272,7 @@ export class SidebarProvider extends BaseWebviewProvider {
         confidence_score: null,
       };
 
-      const questionResponse = await fetch(`${apiBaseURL}/history/entries`, {
+      const questionResponse = await fetch(`${apiBaseURL}/entries`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -250,7 +299,7 @@ export class SidebarProvider extends BaseWebviewProvider {
         confidence_score: null,
       };
 
-      const answerResponse = await fetch(`${apiBaseURL}/history/entries`, {
+      const answerResponse = await fetch(`${apiBaseURL}/entries`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -276,6 +325,233 @@ export class SidebarProvider extends BaseWebviewProvider {
   }
 
   /**
+   * DB에서 히스토리 로드
+   */
+  private async loadHistoryFromDB(): Promise<{
+    success: boolean;
+    history?: Array<{ question: string; response: string; timestamp: string }>;
+    error?: string;
+  }> {
+    try {
+      // JWT 토큰 확인
+      const accessToken = this.getJWTToken();
+      if (!accessToken) {
+        console.log("⚠️ JWT 토큰이 없어 DB 히스토리 로드를 건너뜁니다.");
+        return { success: false, error: "JWT 토큰 없음" };
+      }
+
+      const config = vscode.workspace.getConfiguration("hapa");
+      // DB-Module API 사용으로 변경
+      const dbModuleURL = config.get<string>("dbModuleURL") || "http://3.13.240.111:8001";
+      const apiBaseURL = `${dbModuleURL}/history`;
+
+      console.log("🔄 DB 히스토리 로드 시작...");
+
+      // 타임아웃 처리를 위한 AbortController
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+      try {
+        // 사용자의 히스토리 세션 목록 가져오기 (DB-Module API 사용)
+        const sessionsResponse = await fetch(`${apiBaseURL}/sessions?limit=50`, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!sessionsResponse.ok) {
+          console.error("❌ 세션 목록 조회 실패:", sessionsResponse.status);
+          return { success: false, error: `세션 목록 조회 실패 (${sessionsResponse.status})` };
+        }
+
+        const sessions = await sessionsResponse.json();
+        console.log("📚 DB 세션 목록:", sessions.length, "개");
+
+        if (!sessions || sessions.length === 0) {
+          console.log("📚 DB에 저장된 히스토리가 없습니다.");
+          return { success: true, history: [] };
+        }
+
+        // 모든 세션의 엔트리들을 가져와서 질문-답변 쌍으로 구성
+        const allHistoryItems: Array<{ question: string; response: string; timestamp: string }> = [];
+
+        // 동시 요청 제한을 위한 배치 처리
+        const batchSize = 5;
+        for (let i = 0; i < sessions.length; i += batchSize) {
+          const batch = sessions.slice(i, i + batchSize);
+          
+          const batchPromises = batch.map(async (session: any) => {
+            try {
+              const entryController = new AbortController();
+              const entryTimeoutId = setTimeout(() => entryController.abort(), 8000);
+
+              // DB-Module API 엔드포인트 사용: /history/sessions/{session_id}
+              const entriesResponse = await fetch(`${apiBaseURL}/sessions/${session.session_id}?limit=50`, {
+                method: "GET",
+                headers: {
+                  Authorization: `Bearer ${accessToken}`,
+                  "Content-Type": "application/json",
+                },
+                signal: entryController.signal,
+              });
+
+              clearTimeout(entryTimeoutId);
+
+              if (entriesResponse.ok) {
+                const entries = await entriesResponse.json();
+                console.log(`📚 세션 ${session.session_id}: ${entries.length}개 엔트리`);
+                const historyPairs = this.parseHistoryEntries(entries, session.created_at);
+                return historyPairs;
+              } else {
+                console.warn(`⚠️ 세션 ${session.session_id} 엔트리 조회 실패: ${entriesResponse.status}`);
+                return [];
+              }
+            } catch (error) {
+              console.error(`❌ 세션 ${session.session_id} 엔트리 조회 실패:`, error);
+              return [];
+            }
+          });
+
+          const batchResults = await Promise.all(batchPromises);
+          batchResults.forEach(historyPairs => {
+            allHistoryItems.push(...historyPairs);
+          });
+        }
+
+        // 타임스탬프 기준으로 정렬 (최신 순)
+        allHistoryItems.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+        // 최대 히스토리 개수 제한
+        const limitedHistory = allHistoryItems.slice(0, this.maxHistorySize);
+
+        console.log(`✅ DB 히스토리 로드 완료: ${limitedHistory.length}개 항목 (전체 ${allHistoryItems.length}개 중)`);
+        return { success: true, history: limitedHistory };
+
+      } catch (error) {
+        clearTimeout(timeoutId);
+        if (error instanceof Error && error.name === 'AbortError') {
+          console.error("❌ DB 히스토리 로드 타임아웃");
+          return { success: false, error: "요청 타임아웃" };
+        }
+        throw error;
+      }
+
+    } catch (error) {
+      console.error("❌ DB 히스토리 로드 실패:", error);
+      return { success: false, error: error instanceof Error ? error.message : "알 수 없는 오류" };
+    }
+  }
+
+  /**
+   * DB 엔트리들을 질문-답변 쌍으로 파싱
+   */
+  private parseHistoryEntries(entries: any[], sessionCreatedAt: string): Array<{ question: string; response: string; timestamp: string }> {
+    const historyPairs: Array<{ question: string; response: string; timestamp: string }> = [];
+    
+    // 엔트리들을 시간순으로 정렬
+    entries.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+    let currentQuestion: string | null = null;
+    let currentTimestamp: string | null = null;
+
+    for (const entry of entries) {
+      if (entry.conversation_type === "question") {
+        currentQuestion = entry.content;
+        currentTimestamp = entry.created_at;
+      } else if (entry.conversation_type === "answer" && currentQuestion) {
+        historyPairs.push({
+          question: currentQuestion,
+          response: entry.content,
+          timestamp: currentTimestamp || entry.created_at,
+        });
+        currentQuestion = null;
+        currentTimestamp = null;
+      }
+    }
+
+    return historyPairs;
+  }
+
+  /**
+   * DB 히스토리를 로컬에 동기화
+   */
+  private syncDBToLocalHistory(dbHistory: Array<{ question: string; response: string; timestamp: string }>) {
+    try {
+      const context = this.getContext();
+      if (context) {
+        context.globalState.update("hapaHistory", dbHistory);
+        console.log("✅ DB 히스토리를 로컬에 동기화 완료");
+      }
+    } catch (error) {
+      console.error("❌ DB 히스토리 로컬 동기화 실패:", error);
+    }
+  }
+
+  /**
+   * DB 히스토리와 로컬 히스토리를 지능적으로 병합
+   * - 타임스탬프 기준으로 중복 제거
+   * - 최신 순으로 정렬
+   * - 로컬에만 있는 새로운 항목 보존
+   */
+  private mergeDBHistoryWithLocal(dbHistory: Array<{ question: string; response: string; timestamp: string }>): Array<{ question: string; response: string; timestamp: string }> {
+    try {
+      // 로컬 히스토리 가져오기
+      const context = this.getContext();
+      const localHistory = context?.globalState.get<Array<{ question: string; response: string; timestamp: string }>>("hapaHistory") || [];
+      
+      console.log(`🔄 히스토리 병합 시작: DB ${dbHistory.length}개, 로컬 ${localHistory.length}개`);
+      
+      // 병합을 위한 Map 사용 (타임스탬프를 키로 사용)
+      const mergedMap = new Map<string, { question: string; response: string; timestamp: string }>();
+      
+      // 1. DB 히스토리 추가 (우선순위 높음)
+      dbHistory.forEach(item => {
+        if (item.timestamp && item.question && item.response) {
+          mergedMap.set(item.timestamp, item);
+        }
+      });
+      
+      // 2. 로컬 히스토리 추가 (DB에 없는 항목만)
+      localHistory.forEach(item => {
+        if (item.timestamp && item.question && item.response) {
+          // DB에 없는 항목이거나, 더 최신 데이터인 경우에만 추가
+          if (!mergedMap.has(item.timestamp)) {
+            mergedMap.set(item.timestamp, item);
+          }
+        }
+      });
+      
+      // 3. 타임스탬프 기준 최신 순 정렬
+      const mergedHistory = Array.from(mergedMap.values()).sort((a, b) => {
+        const timestampA = new Date(a.timestamp).getTime();
+        const timestampB = new Date(b.timestamp).getTime();
+        return timestampB - timestampA; // 최신 순 (내림차순)
+      });
+      
+      console.log(`✅ 히스토리 병합 완료: 총 ${mergedHistory.length}개 항목`);
+      console.log(`📊 병합 결과: 기존 ${dbHistory.length + localHistory.length}개 → 중복 제거 후 ${mergedHistory.length}개`);
+      
+      // 4. 병합된 히스토리를 로컬에 저장
+      if (context) {
+        context.globalState.update("hapaHistory", mergedHistory);
+        console.log("💾 병합된 히스토리 로컬 저장 완료");
+      }
+      
+      return mergedHistory;
+      
+    } catch (error) {
+      console.error("❌ 히스토리 병합 실패:", error);
+      // 에러 시 DB 히스토리 우선 반환
+      return dbHistory;
+    }
+  }
+
+  /**
    * 세션 생성 또는 기존 세션 반환
    */
   private async getOrCreateSession(
@@ -296,7 +572,7 @@ export class SidebarProvider extends BaseWebviewProvider {
         project_name: vscode.workspace.name || "Unknown Project",
       };
 
-      const response = await fetch(`${apiBaseURL}/history/sessions`, {
+      const response = await fetch(`${apiBaseURL}/sessions`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -385,7 +661,10 @@ export class SidebarProvider extends BaseWebviewProvider {
    */
   public setContext(context: vscode.ExtensionContext) {
     (this as any)._context = context;
-    this.loadHistory(); // context 설정 후 히스토리 다시 로드
+    // context 설정 후 히스토리 다시 로드 (비동기)
+    this.loadHistory().catch(error => {
+      console.error("❌ 컨텍스트 설정 후 히스토리 로드 실패:", error);
+    });
 
     // 에디터 변경 감지하여 코드 맥락 업데이트
     this.setupEditorContextMonitoring();
@@ -530,26 +809,92 @@ export class SidebarProvider extends BaseWebviewProvider {
    */
   protected onWebviewReady(): void {
     console.log("🔗 사이드바 웹뷰 준비 완료");
+    console.log("🔍 웹뷰 인스턴스 상태:", {
+      hasView: !!this._view,
+      hasPanel: !!this._panel,
+      viewWebview: !!this._view?.webview,
+      panelWebview: !!this._panel?.webview
+    });
 
-    // 1. 히스토리 동기화
-    this.broadcastHistoryUpdate();
-
-    // 2. 초기 빈 상태 메시지 설정
-    setTimeout(() => {
-      if (this._view) {
-        console.log("📤 빈 상태 초기화 메시지 전송");
-        this._view.webview.postMessage({
-          command: "initializeEmptyStates",
-        });
+    // 1. MongoDB에서 히스토리 로드 후 동기화
+    this.loadHistoryFromDB().then((dbResult) => {
+      if (dbResult.success && dbResult.history && dbResult.history.length > 0) {
+        console.log("🔄 MongoDB 히스토리 로드 성공, 로컬 히스토리와 병합");
+        this.questionHistory = dbResult.history;
+        
+        // DB 히스토리를 로컬 저장소에도 캐시 저장
+        this.syncDBToLocalHistory(dbResult.history);
+      } else {
+        console.log("⚠️ MongoDB 히스토리 로드 실패 또는 빈 데이터, 로컬 히스토리 사용");
       }
-    }, 200);
+      
+      // 2. 히스토리 동기화 (DB 또는 로컬)
+      this.broadcastHistoryUpdate();
+      
+      // 3. 히스토리 로드 완료 후 응답 상태 복원 또는 빈 상태 초기화
+      this.initializeResponseState();
+      
+      // 4. 현재 에디터 컨텍스트 정보 전송
+      this.updateEditorContext();
+      
+    }).catch((error) => {
+      console.error("❌ MongoDB 히스토리 로드 중 오류:", error);
+      // 오류 발생 시 기존 로컬 히스토리로 동기화
+      this.broadcastHistoryUpdate();
+      
+      // 오류 시에도 초기화 진행
+      this.initializeResponseState();
+      this.updateEditorContext();
+    });
+  }
 
-    // 3. 현재 에디터 컨텍스트 정보 전송
+  /**
+   * 응답 상태 복원 또는 빈 상태 초기화
+   */
+  private initializeResponseState(): void {
+    const shouldRestoreResponse = this.currentResponseState.isValid && 
+                                 this.currentResponseState.response &&
+                                 this.currentResponseState.timestamp &&
+                                 (Date.now() - this.currentResponseState.timestamp) < 30 * 60 * 1000; // 30분 내
+
+    if (shouldRestoreResponse) {
+      console.log("🔄 마지막 응답 상태 복원 시도");
+      setTimeout(() => {
+        const webview = this._view?.webview || this._panel?.webview;
+        if (webview) {
+          webview.postMessage({
+            command: "restoreResponse",
+            response: this.currentResponseState.response,
+          });
+          console.log("✅ 마지막 응답 상태 복원 완료");
+        }
+      }, 300);
+    } else {
+      // 복원할 응답이 없으면 빈 상태 초기화
+      setTimeout(() => {
+        const webview = this._view?.webview || this._panel?.webview;
+        if (webview) {
+          console.log("📤 빈 상태 초기화 메시지 전송");
+          webview.postMessage({
+            command: "initializeEmptyStates",
+          });
+        } else {
+          console.warn("⚠️ 웹뷰 인스턴스를 찾을 수 없어 빈 상태 초기화 메시지를 전송할 수 없음");
+        }
+      }, 200);
+    }
+  }
+
+  /**
+   * 현재 에디터 컨텍스트 정보 전송
+   */
+  private updateEditorContext(): void {
     setTimeout(() => {
-      if (this._view) {
+      const webview = this._view?.webview || this._panel?.webview;
+      if (webview) {
         const activeEditor = vscode.window.activeTextEditor;
         if (activeEditor) {
-          this._view.webview.postMessage({
+          webview.postMessage({
             command: "updateContext",
             context: {
               filename: activeEditor.document.fileName,
@@ -651,6 +996,16 @@ export class SidebarProvider extends BaseWebviewProvider {
             history: JSON.stringify(this.questionHistory),
           });
         }
+        return;
+      case "refreshHistory":
+        // 히스토리 새로고침 (DB에서 다시 로드)
+        console.log("🔄 히스토리 새로고침 요청");
+        this.loadHistory().then(() => {
+          console.log("✅ 히스토리 새로고침 완료");
+          this.broadcastHistoryUpdate();
+        }).catch((error) => {
+          console.error("❌ 히스토리 새로고침 실패:", error);
+        });
         return;
       case "deleteHistoryItem":
         // 히스토리 항목 삭제 처리
@@ -1916,6 +2271,32 @@ ${previousContent}
    * 확장된 뷰를 메인 패널에 열기
    */
   private openExpandedView() {
+    // 기존 패널이 있는지 확인 (유효하지 않은 패널은 제거)
+    this.expandedPanels = this.expandedPanels.filter(panel => {
+      try {
+        // 패널이 여전히 유효한지 확인
+        return panel && panel.visible !== undefined;
+      } catch {
+        return false; // 유효하지 않은 패널
+      }
+    });
+
+    if (this.expandedPanels.length > 0) {
+      // 기존 패널에 포커스 이동
+      const existingPanel = this.expandedPanels[0];
+      try {
+        console.log("✅ 기존 확장 뷰에 포커스 이동");
+        existingPanel.reveal(vscode.ViewColumn.One);
+        return;
+      } catch (error) {
+        console.warn("⚠️ 기존 패널에 포커스 이동 실패, 새 패널 생성:", error);
+        // 패널이 유효하지 않으면 배열에서 제거
+        this.expandedPanels = [];
+      }
+    }
+
+    console.log("🔧 새 확장 뷰 패널 생성");
+
     // 새로운 웹뷰 패널 생성
     const panel = vscode.window.createWebviewPanel(
       "hapaExpandedView",
@@ -1966,6 +2347,25 @@ ${previousContent}
         command: "updateCodeContext",
         context: contextInfo,
       });
+
+      // 현재 응답 상태 동기화
+      const shouldRestoreResponse = this.currentResponseState.isValid && 
+                                   this.currentResponseState.response &&
+                                   this.currentResponseState.timestamp &&
+                                   (Date.now() - this.currentResponseState.timestamp) < 30 * 60 * 1000; // 30분 내
+
+      if (shouldRestoreResponse) {
+        console.log("🔄 확장 뷰에 마지막 응답 상태 동기화");
+        panel.webview.postMessage({
+          command: "restoreResponse",
+          response: this.currentResponseState.response,
+        });
+      } else {
+        console.log("📤 확장 뷰에 빈 상태 초기화");
+        panel.webview.postMessage({
+          command: "initializeEmptyStates",
+        });
+      }
     }, 100);
   }
 
@@ -2064,6 +2464,16 @@ ${previousContent}
         panel.webview.postMessage({
           command: "syncHistory",
           history: JSON.stringify(this.questionHistory),
+        });
+        return;
+      case "refreshHistory":
+        // 히스토리 새로고침 (DB에서 다시 로드)
+        console.log("🔄 확장 패널 히스토리 새로고침 요청");
+        this.loadHistory().then(() => {
+          console.log("✅ 확장 패널 히스토리 새로고침 완료");
+          this.broadcastHistoryUpdate();
+        }).catch((error) => {
+          console.error("❌ 확장 패널 히스토리 새로고침 실패:", error);
         });
         return;
       case "deleteHistoryItem":
@@ -3018,15 +3428,24 @@ ${previousContent}
         // 성공 응답 처리
         const cleanedCode = this.cleanAIResponse(response.generated_code);
 
+        const responseData = {
+          generated_code: cleanedCode,
+          explanation: response.explanation || "AI가 생성한 코드입니다.",
+          originalQuestion: question,
+          success: true,
+          processingTime: response.processing_time || 0,
+        };
+
+        // 현재 응답 상태 저장 (웹뷰 재생성 시 복원용)
+        this.currentResponseState = {
+          response: responseData,
+          timestamp: Date.now(),
+          isValid: true,
+        };
+
         this._view.webview.postMessage({
           command: "addAIResponse",
-          response: {
-            generated_code: cleanedCode,
-            explanation: response.explanation || "AI가 생성한 코드입니다.",
-            originalQuestion: question,
-            success: true,
-            processingTime: response.processing_time || 0,
-          },
+          response: responseData,
         });
 
         // 응답 확인을 위한 추가 메시지

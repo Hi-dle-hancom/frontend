@@ -37,7 +37,7 @@ export class SidebarComponents {
     return `
     <div class="sidebar-header hapa-animate-fade-in-down">
       <div class="sidebar-title">
-        HAPA - Expanded View
+        HAPA
       </div>
       <div class="header-actions hapa-animate-fade-in-right hapa-animate-delay-100">
         <div class="connection-status">
@@ -106,7 +106,7 @@ export class SidebarComponents {
         
         <div class="action-buttons">
           <button id="generate-btn" class="send-btn hapa-button hapa-hover-lift" onclick="submitQuestion()">
-            코드 생성
+            전송
           </button>
         </div>
       </div>
@@ -115,7 +115,7 @@ export class SidebarComponents {
   }
 
   /**
-   * 응답 표시 섹션
+   * 응답 표시 섹션 (클로드 스타일)
    */
   static generateResponseSection(): string {
     return `
@@ -126,65 +126,79 @@ export class SidebarComponents {
       </div>
       
       <div class="tab-content">
+        <!-- 응답 탭 컨텐츠 -->
         <div class="response-content" style="display: block;">
-          <div id="response-content" class="response-display">
-            <div class="test-response-content">
-              <div class="response-header">
-                <div class="response-title">✅ HAPA 응답</div>
-                <div class="response-meta">방금 전</div>
+          <!-- 클로드 스타일 응답 컨테이너 -->
+          <div id="response-content" class="claude-style-response">
+            <!-- 기본 초기 상태 (빈 응답) -->
+            <div class="claude-empty-state">
+              <div class="empty-icon">💭</div>
+              <div class="empty-message">질문을 입력하고 전송 버튼을 눌러보세요.</div>
+              <div class="empty-submessage">HAPA가 맞춤형 코드를 생성해드립니다.</div>
+            </div>
+          </div>
+          
+          <!-- 스트리밍 인디케이터 (개선된 디자인) -->
+          <div id="streamingIndicator" class="claude-streaming-indicator" style="display: none;">
+            <div class="claude-response-container">
+              <div class="claude-response-header">
+                <div class="claude-response-meta">
+                  <span class="claude-timestamp">생성 중...</span>
+                </div>
               </div>
-              <div class="response-body">
-                <p>응답/기록 섹션이 정상적으로 작동하고 있습니다.</p>
-                <pre class="code-block"><code># 테스트 코드 예시
-def hello_world():
-    print("Hello, HAPA!")
-    return "응답 표시 테스트 완료"</code></pre>
+              <div class="claude-response-body">
+                <div class="claude-streaming-content">
+                  <div class="claude-streaming-dots">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </div>
+                  <span id="streaming-status" class="claude-streaming-text">AI가 응답을 생성하고 있습니다...</span>
+                </div>
               </div>
             </div>
           </div>
+          
+          <!-- 에러 메시지 (클로드 스타일) -->
+          <div id="errorMessage" class="claude-error-message" style="display: none;">
+            <div class="claude-response-container error">
+              <div class="claude-response-header">
+                <div class="claude-ai-avatar error">⚠️</div>
+                <div class="claude-response-meta">
+                  <span class="claude-model-name">오류 발생</span>
+                  <span class="claude-timestamp" id="error-timestamp"></span>
+                </div>
+              </div>
+              <div class="claude-response-body">
+                <div class="claude-error-content">
+                  <span class="claude-error-text">요청 처리 중 오류가 발생했습니다</span>
+                  <div class="claude-error-details" id="error-details"></div>
+                </div>
+              </div>
+              <div class="claude-response-actions">
+                <button class="claude-action-btn retry-btn" onclick="retryLastRequest()">
+                  <span class="claude-btn-icon">🔄</span> 다시 시도
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 기존 호환성을 위한 숨겨진 요소들 -->
           <div class="response-actions" style="display: none;">
             <button id="copy-button" class="copy-button hapa-button" style="display: none;">
               📋 복사
             </button>
           </div>
-          
-          <div id="streamingIndicator" class="streaming-indicator" style="display: none;">
-            <div class="streaming-content">
-              <div class="streaming-dots">
-                <span></span>
-                <span></span>
-                <span></span>
-              </div>
-              <span id="streaming-status" class="streaming-text">HAPA가 응답을 생성하고 있습니다...</span>
-            </div>
-          </div>
-          
-          <div id="errorMessage" class="error-message" style="display: none;">
-            <div class="error-content">
-              <span class="error-text">오류 발생 : HTTP 401: Unauthorized</span>
-            </div>
-          </div>
         </div>
         
+        <!-- 히스토리 탭 컨텐츠 -->
         <div class="history-content" style="display: none;">
           <div class="history-list" id="historyContent">
-            <div class="test-history-item">
-              <div class="history-question">
-                <div class="history-meta">5분 전</div>
-                <div class="question-text">Python 함수 작성 방법을 알려주세요</div>
-              </div>
-              <div class="history-response">
-                <div class="response-preview">✅ 기본적인 Python 함수 작성 방법을 설명드렸습니다.</div>
-              </div>
-            </div>
-            <div class="test-history-item">
-              <div class="history-question">
-                <div class="history-meta">10분 전</div>
-                <div class="question-text">autocomplete 모델 사용법</div>
-              </div>
-              <div class="history-response">
-                <div class="response-preview">✅ 자동완성 코드 생성 방법을 안내했습니다.</div>
-              </div>
+            <!-- 히스토리 항목들이 JavaScript에서 동적으로 생성됩니다 -->
+            <div class="empty-history">
+              <div class="empty-history-icon">📝</div>
+              <div class="empty-history-message">히스토리를 불러오는 중...</div>
+              <div class="empty-history-submessage">잠시만 기다려주세요</div>
             </div>
           </div>
         </div>

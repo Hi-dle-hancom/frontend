@@ -939,8 +939,14 @@ const messageQueue = {
             JSON.parse(message.history).length,
             "개 항목"
           );
-          // 히스토리 UI 업데이트 로직 추가 가능
+          await this.handleSyncHistory(message);
         }
+        break;
+      case "initializeEmptyStates":
+        await this.handleInitializeEmptyStates(message);
+        break;
+      case "restoreResponse":
+        await this.handleRestoreResponse(message);
         break;
       default:
         console.warn(`⚠️ 처리되지 않은 명령: ${command}`);
@@ -1865,36 +1871,36 @@ const messageQueue = {
 
   ensureResponseTabVisible() {
     try {
-      // 응답 탭 강제 활성화
-      const responseTab = document.querySelector('[data-tab="response"]');
-      const historyTab = document.querySelector('[data-tab="history"]');
-      const responseContent = document.querySelector(".response-content");
-      const historyContent = document.querySelector(".history-content");
+      console.log("🔍 응답 탭 표시 보장 시작");
+      
+      // 단일 소스 진실 원칙에 따라 switchTab 함수 사용
+      if (typeof switchTab === 'function') {
+        switchTab('response');
+        console.log("✅ switchTab 함수 통해 응답 탭 활성화");
+      } else {
+        console.warn("⚠️ switchTab 함수 없음, 대안 로직 사용");
+        
+        // switchTab이 없는 경우에만 직접 조작
+        const responseTab = document.querySelector('[data-tab="response"]');
+        const responseContent = document.querySelector(".response-content");
+        const historyContent = document.querySelector(".history-content");
 
-      console.log("🔍 탭 상태 확인:", {
-        responseTabExists: !!responseTab,
-        historyTabExists: !!historyTab,
-        responseContentExists: !!responseContent,
-        historyContentExists: !!historyContent,
-      });
+        // 모든 탭 버튼 비활성화
+        document.querySelectorAll(".tab-btn").forEach((btn) => btn.classList.remove("active"));
 
-      // 모든 탭 버튼 비활성화
-      document
-        .querySelectorAll(".tab-btn")
-        .forEach((btn) => btn.classList.remove("active"));
+        // 응답 탭 활성화
+        if (responseTab) {
+          responseTab.classList.add("active");
+        }
 
-      // 응답 탭 활성화
-      if (responseTab) {
-        responseTab.classList.add("active");
-      }
-
-      // 콘텐츠 표시/숨김
-      if (responseContent) {
-        responseContent.style.display = "block";
-        responseContent.style.visibility = "visible";
-      }
-      if (historyContent) {
-        historyContent.style.display = "none";
+        // 콘텐츠 표시/숨김
+        if (responseContent) {
+          responseContent.style.display = "block";
+          responseContent.style.visibility = "visible";
+        }
+        if (historyContent) {
+          historyContent.style.display = "none";
+        }
       }
 
       console.log("✅ 응답 탭 표시 보장 완료");
@@ -1967,13 +1973,13 @@ const messageQueue = {
         responseElement.innerHTML = safeContent;
 
         // 강제 표시 스타일 적용
-        this.forceElementVisibility(responseElement);
+        messageQueue.forceElementVisibility(responseElement);
 
         // 부모 컨테이너들도 표시
-        this.ensureParentVisibility(responseElement);
+        messageQueue.ensureParentVisibility(responseElement);
 
         // 복사 버튼 활성화
-        this.activateCopyButton(cleanedContent);
+        messageQueue.activateCopyButton(cleanedContent);
 
         // DOM 강제 업데이트
         responseElement.offsetHeight;
@@ -1983,18 +1989,18 @@ const messageQueue = {
 
         // 최종 검증
         setTimeout(
-          () => this.validateFinalDisplay(responseElement, cleanedContent),
+          () => messageQueue.validateFinalDisplay(responseElement, cleanedContent),
           100
         );
 
         console.log("✅ 최종 결과 표시 완료");
       } catch (error) {
         console.error("❌ 최종 결과 표시 오류:", error);
-        this.handleDisplayError(responseElement, content, error);
+        messageQueue.handleDisplayError(responseElement, content, error);
       }
     } catch (outerError) {
       console.error("❌ displayFinalResult 전체 오류:", outerError);
-      this.emergencyUIRecovery();
+      messageQueue.emergencyUIRecovery();
     }
   },
 
@@ -2077,7 +2083,7 @@ const messageQueue = {
       const copyButton = document.getElementById("copy-button");
       if (copyButton) {
         copyButton.style.display = "block";
-        copyButton.onclick = () => this.copyToClipboard(content);
+        copyButton.onclick = () => messageQueue.copyToClipboard(content);
         console.log("📋 복사 버튼 활성화 완료");
       }
 
@@ -2262,123 +2268,44 @@ const messageQueue = {
     }
   },
 
-  // 응답 탭 활성화 함수
+  // 응답 탭 활성화 함수 (개선된 버전 - switchTab 사용)
   activateResponseTab() {
     try {
       console.log("🔄 응답 탭 활성화 시작");
-
-      // 모든 탭 버튼에서 active 클래스 제거
-      const allTabBtns = document.querySelectorAll(".tab-btn");
-      allTabBtns.forEach((btn) => {
-        btn.classList.remove("active");
-        console.log("📱 탭 버튼 비활성화:", btn.textContent?.trim());
-      });
-
-      // 모든 탭 컨텐츠 확인 및 설정
-      const responseContent = document.querySelector(".response-content");
-      const historyContent = document.querySelector(".history-content");
-
-      console.log("🔍 탭 컨텐츠 요소 상태:", {
-        responseContent: !!responseContent,
-        historyContent: !!historyContent,
-        responseDisplay: responseContent
-          ? responseContent.style.display
-          : "unknown",
-        historyDisplay: historyContent
-          ? historyContent.style.display
-          : "unknown",
-      });
-
-      // 히스토리 탭 강제 숨김
-      if (historyContent) {
-        historyContent.style.display = "none";
-        historyContent.style.visibility = "hidden";
-        console.log("📚 히스토리 컨텐츠 숨김");
-      }
-
-      // 응답 탭 강제 표시
-      if (responseContent) {
-        responseContent.style.display = "block";
-        responseContent.style.visibility = "visible";
-        responseContent.style.opacity = "1";
-        responseContent.style.position = "relative";
-        responseContent.style.zIndex = "1";
-
-        // 자식 요소들도 강제 표시
-        const responseDisplay =
-          responseContent.querySelector("#response-content");
-        if (responseDisplay) {
-          responseDisplay.style.display = "block";
-          responseDisplay.style.visibility = "visible";
-          responseDisplay.style.opacity = "1";
+      
+      // 기존 switchTab 함수 사용하여 중복 코드 제거
+      if (typeof switchTab === 'function') {
+        switchTab('response');
+      } else {
+        console.warn("⚠️ switchTab 함수를 찾을 수 없어 대안 방식 사용");
+        
+        // switchTab 함수가 없는 경우 기본 로직
+        const allTabBtns = document.querySelectorAll(".tab-btn");
+        allTabBtns.forEach((btn) => btn.classList.remove("active"));
+        
+        const responseContent = document.querySelector(".response-content");
+        const historyContent = document.querySelector(".history-content");
+        
+        if (responseContent) {
+          responseContent.style.display = "block";
+          responseContent.style.visibility = "visible";
         }
-
-        console.log("✅ 응답 컨텐츠 강제 표시");
-      } else {
-        console.error("❌ .response-content 요소를 찾을 수 없음");
-
-        // 대안: 모든 response 관련 요소 강제 표시
-        const allResponseEls = document.querySelectorAll(
-          '[class*="response"], [id*="response"]'
-        );
-        console.log(
-          "🔍 대안으로 모든 response 요소 표시:",
-          allResponseEls.length
-        );
-        allResponseEls.forEach((el) => {
-          if (el.id !== "response-content") {
-            // 내용 요소가 아닌 컨테이너만
-            el.style.display = "block";
-            el.style.visibility = "visible";
-          }
-        });
-      }
-
-      // 응답 탭 버튼 활성화
-      const responseTabBtn = document.querySelector('[data-tab="response"]');
-      if (responseTabBtn) {
-        responseTabBtn.classList.add("active");
-        responseTabBtn.style.backgroundColor =
-          "var(--vscode-button-background)";
-        responseTabBtn.style.color = "var(--vscode-button-foreground)";
-        console.log("✅ 응답 탭 버튼 활성화");
-      } else {
-        console.warn("⚠️ 응답 탭 버튼을 찾을 수 없음");
-
-        // 대안: 모든 탭 버튼 찾아서 첫 번째 활성화
-        const firstTabBtn = document.querySelector(".tab-btn");
-        if (firstTabBtn) {
-          firstTabBtn.classList.add("active");
-          console.log("✅ 대안으로 첫 번째 탭 버튼 활성화");
+        if (historyContent) {
+          historyContent.style.display = "none";
+        }
+        
+        const responseTabBtn = document.querySelector('[data-tab="response"]');
+        if (responseTabBtn) {
+          responseTabBtn.classList.add("active");
         }
       }
-
-      // 강제 리플로우 및 리페인트
-      document.body.offsetHeight;
-
-      // 최종 검증
-      setTimeout(() => {
-        const finalResponseContent =
-          document.querySelector(".response-content");
-        const finalResponseElement =
-          document.getElementById("response-content");
-
-        console.log("🔍 최종 상태 검증:", {
-          responseContainer: finalResponseContent
-            ? finalResponseContent.style.display
-            : "not found",
-          responseElement: finalResponseElement
-            ? finalResponseElement.style.display
-            : "not found",
-          responseElementVisible: finalResponseElement
-            ? finalResponseElement.offsetHeight > 0
-            : false,
-          responseElementContent: finalResponseElement
-            ? finalResponseElement.innerHTML.length
-            : 0,
-        });
-      }, 100);
-
+      
+      // 추가 강제 표시 로직 (응답 컨텐츠용)
+      const responseElement = document.getElementById("response-content");
+      if (responseElement) {
+        this.forceElementVisibility(responseElement);
+      }
+      
       console.log("✅ 응답 탭 활성화 완료");
     } catch (error) {
       console.error("❌ 응답 탭 활성화 오류:", error);
@@ -3104,48 +3031,7 @@ const messageQueue = {
     return `language-${language}`;
   },
 
-  /**
-   * 응답 탭 활성화 (새로운 메서드)
-   */
-  activateResponseTab() {
-    try {
-      const responseTab = document.querySelector('[data-tab="response"]');
-      const historyTab = document.querySelector('[data-tab="history"]');
 
-      if (responseTab && historyTab) {
-        responseTab.classList.add("active");
-        historyTab.classList.remove("active");
-      }
-
-      // 탭 내용 표시
-      const responseContent = document.querySelector(".response-content");
-      const historyContent = document.querySelector(".history-content");
-
-      if (responseContent) {
-        responseContent.style.display = "block";
-      }
-      if (historyContent) {
-        historyContent.style.display = "none";
-      }
-
-      console.log("✅ 응답 탭 활성화 완료");
-    } catch (error) {
-      console.error("❌ 응답 탭 활성화 오류:", error);
-    }
-  },
-
-  /**
-   * 요소 강제 표시 (새로운 메서드)
-   */
-  forceElementVisibility(element) {
-    if (!element) {return;}
-
-    element.style.display = "block";
-    element.style.visibility = "visible";
-    element.style.opacity = "1";
-    element.style.position = "relative";
-    element.style.zIndex = "1";
-  },
 
   /**
    * 부모 컨테이너 표시 (새로운 메서드)
@@ -3169,19 +3055,6 @@ const messageQueue = {
   /**
    * 복사 버튼 활성화 (새로운 메서드)
    */
-  activateCopyButton(code) {
-    try {
-      const copyButton = document.getElementById("copy-button");
-      if (copyButton) {
-        copyButton.style.display = "block";
-        copyButton.onclick = () => {
-          copyToClipboard(code);
-        };
-      }
-    } catch (error) {
-      console.error("❌ 복사 버튼 활성화 오류:", error);
-    }
-  },
 
   /**
    * HTML 이스케이프 (새로운 메서드)
@@ -3347,7 +3220,398 @@ const messageQueue = {
         .replace(/\/\*[\s\S]*?\*\//g, '<span class="comment">$&</span>')
     );
   },
+
+  // 빈 상태 초기화 처리 (개선된 DOM 타이밍 및 가시성 처리)
+  async handleInitializeEmptyStates(message) {
+    console.log("🎯 빈 상태 초기화 요청 처리");
+    console.log("🎯 메시지 내용:", message);
+    
+    try {
+      // DOM 준비 대기 (더 강력한 대기 로직)
+      await this.waitForDOMReady();
+
+      // 응답 컨테이너 찾기 (재시도 로직 포함)
+      const responseContent = await this.getResponseElementWithRetry();
+      if (!responseContent) {
+        console.error("❌ response-content 요소를 찾을 수 없음 (재시도 후에도)");
+        return;
+      }
+
+      console.log("🔍 현재 response-content 내용:", {
+        innerHTML: responseContent.innerHTML.substring(0, 200),
+        hasEmptyState: !!responseContent.querySelector('.claude-empty-state'),
+        display: responseContent.style.display,
+        visibility: responseContent.style.visibility,
+        opacity: responseContent.style.opacity,
+        offsetHeight: responseContent.offsetHeight,
+        offsetWidth: responseContent.offsetWidth
+      });
+
+      // 응답 컨테이너 강제 표시
+      messageQueue.forceElementVisibility(responseContent);
+
+      // 기본 빈 상태 HTML 확인 - 이미 HTML에 있으므로 단순히 표시만 확인
+      let emptyState = responseContent.querySelector('.claude-empty-state');
+      if (emptyState) {
+        messageQueue.forceElementVisibility(emptyState);
+        console.log("✅ 기존 빈 상태 요소 강제 표시");
+      } else {
+        console.warn("⚠️ 빈 상태 요소가 없어서 새로 생성");
+        const emptyStateHtml = `
+          <div class="claude-empty-state">
+            <div class="empty-icon">💭</div>
+            <div class="empty-message">질문을 입력하고 전송 버튼을 눌러보세요</div>
+            <div class="empty-submessage">HAPA가 맞춤형 코드를 생성해드립니다</div>
+          </div>
+        `;
+        responseContent.innerHTML = emptyStateHtml;
+        emptyState = responseContent.querySelector('.claude-empty-state');
+      }
+
+      // 기타 상태 요소들 숨기기
+      const streamingIndicator = document.getElementById("streamingIndicator");
+      const errorMessage = document.getElementById("errorMessage");
+      
+      if (streamingIndicator) {
+        streamingIndicator.style.display = 'none';
+      }
+      if (errorMessage) {
+        errorMessage.style.display = 'none';
+      }
+
+      // 응답 탭 활성화 및 부모 요소들 표시
+      messageQueue.activateResponseTab();
+      messageQueue.ensureParentVisibility(responseContent);
+
+      // DOM 강제 레이아웃 재계산
+      responseContent.offsetHeight;
+      if (emptyState) {
+        emptyState.offsetHeight;
+      }
+
+      // 최종 상태 검증 (더 긴 대기)
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
+      const finalCheck = {
+        responseContentVisible: responseContent.offsetHeight > 0,
+        emptyStateVisible: emptyState ? emptyState.offsetHeight > 0 : false,
+        responseContentHTML: responseContent.innerHTML.substring(0, 100),
+        responseContentStyles: {
+          display: responseContent.style.display,
+          visibility: responseContent.style.visibility,
+          opacity: responseContent.style.opacity
+        }
+      };
+      console.log("🔍 최종 빈 상태 검증:", finalCheck);
+
+      if (!finalCheck.responseContentVisible || !finalCheck.emptyStateVisible) {
+        console.warn("⚠️ 빈 상태가 여전히 보이지 않음, 긴급 복구 시도");
+        await this.emergencyEmptyStateRecovery(responseContent);
+      }
+
+      console.log("✅ 빈 상태 초기화 완료");
+      
+    } catch (error) {
+      console.error("❌ 빈 상태 초기화 실패:", error);
+      // 실패 시 긴급 복구 시도
+      this.emergencyEmptyStateRecovery(document.getElementById("response-content"));
+    }
+  },
+
+  // DOM 준비 대기 (개선된 버전)
+  async waitForDOMReady() {
+    if (document.readyState === 'complete') {
+      // DOM이 준비되었어도 스타일과 레이아웃 적용을 위해 짧은 대기
+      await new Promise(resolve => setTimeout(resolve, 50));
+      return;
+    }
+    
+    return new Promise(resolve => {
+      const timeout = setTimeout(() => {
+        console.warn("⚠️ DOM 준비 타임아웃, 강제 진행");
+        resolve();
+      }, 3000); // 3초 타임아웃
+      
+      const checkReady = () => {
+        if (document.readyState === 'complete') {
+          clearTimeout(timeout);
+          // 추가 대기로 레이아웃 완료 보장
+          setTimeout(resolve, 100);
+        } else {
+          setTimeout(checkReady, 10);
+        }
+      };
+      checkReady();
+    });
+  },
+
+  // 응답 요소 재시도 로직 (개선된 버전)
+  async getResponseElementWithRetry() {
+    for (let i = 0; i < 15; i++) {
+      const element = document.getElementById("response-content");
+      if (element) {
+        // 요소가 실제로 렌더링되고 접근 가능한지 확인
+        if (element.offsetParent !== null || element.offsetHeight > 0 || element.offsetWidth > 0) {
+          return element;
+        }
+        // 요소는 있지만 아직 렌더링되지 않은 경우
+        console.log(`🔄 요소 발견했지만 렌더링 대기 중... (시도 ${i + 1}/15)`);
+      }
+      
+      // 점진적으로 대기 시간 증가
+      const waitTime = Math.min(50 + (i * 10), 200);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+    
+    // 최후의 수단: 요소가 있기만 하면 반환
+    const element = document.getElementById("response-content");
+    if (element) {
+      console.warn("⚠️ 요소를 찾았지만 렌더링 상태 불확실");
+      return element;
+    }
+    
+    return null;
+  },
+
+  // 긴급 빈 상태 복구
+  async emergencyEmptyStateRecovery(responseContent) {
+    console.log("🚨 긴급 빈 상태 복구 시작");
+    
+    if (!responseContent) {
+      responseContent = document.getElementById("response-content");
+    }
+    
+    if (!responseContent) {
+      console.error("❌ 긴급 복구도 실패: response-content 요소 없음");
+      return;
+    }
+
+    // 강제 HTML 재설정
+    responseContent.innerHTML = `
+      <div class="claude-empty-state" style="display: block !important; visibility: visible !important; opacity: 1 !important;">
+        <div class="empty-icon">💭</div>
+        <div class="empty-message">질문을 입력하고 전송 버튼을 눌러보세요</div>
+        <div class="empty-submessage">HAPA가 맞춤형 코드를 생성해드립니다</div>
+      </div>
+    `;
+
+    // 강제 스타일 적용
+    responseContent.style.cssText = `
+      display: block !important;
+      visibility: visible !important;
+      opacity: 1 !important;
+      position: relative !important;
+      z-index: 1 !important;
+      min-height: 200px !important;
+      background: var(--vscode-editor-background) !important;
+    `;
+
+    // 부모 요소들도 강제 표시
+    let parent = responseContent.parentElement;
+    while (parent && parent !== document.body) {
+      parent.style.display = 'block';
+      parent.style.visibility = 'visible';
+      parent.style.opacity = '1';
+      parent = parent.parentElement;
+    }
+
+    console.log("✅ 긴급 빈 상태 복구 완료");
+  },
+
+  // 응답 상태 복원 처리
+  async handleRestoreResponse(message) {
+    console.log("🔄 응답 상태 복원 시작");
+    console.log("🔄 복원할 응답 데이터:", message.response);
+
+    try {
+      const response = message.response;
+      if (!response || !response.generated_code) {
+        console.warn("⚠️ 복원할 응답 데이터가 유효하지 않음");
+        // 복원 실패 시 빈 상태로 fallback
+        return this.handleInitializeEmptyStates({});
+      }
+
+      // 응답 컨테이너 찾기
+      const responseContent = document.getElementById("response-content");
+      if (!responseContent) {
+        console.warn("⚠️ response-content 요소를 찾을 수 없음");
+        return;
+      }
+
+      // 응답 탭 활성화
+      messageQueue.activateResponseTab();
+
+      // 응답 렌더링
+      const renderedContent = messageQueue.renderAIResponse(response);
+      responseContent.innerHTML = renderedContent;
+
+      // 강제 표시
+      messageQueue.forceElementVisibility(responseContent);
+      messageQueue.ensureParentVisibility(responseContent);
+
+      // 복사 버튼 활성화
+      messageQueue.activateCopyButton(response.generated_code);
+
+      // 스트리밍 관련 요소들 숨기기
+      const streamingIndicator = document.getElementById("streamingIndicator");
+      const errorMessage = document.getElementById("errorMessage");
+      
+      if (streamingIndicator) {
+        streamingIndicator.style.display = 'none';
+      }
+      if (errorMessage) {
+        errorMessage.style.display = 'none';
+      }
+
+      console.log("✅ 응답 상태 복원 완료");
+      
+    } catch (error) {
+      console.error("❌ 응답 상태 복원 실패:", error);
+      // 복원 실패 시 빈 상태로 fallback
+      this.handleInitializeEmptyStates({});
+    }
+  },
+
+  // 히스토리 동기화 처리
+  async handleSyncHistory(message) {
+    console.log("📚 히스토리 동기화 시작");
+    
+    try {
+      const historyData = JSON.parse(message.history);
+      console.log("📚 히스토리 데이터:", historyData);
+
+      // 히스토리 컨테이너 찾기
+      const historyContainer = document.getElementById("historyContent");
+      if (!historyContainer) {
+        console.warn("⚠️ 히스토리 컨테이너를 찾을 수 없음");
+        return;
+      }
+
+      // 히스토리 항목이 있는지 확인
+      if (!historyData || historyData.length === 0) {
+        console.log("📚 히스토리가 비어있음");
+        historyContainer.innerHTML = `
+          <div class="empty-history">
+            <div class="empty-history-icon">📝</div>
+            <div class="empty-history-message">아직 질문 기록이 없습니다</div>
+            <div class="empty-history-submessage">질문을 하면 여기에 기록이 표시됩니다</div>
+          </div>
+        `;
+        return;
+      }
+
+      // 히스토리 헤더 추가
+      const historyHeader = `
+        <div class="history-header">
+          <button class="history-refresh-btn" onclick="refreshHistory()">
+            🔄
+          </button>
+        </div>
+      `;
+
+      // 히스토리 HTML 생성
+      const historyHTML = historyData.map(item => {
+        const timestamp = new Date(item.timestamp).toLocaleString('ko-KR');
+        const questionPreview = item.question.length > 50 ? 
+          item.question.substring(0, 50) + '...' : 
+          item.question;
+        const responsePreview = item.response?.substring(0, 100) + '...' || '응답 생성 중...';
+
+        return `
+          <div class="history-item" data-timestamp="${item.timestamp}">
+            <div class="history-question">
+              <div class="history-meta">${timestamp}</div>
+              <div class="question-text">${this.escapeHtml(questionPreview)}</div>
+            </div>
+            <div class="history-response">
+              <div class="response-preview">${this.escapeHtml(responsePreview)}</div>
+            </div>
+            <div class="history-actions">
+              <button class="history-action-btn" onclick="deleteHistoryItem('${item.timestamp}')">
+                🗑️
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      // 히스토리 컨테이너 업데이트
+      historyContainer.innerHTML = historyHeader + historyHTML;
+
+      console.log("✅ 히스토리 동기화 완료:", historyData.length, "개 항목");
+      
+    } catch (error) {
+      console.error("❌ 히스토리 동기화 실패:", error);
+      
+      // 에러 시 기본 메시지 표시
+      const historyContainer = document.getElementById("historyContent");
+      if (historyContainer) {
+        historyContainer.innerHTML = `
+          <div class="empty-history">
+            <div class="empty-history-icon">⚠️</div>
+            <div class="empty-history-message">히스토리를 불러올 수 없습니다</div>
+            <div class="empty-history-submessage">나중에 다시 시도해 주세요</div>
+          </div>
+        `;
+      }
+    }
+  },
 };
+
+// ============================================================================
+// 히스토리 관련 전역 함수들
+// ============================================================================
+
+/**
+ * 히스토리 새로고침 (DB에서 다시 로드)
+ */
+function refreshHistory() {
+  console.log("🔄 히스토리 새로고침 요청");
+  
+  // 새로고침 버튼 비활성화
+  const refreshBtn = document.querySelector('.history-refresh-btn');
+  if (refreshBtn) {
+    refreshBtn.disabled = true;
+    refreshBtn.textContent = '🔄 새로고침 중...';
+  }
+  
+  // VSCode 확장에 새로고침 메시지 전송
+  vscode.postMessage({
+    command: 'refreshHistory'
+  });
+  
+  // 3초 후 버튼 복원
+  setTimeout(() => {
+    if (refreshBtn) {
+      refreshBtn.disabled = false;
+      refreshBtn.textContent = '🔄 새로고침';
+    }
+  }, 3000);
+}
+
+/**
+ * 히스토리 항목 복원
+ */
+function restoreHistoryItem(timestamp) {
+  console.log("🔄 히스토리 항목 복원:", timestamp);
+  // 복원 기능 구현 (향후 확장)
+  vscode.postMessage({
+    command: 'restoreHistoryItem',
+    timestamp: timestamp
+  });
+}
+
+/**
+ * 히스토리 항목 삭제
+ */
+function deleteHistoryItem(timestamp) {
+  console.log("🗑️ 히스토리 항목 삭제:", timestamp);
+  // 삭제 기능 구현 (향후 확장)
+  vscode.postMessage({
+    command: 'deleteHistoryItem',
+    timestamp: timestamp
+  });
+}
 
 // ============================================================================
 // 주요 이벤트 핸들러들
@@ -3533,6 +3797,7 @@ function submitQuestion() {
 
     alert("메시지 전송에 실패했습니다. 다시 시도해주세요.");
   }
+
 }
 
 /**
@@ -3705,18 +3970,18 @@ function addTestHistoryData() {
     if (historyContent) {
       const testHistoryItems = [
         {
-          question: "파이썬에서 리스트를 정렬하는 방법은?",
+          question: "(예시) 파이썬에서 리스트를 정렬하는 방법은?",
           response: "sorted() 함수나 .sort() 메서드를 사용할 수 있습니다.",
           timestamp: new Date(Date.now() - 3600000).toISOString(), // 1시간 전
         },
         {
-          question: "Django 모델에서 데이터를 조회하는 방법",
+          question: "(예시) Django 모델에서 데이터를 조회하는 방법",
           response:
             "Model.objects.filter()나 Model.objects.get() 메서드를 사용합니다.",
           timestamp: new Date(Date.now() - 7200000).toISOString(), // 2시간 전
         },
         {
-          question: "FastAPI에서 비동기 함수 작성법",
+          question: "(예시) FastAPI에서 비동기 함수 작성법",
           response: "async def 키워드로 함수를 정의하고 await를 사용합니다.",
           timestamp: new Date(Date.now() - 10800000).toISOString(), // 3시간 전
         },
@@ -5228,39 +5493,6 @@ function insertCode(code) {
   }
 }
 
-/**
- * 탭 전환 함수
- */
-function switchTab(tabName) {
-  try {
-    console.log("🔄 탭 전환:", tabName);
-
-    // 탭 버튼 상태 변경
-    const tabButtons = document.querySelectorAll(".tab-btn");
-    tabButtons.forEach((btn) => {
-      btn.classList.remove("active");
-      if (btn.dataset.tab === tabName) {
-        btn.classList.add("active");
-      }
-    });
-
-    // 탭 내용 표시/숨김
-    const responseContent = document.querySelector(".response-content");
-    const historyContent = document.querySelector(".history-content");
-
-    if (tabName === "response") {
-      if (responseContent) {responseContent.style.display = "block";}
-      if (historyContent) {historyContent.style.display = "none";}
-    } else if (tabName === "history") {
-      if (responseContent) {responseContent.style.display = "none";}
-      if (historyContent) {historyContent.style.display = "block";}
-    }
-
-    console.log("✅ 탭 전환 완료");
-  } catch (error) {
-    console.error("❌ 탭 전환 오류:", error);
-  }
-}
 
 /**
  * 알림 표시 함수

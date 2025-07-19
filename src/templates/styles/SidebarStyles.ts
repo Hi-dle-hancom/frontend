@@ -1004,6 +1004,181 @@ body {
   font-size: 11px;
 }
 
+/* Claude 스타일 응답 컨테이너 - SidebarComponents.ts와 호환 */
+.claude-style-response {
+  width: 100%;
+  min-height: 200px;
+  display: block;
+  visibility: visible;
+  opacity: 1;
+}
+
+/* Claude 스타일 빈 상태 - SidebarComponents.ts와 호환 */
+.claude-empty-state {
+  text-align: center;
+  color: var(--hapa-description-foreground);
+  padding: 40px 20px;
+  font-size: 11px;
+  display: block;
+  visibility: visible;
+  opacity: 1;
+}
+
+.claude-empty-state .empty-icon {
+  font-size: 24px;
+  margin-bottom: 12px;
+  opacity: 0.6;
+}
+
+.claude-empty-state .empty-message {
+  font-size: 12px;
+  font-weight: 500;
+  margin-bottom: 8px;
+  color: var(--hapa-foreground);
+  line-height: 1.4;
+}
+
+.claude-empty-state .empty-submessage {
+  font-size: 10px;
+  line-height: 1.4;
+  opacity: 0.7;
+  color: var(--hapa-description-foreground);
+}
+
+/* 히스토리 관련 스타일 */
+.empty-history {
+  text-align: center;
+  color: var(--hapa-description-foreground);
+  padding: 40px 20px;
+  font-size: 11px;
+}
+
+.empty-history-icon {
+  font-size: 24px;
+  margin-bottom: 12px;
+  opacity: 0.6;
+}
+
+.empty-history-message {
+  font-size: 12px;
+  font-weight: 500;
+  margin-bottom: 8px;
+  color: var(--hapa-foreground);
+  line-height: 1.4;
+}
+
+.empty-history-submessage {
+  font-size: 10px;
+  line-height: 1.4;
+  opacity: 0.7;
+  color: var(--hapa-description-foreground);
+}
+
+.history-item {
+  border: 1px solid var(--hapa-panel-border);
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 12px;
+  background: var(--hapa-editor-background);
+  transition: all 0.2s ease;
+}
+
+.history-item:hover {
+  border-color: var(--hapa-primary);
+  background: rgba(var(--hapa-primary-rgb), 0.05);
+}
+
+.history-question {
+  margin-bottom: 8px;
+}
+
+.history-meta {
+  font-size: 10px;
+  color: var(--hapa-description-foreground);
+  margin-bottom: 4px;
+}
+
+.question-text {
+  font-size: 12px;
+  color: var(--hapa-foreground);
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.history-response {
+  margin-bottom: 8px;
+}
+
+.response-preview {
+  font-size: 11px;
+  color: var(--hapa-description-foreground);
+  line-height: 1.4;
+  padding: 8px;
+  background: var(--hapa-input-background);
+  border-radius: 4px;
+  border-left: 3px solid var(--hapa-primary);
+}
+
+.history-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.history-action-btn {
+  background: var(--hapa-button-background);
+  border: 1px solid var(--hapa-button-border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 10px;
+  color: var(--hapa-button-foreground);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.history-action-btn:hover {
+  background: var(--hapa-button-hoverBackground);
+  border-color: var(--hapa-primary);
+}
+
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  border-bottom: 1px solid var(--hapa-panel-border);
+  background: var(--hapa-input-background);
+  border-radius: 6px 6px 0 0;
+  margin-bottom: 8px;
+}
+
+.history-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--hapa-foreground);
+}
+
+.history-refresh-btn {
+  background: var(--hapa-button-background);
+  border: 1px solid var(--hapa-button-border);
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--hapa-button-foreground);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.history-refresh-btn:hover:not(:disabled) {
+  background: var(--hapa-button-hoverBackground);
+  border-color: var(--hapa-primary);
+}
+
+.history-refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .empty-icon {
   font-size: 24px;
   margin-bottom: 8px;

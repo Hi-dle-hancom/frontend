@@ -14,7 +14,7 @@ export class SidebarHtmlGenerator {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; font-src vscode-resource:;">
-    <title>HAPA AI Assistant</title>
+    <title>HAPA</title>
   <style>
         ${SidebarStyles.generateCSS()}
   </style>
@@ -41,7 +41,7 @@ export class SidebarHtmlGenerator {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; font-src vscode-resource:;">
-    <title>HAPA AI Assistant - Expanded View</title>
+    <title>HAPA</title>
   <style>
         ${SidebarStyles.generateCSS()}
         ${SidebarStyles.generateExpandedViewCSS()}

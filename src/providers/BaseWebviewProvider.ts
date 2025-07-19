@@ -71,11 +71,15 @@ export abstract class BaseWebviewProvider
         this._panel = undefined;
       }, null);
 
-      // 웹뷰 준비 완료 알림
-      setTimeout(() => {
+      // 웹뷰 준비 완료 알림 (개선된 준비 확인)
+      this.waitForWebviewReady().then(() => {
         console.log(`🎉 [${this.constructor.name}] 웹뷰 준비 완료`);
         this.onWebviewReady();
-      }, 100);
+      }).catch(error => {
+        console.error(`❌ [${this.constructor.name}] 웹뷰 준비 실패:`, error);
+        // 실패 시 fallback으로 기본 초기화 시도
+        setTimeout(() => this.onWebviewReady(), 500);
+      });
 
       console.log(`✅ [${this.constructor.name}] show() 메서드 완료`);
     } catch (error) {
@@ -168,6 +172,48 @@ export abstract class BaseWebviewProvider
    */
   protected onWebviewReady(): void {
     // 기본 구현 - 서브클래스에서 오버라이드
+  }
+
+  /**
+   * 웹뷰가 실제로 준비될 때까지 기다립니다.
+   */
+  private async waitForWebviewReady(): Promise<void> {
+    const webview = this._panel?.webview || this._view?.webview;
+    if (!webview) {
+      throw new Error("Webview instance not found");
+    }
+
+    // 웹뷰 준비 확인을 위한 핑 메시지 전송
+    return new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error("Webview ready timeout"));
+      }, 5000);
+
+      const messageHandler = (message: any) => {
+        if (message.command === "webviewReady") {
+          clearTimeout(timeout);
+          resolve();
+        }
+      };
+
+      // 메시지 핸들러 등록
+      const disposable = webview.onDidReceiveMessage(messageHandler);
+
+      // 핑 메시지 전송
+      try {
+        webview.postMessage({ command: "ping" });
+        // 핑 전송 성공 시 기본 대기 시간 후 준비 완료로 간주
+        setTimeout(() => {
+          clearTimeout(timeout);
+          disposable.dispose();
+          resolve();
+        }, 150);
+      } catch (error) {
+        clearTimeout(timeout);
+        disposable.dispose();
+        reject(error);
+      }
+    });
   }
 
   /**

@@ -1,3 +1,27 @@
+# 🎨 HAPA Frontend
+
+> **사용자와 만나는 최전선 인터페이스**  
+> VSCode Extension + React Landing Page로 완벽한 AI 코딩 경험 제공
+
+## 🤔 **Frontend가 하는 일**
+
+**간단히 설명하면**: 사용자가 AI 코딩 어시스턴트를 편리하게 사용할 수 있는 화면과 기능을 제공합니다! ✨
+
+```mermaid
+graph TB
+    A[👤 사용자] --> B[🎨 Frontend]
+    B --> C[📝 VSCode Extension<br/>실제 코딩 환경]
+    B --> D[🌐 React Landing Page<br/>웹 데모 & 가이드]
+    
+    C --> E[🤖 실시간 코드 생성]
+    C --> F[💡 자동 완성]
+    C --> G[📚 히스토리 관리]
+    
+    D --> H[🎮 라이브 데모]
+    D --> I[📖 사용 가이드]
+    D --> J[🔗 API 테스트]
+```
+=======
 # HAPA (Hancom AI Python Assistant) VSCode Extension
 
 🤖 한컴에서 개발한 AI 기반 Python 개발 지원 VSCode 확장 프로그램
@@ -21,265 +45,485 @@
 - **CodeCompletionProvider**: 코드 자동완성 및 인라인 완성 전용
 - **결과**: 기능별 전문화, 안전성 강화, 타임아웃 관리 개선
 
-#### 3단계: SidebarScripts 분리 ✅
+## 🌟 **두 가지 Frontend**
 
-- **sidebar-main.js**: 순수 JavaScript로 분리된 사이드바 로직
-- **SidebarScripts.ts**: 외부 파일 로드 관리자로 변경
-- **결과**: 프론트엔드/백엔드 분리, 캐싱 및 개발 모드 지원
+### **📝 1. VSCode Extension (메인 인터페이스)**
+> **개발자가 실제로 코딩할 때 사용하는 핵심 도구**
 
-#### 4단계: 메시지 시스템 타입 안전성 ✅
+**주요 기능:**
+- **🤖 실시간 AI 코드 생성**: 주석만 써도 자동으로 코드 완성
+- **💡 스마트 자동완성**: 컨텍스트 기반 지능형 제안
+- **📚 히스토리 관리**: 과거 질문-답변 저장 및 재사용
+- **⚙️ 개인화 설정**: 스킬 레벨별 맞춤 코드 생성
+- **🎯 멀티 에이전트**: 웹 개발자, 데이터 사이언티스트 등 역할별 AI
 
-- **TypedMessageHandler**: 완전한 타입 안전 메시지 처리
-- **포괄적 타입 정의**: 모든 메시지 타입 명시적 정의
-- **결과**: 런타임 오류 방지, IDE 지원 향상, 코드 안정성 확보
+### **🌐 2. React Landing Page (데모 & 가이드)**
+> **HAPA를 처음 접하는 사람들을 위한 웹 인터페이스**
 
-#### 5단계: 포괄적 테스트 ✅
+**주요 기능:**
+- **🎮 라이브 데모**: 웹에서 바로 AI 코드 생성 체험
+- **📖 사용 가이드**: 설치부터 고급 사용법까지
+- **🔗 API 테스트**: REST API 실시간 테스트
+- **📊 상태 모니터링**: 백엔드 서버 상태 실시간 확인
 
-- **단위 테스트**: 각 컴포넌트별 독립 테스트
-- **통합 테스트**: 전체 시스템 연동 테스트
-- **결과**: 테스트 커버리지 대폭 향상, 지속적 품질 보장
+## 📁 **프로젝트 구조**
+Frontend/
+├── vscode-extension/ # 🎯 메인 Extension
+│ ├── src/
+│ │ ├── providers/ # 5개 핵심 Provider
+│ │ │ ├── SidebarProvider.ts # 메인 AI 인터페이스
+│ │ │ ├── OnboardingProvider.ts # 온보딩 가이드
+│ │ │ ├── SettingsProvider.ts # 개인화 설정
+│ │ │ ├── GuideProvider.ts # 사용법 가이드
+│ │ │ └── BaseWebviewProvider.ts # 공통 기능
+│ │ ├── services/ # 12개 전문 서비스
+│ │ ├── modules/ # 6개 핵심 모듈
+│ │ ├── core/ # 5개 핵심 시스템
+│ │ └── templates/ # UI 템플릿 & 스타일
+│ ├── package.json # Extension 설정
+│ └── README.md # Extension 가이드
 
-### 🏗️ 개선된 아키텍처
 
-```
-Frontend/vscode-extension/src/
-├── core/                    # 핵심 관리 클래스들
-│   ├── ExtensionManager.ts  # 전체 확장 관리 (간소화됨)
-│   ├── ProviderRegistry.ts  # 프로바이더 등록 관리
-│   ├── CommandRegistry.ts   # 명령어 등록 관리
-│   ├── ServiceManager.ts    # 서비스 초기화 관리
-│   └── TypedMessageHandler.ts # 타입 안전 메시지 처리
-├── modules/                 # 전문화된 모듈들
-│   ├── StreamingCodeGenerator.ts # 스트리밍 코드 생성
-│   ├── CodeCompletionProvider.ts # 코드 자동완성
-│   └── apiClient.ts         # API 클라이언트 (리팩토링됨)
-├── templates/scripts/       # 분리된 스크립트들
-│   ├── sidebar-main.js      # 순수 JavaScript 사이드바 로직
-│   └── SidebarScripts.ts    # 스크립트 로드 관리자
-└── test/                    # 포괄적 테스트 슈트
-    ├── ProviderRegistry.test.ts
-    ├── CommandRegistry.test.ts
-    ├── TypedMessageHandler.test.ts
-    └── Integration.test.ts
-```
 
-## 🚀 빠른 시작
+## 🚀 **빠른 시작**
 
-### 설치 및 개발 환경 설정
+### **📝 VSCode Extension 개발**
 
 ```bash
-# 저장소 클론
-git clone [repository-url]
+# 1. Extension 개발 환경 설정
 cd Frontend/vscode-extension
-
-# 의존성 설치
 npm install
 
-# 컴파일
+# 2. TypeScript 컴파일
 npm run compile
 
-# 확장 프로그램 실행 (F5 또는)
-npm run watch
+# 3. Extension 테스트
+# VSCode에서 F5 키 → Extension Development Host 실행
+
+# 4. 사용 방법
+# Python 파일에서 다음 주석 입력:
+# 파이썬 리스트 정렬하는 함수 만들어줘
+# → 자동으로 코드 생성!
 ```
 
-### 테스트 실행
+### **🌐 React Landing Page 개발**
 
 ```bash
-# 모든 테스트 실행
+# 1. 웹앱 개발 환경 설정
+cd Frontend/landing-page
+npm install
+
+# 2. 개발 서버 시작
+npm start
+# → http://localhost:3000에서 확인
+
+# 3. 프로덕션 빌드
+npm run build
+```
+
+### **🐳 Docker로 전체 실행**
+
+```bash
+# 전체 Frontend 서비스 시작
+docker-compose up frontend
+
+# 또는 개별 실행
+docker-compose up landing-page
+```
+
+## 💻 **VSCode Extension 상세**
+
+### **🎯 핵심 Provider 시스템**
+
+#### **1. SidebarProvider** (메인 AI 인터페이스)
+```typescript
+// 실시간 AI 코드 생성 인터페이스
+class SidebarProvider {
+  // 🤖 AI 질문-답변 처리
+  async handleAIQuestion(question: string)
+  
+  // 🌊 실시간 스트리밍 코드 생성
+  async handleStreamingCodeGeneration(question: string)
+  
+  // 📚 히스토리 관리 (MongoDB 연동)
+  async loadHistoryFromDB()
+  async saveHistoryToDB()
+  
+  // 🎯 멀티 에이전트 지원
+  selectModel(modelType: string)
+}
+```
+
+#### **2. OnboardingProvider** (온보딩 시스템)
+```typescript
+// 6단계 온보딩 프로세스
+class OnboardingProvider {
+  // 📧 이메일 입력 → 🎯 스킬 레벨 → ⚙️ 설정 → ✅ 완료
+  handleNextStep(stepData: any)
+  
+  // 🔗 자동 DB 연동 및 설정 저장
+  async saveUserProfileToDB()
+}
+```
+
+### **🔧 주요 기능**
+
+#### **🤖 AI 코드 생성**
+```javascript
+// 사용자가 주석 입력
+// 데이터베이스 연결 함수 만들어줘
+
+// ↓ AI가 자동 생성
+import sqlite3
+
+def connect_database(db_path="database.db"):
+    """데이터베이스에 연결하는 함수"""
+    try:
+        conn = sqlite3.connect(db_path)
+        return conn
+    except sqlite3.Error as e:
+        print(f"데이터베이스 연결 오류: {e}")
+        return None
+```
+
+#### **📚 히스토리 관리**
+- **MongoDB 연동**: 모든 질문-답변 영구 저장
+- **빠른 검색**: 과거 대화 내용 실시간 검색
+- **재사용 기능**: 클릭 한 번으로 이전 답변 재사용
+
+#### **⚙️ 개인화 설정**
+- **스킬 레벨**: 초급자 → 상세 설명, 전문가 → 간결한 코드
+- **코딩 스타일**: 최소화, 표준, 상세, 포괄적
+- **설명 방식**: 간단, 표준, 상세, 교육용
+
+### **🎨 UI/UX 특징**
+
+#### **VSCode 네이티브 스타일**
+```css
+/* VSCode 테마 완벽 적용 */
+.vscode-sidebar-container {
+  background: var(--vscode-sidebar-background);
+  color: var(--vscode-sidebar-foreground);
+  border: 1px solid var(--vscode-sidebar-border);
+}
+
+/* 다크/라이트 테마 자동 전환 */
+.vscode-btn-primary {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+```
+
+#### **반응형 디자인**
+- **사이드바 모드**: 일반적인 개발 시 사용
+- **확장 모드**: 큰 화면에서 상세 작업
+- **자동 크기 조절**: 화면 크기에 맞춰 UI 자동 최적화
+
+## 🌐 **React Landing Page 상세**
+
+### **🎮 라이브 데모 시스템**
+
+#### **ThunderDemo Component**
+```typescript
+// 실시간 AI 코드 생성 체험
+const ThunderDemo: React.FC = () => {
+  const [input, setInput] = useState("");
+  const [output, setOutput] = useState("");
+  const [isStreaming, setIsStreaming] = useState(false);
+  
+  // 🌊 Server-Sent Events로 실시간 스트리밍
+  const handleSend = async () => {
+    const response = await fetch('/api/v1/code/generate/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_question: input })
+    });
+    
+    // 실시간으로 코드 생성 과정 표시
+    const reader = response.body?.getReader();
+    // ...
+  };
+};
+```
+
+### **📊 API 상태 모니터링**
+
+#### **ApiStatus Component**
+```typescript
+// 백엔드 서버 실시간 상태 체크
+const ApiStatus: React.FC = () => {
+  const [status, setStatus] = useState<"connected" | "disconnected">("checking");
+  
+  const checkApiHealth = async () => {
+    const startTime = Date.now();
+    const response = await fetch('http://3.13.240.111:8000/api/v1/health');
+    const responseTime = Date.now() - startTime;
+    
+    setStatus(response.ok ? "connected" : "disconnected");
+  };
+  
+  // 30초마다 자동 상태 체크
+  useEffect(() => {
+    const interval = setInterval(checkApiHealth, 30000);
+    return () => clearInterval(interval);
+  }, []);
+};
+```
+
+### **🎨 UI 컴포넌트 시스템**
+
+#### **주요 컴포넌트**
+- **ThunderButton**: VSCode 스타일 버튼
+- **ThunderCard**: 정보 카드 컴포넌트  
+- **LiveDemo**: 실시간 AI 데모
+- **ApiStatus**: 서버 상태 표시
+- **ToastNotification**: 알림 시스템
+
+#### **접근성 지원**
+```typescript
+// 스크린 리더, 키보드 내비게이션 등 완벽 지원
+export const useAccessibility = () => {
+  const [screenReader, setScreenReader] = useState(false);
+  const [keyboardNavigation, setKeyboardNavigation] = useState(false);
+  const [highContrast, setHighContrast] = useState(false);
+  
+  // 접근성 기능 자동 감지 및 적용
+};
+```
+
+## 🛠️ **개발 도구 & 설정**
+
+### **VSCode Extension**
+
+#### **package.json 주요 설정**
+```json
+{
+  "name": "hapa-ai-assistant",
+  "displayName": "HAPA AI Python Assistant",
+  "version": "1.0.0",
+  "engines": { "vscode": "^1.82.0" },
+  "categories": ["Other", "Snippets", "Machine Learning"],
+  "activationEvents": ["onLanguage:python"],
+  "contributes": {
+    "views": {
+      "explorer": [
+        {
+          "id": "hapa-sidebar",
+          "name": "HAPA AI Assistant",
+          "when": "true"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "hapa.showSidebar",
+        "title": "Show HAPA Assistant"
+      }
+    ]
+  }
+}
+```
+
+#### **TypeScript 설정**
+```json
+// tsconfig.json
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "commonjs",
+    "lib": ["ES2020"],
+    "outDir": "out",
+    "rootDir": "src",
+    "strict": true,
+    "esModuleInterop": true
+  }
+}
+```
+
+### **React Landing Page**
+
+#### **주요 의존성**
+```json
+{
+  "dependencies": {
+    "react": "^18.2.0",
+    "typescript": "^5.0.0",
+    "tailwindcss": "^3.3.0",
+    "@types/react": "^18.2.0"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test"
+  }
+}
+```
+
+#### **Tailwind CSS 설정**
+```javascript
+// tailwind.config.js
+module.exports = {
+  content: ["./src/**/*.{js,jsx,ts,tsx}"],
+  theme: {
+    extend: {
+      colors: {
+        'vscode-bg': 'var(--vscode-editor-background)',
+        'vscode-fg': 'var(--vscode-editor-foreground)',
+      }
+    }
+  }
+}
+```
+
+## 🔧 **환경 설정**
+
+### **개발 환경 변수**
+```bash
+# VSCode Extension
+VSCODE_HAPA_API_URL=http://localhost:8000/api/v1
+VSCODE_HAPA_DB_MODULE_URL=http://localhost:8001
+
+# React Landing Page  
+REACT_APP_API_BASE_URL=http://3.13.240.111:8000/api/v1
+REACT_APP_DEMO_MODE=true
+REACT_APP_ANALYTICS_ENABLED=false
+```
+
+### **프로덕션 설정**
+```bash
+# 운영 환경
+REACT_APP_API_BASE_URL=http://3.13.240.111:8000/api/v1
+REACT_APP_DEMO_MODE=false
+REACT_APP_ANALYTICS_ENABLED=true
+```
+
+## 📊 **성능 최적화**
+
+### **VSCode Extension**
+- **레이지 로딩**: 필요할 때만 Provider 활성화
+- **메모리 관리**: 사용하지 않는 웹뷰 자동 해제
+- **캐시 시스템**: 자주 사용하는 응답 로컬 캐시
+
+
+## 🧪 **테스트**
+
+### **Extension 테스트**
+```bash
+# 단위 테스트
 npm test
 
-# 특정 테스트 파일 실행
-npm test -- --grep "ProviderRegistry"
-npm test -- --grep "CommandRegistry"
-npm test -- --grep "TypedMessageHandler"
-npm test -- --grep "Integration"
+# E2E 테스트
+npm run test:e2e
 
-# 테스트 커버리지 확인
-npm run test:coverage
+# Extension 수동 테스트
+# F5 → Extension Development Host → Python 파일에서 테스트
 ```
 
-### VS Code에서 디버깅
-
-1. **F5** 또는 `Ctrl+F5`로 확장 개발 환경 실행
-2. **Ctrl+Shift+P** → "HAPA Extension 테스트" 선택하여 테스트 실행
-3. **개발자 도구** (`Ctrl+Shift+I`)로 디버깅 정보 확인
-
-## 🎯 주요 기능
-
-### 🤖 AI 기반 코드 생성
-
-- **실시간 스트리밍**: 코드 생성 과정을 실시간으로 확인
-- **다중 모델 지원**: autocomplete, prompt, comment, error_fix 모델
-- **컨텍스트 인식**: 현재 파일과 프로젝트 구조를 고려한 지능형 생성
-
-### 💡 지능형 자동완성
-
-- **인라인 완성**: 타이핑하면서 즉시 제안
-- **함수 시그니처**: 매개변수와 반환값 자동 추론
-- **스마트 완성**: 프로젝트 스타일에 맞는 코드 제안
-
-### 🔍 코드 분석 및 개선
-
-- **버그 탐지**: AI가 잠재적 문제점 식별
-- **코드 리뷰**: 개선점과 최적화 제안
-- **테스트 생성**: 자동 단위 테스트 코드 생성
-
-### 🎨 사용자 경험
-
-- **한국어 UI**: 완전한 한국어 인터페이스
-- **접근성 지원**: 스크린 리더, 키보드 네비게이션
-- **반응형 디자인**: 다양한 화면 크기 지원
-- **다크/라이트 테마**: VSCode 테마에 맞춰 자동 조정
-
-## 🛠️ 기술 스택
-
-### Frontend (VSCode Extension)
-
-- **TypeScript**: 타입 안전성과 개발 생산성
-- **React**: 사이드바 및 웹뷰 UI 컴포넌트
-- **VSCode API**: 확장 프로그램 통합
-- **WebSocket**: 실시간 AI 응답 스트리밍
-
-### Backend Integration
-
-- **FastAPI**: 고성능 Python 웹 프레임워크
-- **vLLM**: 대규모 언어 모델 추론 엔진
-- **Redis**: 세션 및 캐시 관리
-- **PostgreSQL**: 사용자 데이터 및 히스토리 저장
-
-### AI Models
-
-- **LLaMA 2**: 코드 생성 및 분석
-- **CodeLLaMA**: 코드 특화 모델
-- **Custom Fine-tuned**: 한국어 및 프로젝트 특화 모델
-
-## 📊 성능 최적화
-
-- **스트리밍 아키텍처**: 청크 기반 실시간 응답
-- **지능형 캐싱**: 자주 사용되는 응답 캐시
-- **오프라인 지원**: 네트워크 연결 없이도 기본 기능 사용
-- **메모리 최적화**: 가비지 컬렉션 및 리소스 관리
-
-## 🔐 보안 및 개인정보
-
-- **로컬 처리**: 민감한 코드는 로컬에서만 분석
-- **암호화 통신**: HTTPS/WSS를 통한 안전한 데이터 전송
-- **선택적 텔레메트리**: 사용자가 제어하는 데이터 수집
-- **GDPR 준수**: 유럽 개인정보보호법 준수
-
-## 🧪 테스트 아키텍처
-
-### 단위 테스트
-
-```typescript
-// ProviderRegistry 테스트 예시
-test("프로바이더 등록 성공", async () => {
-  const registry = new ProviderRegistry(extensionUri);
-  await registry.registerAllProviders(context);
-
-  const providerCount = registry.getProviderCount();
-  assert.ok(providerCount > 0);
-});
-```
-
-### 통합 테스트
-
-```typescript
-// 전체 시스템 통합 테스트 예시
-test("확장 시작부터 명령어 실행까지", async () => {
-  const extensionManager = new ExtensionManager(context);
-  await extensionManager.activate();
-
-  const commands = await vscode.commands.getCommands();
-  const hapaCommands = commands.filter((cmd) => cmd.startsWith("hapa."));
-  assert.ok(hapaCommands.length > 0);
-});
-```
-
-### 메시지 시스템 테스트
-
-```typescript
-// 타입 안전 메시지 처리 테스트
-test("타입 안전 메시지 전송", async () => {
-  const handler = new TypedMessageHandler();
-  const result = await handler.sendToWebview({
-    command: "showStatus",
-    message: "Test message",
-  });
-  assert.strictEqual(result, true);
-});
-```
-
-## 🚀 배포 및 CI/CD
-
-### 개발 환경
-
+### **React 테스트**
 ```bash
-npm run dev     # 개발 모드 실행
-npm run build   # 프로덕션 빌드
-npm run package # VSIX 패키지 생성
+# 컴포넌트 테스트
+npm test
+
+# 시각적 회귀 테스트
+npm run test:visual
+
+# 접근성 테스트
+npm run test:a11y
 ```
 
-### 프로덕션 배포
+## 🔗 **API 연동**
 
+### **Backend API 호출**
+```typescript
+// Extension에서 Backend API 호출
+class ApiClient {
+  async generateCode(question: string): Promise<CodeResponse> {
+    const response = await fetch(`${this.baseURL}/code/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': this.apiKey
+      },
+      body: JSON.stringify({ user_question: question })
+    });
+    
+    return response.json();
+  }
+  
+  // 🌊 스트리밍 응답 처리
+  async generateCodeStream(question: string): Promise<ReadableStream> {
+    const response = await fetch(`${this.baseURL}/code/generate/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': this.apiKey
+      },
+      body: JSON.stringify({ user_question: question })
+    });
+    
+    return response.body!;
+  }
+}
+```
+
+### **DB-Module 연동**
+```typescript
+// 사용자 인증 및 설정 관리
+class DbModuleClient {
+  async login(email: string): Promise<AuthResponse> {
+    const response = await fetch(`${this.dbModuleURL}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, username: email.split('@')[0] })
+    });
+    
+    return response.json();
+  }
+  
+  async getUserSettings(token: string): Promise<UserSettings> {
+    const response = await fetch(`${this.dbModuleURL}/settings/me`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    
+    return response.json();
+  }
+}
+```
+
+## 🆘 **문제 해결**
+
+### **자주 발생하는 문제**
+
+**Q: Extension이 활성화되지 않음**
 ```bash
-# 버전 업데이트
-npm version patch|minor|major
-
-# 마켓플레이스 배포
-vsce publish
-
-# GitHub 릴리즈
-gh release create v1.x.x ./hapa-extension.vsix
+# 해결: Python 파일을 열어야 Extension 활성화
+# 또는 Command Palette에서 "HAPA" 검색
 ```
 
-## 📈 로드맵
+**Q: API 연결 실패** 
+```bash
+# 해결: Backend 서버 상태 확인
+curl http://localhost:8000/health
 
-### 2024 Q4
+# 네트워크 설정 확인
+# VSCode Settings → HAPA → API URL 확인
+```
 
-- ✅ 5단계 리팩토링 완료
-- ✅ 포괄적 테스트 슈트 구축
-- 🔄 성능 최적화 및 메모리 사용량 개선
+**Q: 웹앱이 로드되지 않음**
+```bash
+# 해결: 의존성 재설치
+rm -rf node_modules package-lock.json
+npm install
+npm start
+```
 
-### 2025 Q1
+## 📈 **성능 지표**
 
-- 🔜 다국어 지원 확장 (영어, 일본어)
-- 🔜 플러그인 시스템 도입
-- 🔜 커뮤니티 모델 지원
-
-### 2025 Q2
-
-- 🔜 Visual Studio 확장 버전
-- 🔜 웹 기반 IDE 지원
-- 🔜 모바일 컴패니언 앱
-
-## 🤝 기여하기
-
-### 개발 가이드라인
-
-1. **이슈 확인**: GitHub Issues에서 작업할 이슈 선택
-2. **브랜치 생성**: `feature/기능명` 또는 `fix/버그명`
-3. **테스트 작성**: 새 기능에 대한 테스트 필수
-4. **코드 리뷰**: PR 생성 후 팀 리뷰 진행
-
-### 코딩 스타일
-
-- **TypeScript**: 엄격한 타입 체크 활성화
-- **ESLint + Prettier**: 자동 코드 포맷팅
-- **JSDoc**: 모든 public 메서드에 문서화
-- **Test Coverage**: 최소 80% 이상 유지
-
-## 📞 지원 및 피드백
-
-- **GitHub Issues**: 버그 신고 및 기능 요청
-- **Discord**: 실시간 커뮤니티 지원
-- **이메일**: hapa-support@hancom.com
-- **문서**: [HAPA 공식 문서](https://hapa.hancom.com/docs)
-
-## 📜 라이선스
-
-이 프로젝트는 [MIT 라이선스](LICENSE) 하에 배포됩니다.
+| 메트릭 | VSCode Extension | React Landing Page |
+|--------|------------------|-------------------|
+| **번들 크기** | < 2MB | < 1MB |
+| **메모리 사용** | < 50MB | < 30MB |
+| **초기 로딩** | < 1초 | < 2초 |
+| **API 응답** | < 3초 | < 3초 |
 
 ---
-
-🎉 **HAPA와 함께 더 스마트한 Python 개발을 경험해보세요!**
