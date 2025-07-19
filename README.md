@@ -21,6 +21,29 @@ graph TB
     D --> I[📖 사용 가이드]
     D --> J[🔗 API 테스트]
 ```
+=======
+# HAPA (Hancom AI Python Assistant) VSCode Extension
+
+🤖 한컴에서 개발한 AI 기반 Python 개발 지원 VSCode 확장 프로그램
+
+## 🎯 리팩토링 완료 
+
+이 프로젝트는 **5단계 포괄적 리팩토링**을 완료하여 코드 품질과 유지보수성을 크게 향상시켰습니다.
+
+### ✅ 완료된 리팩토링 단계
+
+#### 1단계: ExtensionManager 분할 ✅
+
+- **ProviderRegistry**: 모든 프로바이더 등록 및 생명주기 관리
+- **CommandRegistry**: VSCode 명령어 등록 및 라우팅 관리
+- **ServiceManager**: 서비스 초기화 순서 및 의존성 관리
+- **결과**: 단일 책임 원칙 적용, 895줄 → 각 클래스 200-300줄로 분할
+
+#### 2단계: API Client 리팩토링 ✅
+
+- **StreamingCodeGenerator**: 실시간 스트리밍 코드 생성 전용
+- **CodeCompletionProvider**: 코드 자동완성 및 인라인 완성 전용
+- **결과**: 기능별 전문화, 안전성 강화, 타임아웃 관리 개선
 
 ## 🌟 **두 가지 Frontend**
 
