@@ -1,506 +1,258 @@
-# 🎨 HAPA Frontend
+# 🖥️ HAPA Backend API Server
 
-> **사용자와 만나는 최전선 인터페이스**  
-> VSCode Extension + React Landing Page로 완벽한 AI 코딩 경험 제공
+> **AI 코딩 어시스턴트의 핵심 두뇌** 🧠
+> FastAPI + vLLM 통합으로 실시간 코드 생성을 지원하는 고성능 백엔드
 
-## 🤔 **Frontend가 하는 일**
+## 🤔 **이 Backend는 무엇을 하나요?**
 
-**간단히 설명하면**: 사용자가 AI 코딩 어시스턴트를 편리하게 사용할 수 있는 화면과 기능을 제공합니다! ✨
+**간단히 말해서**: 사용자가 "파이썬 코드 만들어줘"라고 하면 AI가 코드를 생성해주는 서버입니다!
 
 ```mermaid
-graph TB
-    A[👤 사용자] --> B[🎨 Frontend]
-    B --> C[📝 VSCode Extension<br/>실제 코딩 환경]
-    B --> D[🌐 React Landing Page<br/>웹 데모 & 가이드]
-    
-    C --> E[🤖 실시간 코드 생성]
-    C --> F[💡 자동 완성]
-    C --> G[📚 히스토리 관리]
-    
-    D --> H[🎮 라이브 데모]
-    D --> I[📖 사용 가이드]
-    D --> J[🔗 API 테스트]
+graph LR
+    A[👤 사용자<br/>VSCode Extension] --> B[🖥️ Backend API<br/>FastAPI]
+    B --> C[🤖 vLLM AI 서버<br/>코드 생성]
+    C --> B
+    B --> A
+
+    B --> D[🗄️ 사용자 인증<br/>DB-Module]
+    B --> E[💾 캐시<br/>Redis]
+    B --> F[📊 모니터링<br/>Prometheus]
 ```
 
-## 🌟 **두 가지 Frontend**
+## 📊 **현재 상태**
 
-### **📝 1. VSCode Extension (메인 인터페이스)**
-> **개발자가 실제로 코딩할 때 사용하는 핵심 도구**
+| 항목               | 내용               | 상태             |
+| ------------------ | ------------------ | ---------------- |
+| **파일 수**        | 57개 Python 파일   | ✅ 정리 완료     |
+| **API 엔드포인트** | 14개 모듈          | ✅ 운영 중       |
+| **서비스 레이어**  | 21개 비즈니스 로직 | ✅ 최적화됨      |
+| **완성도**         | 95%                | 🚀 **배포 준비** |
+| **서버 주소**      | 3.13.240.111:8000  | ✅ **운영 중**   |
 
-**주요 기능:**
-- **🤖 실시간 AI 코드 생성**: 주석만 써도 자동으로 코드 완성
-- **💡 스마트 자동완성**: 컨텍스트 기반 지능형 제안
-- **📚 히스토리 관리**: 과거 질문-답변 저장 및 재사용
-- **⚙️ 개인화 설정**: 스킬 레벨별 맞춤 코드 생성
-- **🎯 멀티 에이전트**: 웹 개발자, 데이터 사이언티스트 등 역할별 AI
+## 🌟 **주요 기능**
 
-### **🌐 2. React Landing Page (데모 & 가이드)**
-> **HAPA를 처음 접하는 사람들을 위한 웹 인터페이스**
+### **🤖 AI 코드 생성**
 
-**주요 기능:**
-- **🎮 라이브 데모**: 웹에서 바로 AI 코드 생성 체험
-- **📖 사용 가이드**: 설치부터 고급 사용법까지
-- **🔗 API 테스트**: REST API 실시간 테스트
-- **📊 상태 모니터링**: 백엔드 서버 상태 실시간 확인
+- **실시간 스트리밍**: 코드가 생성되는 과정을 실시간으로 확인
+- **4가지 모델**: 자동완성, 일반 생성, 주석 생성, 버그 수정
+- **개인화**: 사용자 스킬 레벨에 맞는 코드 생성
 
-## 📁 **프로젝트 구조**
-Frontend/
-├── vscode-extension/ # 🎯 메인 Extension
-│ ├── src/
-│ │ ├── providers/ # 5개 핵심 Provider
-│ │ │ ├── SidebarProvider.ts # 메인 AI 인터페이스
-│ │ │ ├── OnboardingProvider.ts # 온보딩 가이드
-│ │ │ ├── SettingsProvider.ts # 개인화 설정
-│ │ │ ├── GuideProvider.ts # 사용법 가이드
-│ │ │ └── BaseWebviewProvider.ts # 공통 기능
-│ │ ├── services/ # 12개 전문 서비스
-│ │ ├── modules/ # 6개 핵심 모듈
-│ │ ├── core/ # 5개 핵심 시스템
-│ │ └── templates/ # UI 템플릿 & 스타일
-│ ├── package.json # Extension 설정
-│ └── README.md # Extension 가이드
+### **🔒 보안 & 인증**
 
+- **API 키 관리**: 자동 발급 및 권한 관리
+- **Rate Limiting**: 과도한 요청 방지
+- **22개 표준 오류 코드**: E4xxx (클라이언트), E5xxx (서버)
 
+### **📈 모니터링 & 분석**
+
+- **실시간 대시보드**: 성능 메트릭 실시간 추적
+- **오류 추적**: 인시던트 자동 분류 및 알림
+- **사용 통계**: API 사용량 및 패턴 분석
+
+## 🏗️ **아키텍처**
+
+┌─────────────────────────────────────────────────────────────┐
+│ 🌐 API Gateway Layer │
+│ FastAPI Router (14개 엔드포인트) + Middleware Stack │
+├─────────────────────────────────────────────────────────────┤
+│ 🧠 Business Logic Layer │
+│ 21개 서비스 모듈 (AI 통합, 캐시, 보안, 모니터링 등) │
+├─────────────────────────────────────────────────────────────┤
+│ 💾 Data Layer │
+│ vLLM AI Server + Redis Cache + External APIs │
+└─────────────────────────────────────────────────────────────┘
+
+## 📡 **주요 API 엔드포인트**
+
+### **🤖 코드 생성**
+
+```http
+POST /api/v1/code/generate
+# 동기식 코드 생성
+
+POST /api/v1/code/generate/stream
+# 실시간 스트리밍 생성
+```
+
+### **👤 사용자 관리**
+
+```http
+POST /api/v1/users/generate-api-key
+# API 키 자동 발급
+
+GET /api/v1/users/profile
+# 사용자 프로필 조회
+```
+
+### **📊 모니터링**
+
+```http
+GET /api/v1/analytics/dashboard
+# 실시간 대시보드
+
+GET /api/v1/error-monitoring/incidents
+# 오류 인시던트 추적
+```
+
+### **🏥 헬스 체크**
+
+```http
+GET /health
+# 기본 상태 확인
+
+GET /health/detailed
+# 상세 시스템 상태
+```
 
 ## 🚀 **빠른 시작**
 
-### **📝 VSCode Extension 개발**
+### **1. 개발 환경 설정**
 
 ```bash
-# 1. Extension 개발 환경 설정
-cd Frontend/vscode-extension
-npm install
+# 1. 가상환경 생성
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
 
-# 2. TypeScript 컴파일
-npm run compile
+# 2. 의존성 설치
+pip install -r requirements.txt
 
-# 3. Extension 테스트
-# VSCode에서 F5 키 → Extension Development Host 실행
+# 3. 환경 변수 설정
+cp .env.example .env
+# .env 파일 수정 (API 키, DB 연결 정보 등)
 
-# 4. 사용 방법
-# Python 파일에서 다음 주석 입력:
-# 파이썬 리스트 정렬하는 함수 만들어줘
-# → 자동으로 코드 생성!
+# 4. 서버 실행
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### **🌐 React Landing Page 개발**
+### **2. Docker로 실행**
 
 ```bash
-# 1. 웹앱 개발 환경 설정
-cd Frontend/landing-page
-npm install
+# 전체 서비스 시작
+docker-compose up -d
 
-# 2. 개발 서버 시작
-npm start
-# → http://localhost:3000에서 확인
-
-# 3. 프로덕션 빌드
-npm run build
+# Backend만 실행
+docker-compose up backend
 ```
 
-### **🐳 Docker로 전체 실행**
+### **3. API 테스트**
 
 ```bash
-# 전체 Frontend 서비스 시작
-docker-compose up frontend
+# 헬스 체크
+curl http://localhost:8000/health
 
-# 또는 개별 실행
-docker-compose up landing-page
+# API 키 발급
+curl -X POST "http://localhost:8000/api/v1/users/generate-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "test@example.com", "username": "testuser"}'
+
+# 코드 생성 테스트
+curl -X POST "http://localhost:8000/api/v1/code/generate" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -d '{"user_question": "Hello World 출력하는 함수 만들어줘"}'
 ```
 
-## 💻 **VSCode Extension 상세**
+## 🔧 **환경 변수 설정**
 
-### **🎯 핵심 Provider 시스템**
-
-#### **1. SidebarProvider** (메인 AI 인터페이스)
-```typescript
-// 실시간 AI 코드 생성 인터페이스
-class SidebarProvider {
-  // 🤖 AI 질문-답변 처리
-  async handleAIQuestion(question: string)
-  
-  // 🌊 실시간 스트리밍 코드 생성
-  async handleStreamingCodeGeneration(question: string)
-  
-  // 📚 히스토리 관리 (MongoDB 연동)
-  async loadHistoryFromDB()
-  async saveHistoryToDB()
-  
-  // 🎯 멀티 에이전트 지원
-  selectModel(modelType: string)
-}
-```
-
-#### **2. OnboardingProvider** (온보딩 시스템)
-```typescript
-// 6단계 온보딩 프로세스
-class OnboardingProvider {
-  // 📧 이메일 입력 → 🎯 스킬 레벨 → ⚙️ 설정 → ✅ 완료
-  handleNextStep(stepData: any)
-  
-  // 🔗 자동 DB 연동 및 설정 저장
-  async saveUserProfileToDB()
-}
-```
-
-### **🔧 주요 기능**
-
-#### **🤖 AI 코드 생성**
-```javascript
-// 사용자가 주석 입력
-// 데이터베이스 연결 함수 만들어줘
-
-// ↓ AI가 자동 생성
-import sqlite3
-
-def connect_database(db_path="database.db"):
-    """데이터베이스에 연결하는 함수"""
-    try:
-        conn = sqlite3.connect(db_path)
-        return conn
-    except sqlite3.Error as e:
-        print(f"데이터베이스 연결 오류: {e}")
-        return None
-```
-
-#### **📚 히스토리 관리**
-- **MongoDB 연동**: 모든 질문-답변 영구 저장
-- **빠른 검색**: 과거 대화 내용 실시간 검색
-- **재사용 기능**: 클릭 한 번으로 이전 답변 재사용
-
-#### **⚙️ 개인화 설정**
-- **스킬 레벨**: 초급자 → 상세 설명, 전문가 → 간결한 코드
-- **코딩 스타일**: 최소화, 표준, 상세, 포괄적
-- **설명 방식**: 간단, 표준, 상세, 교육용
-
-### **🎨 UI/UX 특징**
-
-#### **VSCode 네이티브 스타일**
-```css
-/* VSCode 테마 완벽 적용 */
-.vscode-sidebar-container {
-  background: var(--vscode-sidebar-background);
-  color: var(--vscode-sidebar-foreground);
-  border: 1px solid var(--vscode-sidebar-border);
-}
-
-/* 다크/라이트 테마 자동 전환 */
-.vscode-btn-primary {
-  background: var(--vscode-button-background);
-  color: var(--vscode-button-foreground);
-}
-```
-
-#### **반응형 디자인**
-- **사이드바 모드**: 일반적인 개발 시 사용
-- **확장 모드**: 큰 화면에서 상세 작업
-- **자동 크기 조절**: 화면 크기에 맞춰 UI 자동 최적화
-
-## 🌐 **React Landing Page 상세**
-
-### **🎮 라이브 데모 시스템**
-
-#### **ThunderDemo Component**
-```typescript
-// 실시간 AI 코드 생성 체험
-const ThunderDemo: React.FC = () => {
-  const [input, setInput] = useState("");
-  const [output, setOutput] = useState("");
-  const [isStreaming, setIsStreaming] = useState(false);
-  
-  // 🌊 Server-Sent Events로 실시간 스트리밍
-  const handleSend = async () => {
-    const response = await fetch('/api/v1/code/generate/stream', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_question: input })
-    });
-    
-    // 실시간으로 코드 생성 과정 표시
-    const reader = response.body?.getReader();
-    // ...
-  };
-};
-```
-
-### **📊 API 상태 모니터링**
-
-#### **ApiStatus Component**
-```typescript
-// 백엔드 서버 실시간 상태 체크
-const ApiStatus: React.FC = () => {
-  const [status, setStatus] = useState<"connected" | "disconnected">("checking");
-  
-  const checkApiHealth = async () => {
-    const startTime = Date.now();
-    const response = await fetch('http://3.13.240.111:8000/api/v1/health');
-    const responseTime = Date.now() - startTime;
-    
-    setStatus(response.ok ? "connected" : "disconnected");
-  };
-  
-  // 30초마다 자동 상태 체크
-  useEffect(() => {
-    const interval = setInterval(checkApiHealth, 30000);
-    return () => clearInterval(interval);
-  }, []);
-};
-```
-
-### **🎨 UI 컴포넌트 시스템**
-
-#### **주요 컴포넌트**
-- **ThunderButton**: VSCode 스타일 버튼
-- **ThunderCard**: 정보 카드 컴포넌트  
-- **LiveDemo**: 실시간 AI 데모
-- **ApiStatus**: 서버 상태 표시
-- **ToastNotification**: 알림 시스템
-
-#### **접근성 지원**
-```typescript
-// 스크린 리더, 키보드 내비게이션 등 완벽 지원
-export const useAccessibility = () => {
-  const [screenReader, setScreenReader] = useState(false);
-  const [keyboardNavigation, setKeyboardNavigation] = useState(false);
-  const [highContrast, setHighContrast] = useState(false);
-  
-  // 접근성 기능 자동 감지 및 적용
-};
-```
-
-## 🛠️ **개발 도구 & 설정**
-
-### **VSCode Extension**
-
-#### **package.json 주요 설정**
-```json
-{
-  "name": "hapa-ai-assistant",
-  "displayName": "HAPA AI Python Assistant",
-  "version": "1.0.0",
-  "engines": { "vscode": "^1.82.0" },
-  "categories": ["Other", "Snippets", "Machine Learning"],
-  "activationEvents": ["onLanguage:python"],
-  "contributes": {
-    "views": {
-      "explorer": [
-        {
-          "id": "hapa-sidebar",
-          "name": "HAPA AI Assistant",
-          "when": "true"
-        }
-      ]
-    },
-    "commands": [
-      {
-        "command": "hapa.showSidebar",
-        "title": "Show HAPA Assistant"
-      }
-    ]
-  }
-}
-```
-
-#### **TypeScript 설정**
-```json
-// tsconfig.json
-{
-  "compilerOptions": {
-    "target": "ES2020",
-    "module": "commonjs",
-    "lib": ["ES2020"],
-    "outDir": "out",
-    "rootDir": "src",
-    "strict": true,
-    "esModuleInterop": true
-  }
-}
-```
-
-### **React Landing Page**
-
-#### **주요 의존성**
-```json
-{
-  "dependencies": {
-    "react": "^18.2.0",
-    "typescript": "^5.0.0",
-    "tailwindcss": "^3.3.0",
-    "@types/react": "^18.2.0"
-  },
-  "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
-    "test": "react-scripts test"
-  }
-}
-```
-
-#### **Tailwind CSS 설정**
-```javascript
-// tailwind.config.js
-module.exports = {
-  content: ["./src/**/*.{js,jsx,ts,tsx}"],
-  theme: {
-    extend: {
-      colors: {
-        'vscode-bg': 'var(--vscode-editor-background)',
-        'vscode-fg': 'var(--vscode-editor-foreground)',
-      }
-    }
-  }
-}
-```
-
-## 🔧 **환경 설정**
-
-### **개발 환경 변수**
 ```bash
-# VSCode Extension
-VSCODE_HAPA_API_URL=http://localhost:8000/api/v1
-VSCODE_HAPA_DB_MODULE_URL=http://localhost:8001
+# 핵심 설정
+API_V1_PREFIX=/api/v1
+ENVIRONMENT=development
+DEBUG=true
 
-# React Landing Page  
-REACT_APP_API_BASE_URL=http://3.13.240.111:8000/api/v1
-REACT_APP_DEMO_MODE=true
-REACT_APP_ANALYTICS_ENABLED=false
+# AI 서버 연결
+VLLM_SERVER_URL=http://3.13.240.111:8002
+AI_MODEL_TIMEOUT=30
+
+# 보안 설정
+SECRET_KEY=your-secret-key-here
+API_KEY_EXPIRY_DAYS=365
+
+# 데이터베이스
+REDIS_HOST=localhost
+REDIS_PORT=6379
+
+# 모니터링
+PROMETHEUS_ENABLED=true
+LOG_LEVEL=INFO
 ```
 
-### **프로덕션 설정**
-```bash
-# 운영 환경
-REACT_APP_API_BASE_URL=http://3.13.240.111:8000/api/v1
-REACT_APP_DEMO_MODE=false
-REACT_APP_ANALYTICS_ENABLED=true
-```
+## 📁 **프로젝트 구조**
 
-## 📊 **성능 최적화**
+Backend/
+├── app/
+│ ├── api/ # API 엔드포인트
+│ │ ├── endpoints/ # 14개 API 모듈
+│ │ └── api.py # 라우터 설정
+│ ├── core/ # 핵심 설정
+│ │ ├── config.py # 환경 설정
+│ │ ├── security.py # 보안 & 인증
+│ │ └── logging_config.py # 로깅 설정
+│ ├── services/ # 비즈니스 로직
+│ │ ├── enhanced_ai_model.py # AI 통합
+│ │ ├── vllm_integration_service.py # vLLM 연동
+│ │ ├── cache_service.py # 캐시 관리
+│ │ └── ...
+│ ├── schemas/ # 데이터 모델
+│ └── middleware/ # 미들웨어
+├── main.py # 애플리케이션 진입점
+├── requirements.txt # Python 의존성
+├── Dockerfile # Docker 설정
+└── README.md # 이 문서
 
-### **VSCode Extension**
-- **레이지 로딩**: 필요할 때만 Provider 활성화
-- **메모리 관리**: 사용하지 않는 웹뷰 자동 해제
-- **캐시 시스템**: 자주 사용하는 응답 로컬 캐시
+## 🛡️ **오류 처리 시스템**
 
+### **표준 오류 코드**
 
-## 🧪 **테스트**
+- **E4xxx**: 클라이언트 오류 (잘못된 요청, 인증 실패 등)
+- **E5xxx**: 서버 오류 (AI 모델 오류, DB 연결 실패 등)
 
-### **Extension 테스트**
-```bash
-# 단위 테스트
-npm test
+### **오류 모니터링**
 
-# E2E 테스트
-npm run test:e2e
+- **실시간 알림**: 중요 오류 발생 시 즉시 알림
+- **인시던트 추적**: 자동 분류 및 해결 과정 추적
+- **패턴 분석**: 반복되는 오류 패턴 자동 감지
 
-# Extension 수동 테스트
-# F5 → Extension Development Host → Python 파일에서 테스트
-```
+## 📈 **성능 최적화**
 
-### **React 테스트**
-```bash
-# 컴포넌트 테스트
-npm test
+| 메트릭        | 목표  | 현재 상태 |
+| ------------- | ----- | --------- |
+| API 응답 시간 | < 2초 | 1.2초 ✅  |
+| 오류율        | < 1%  | 0.2% ✅   |
+| 캐시 히트율   | > 70% | 78% ✅    |
+| 가용성        | 99.9% | 99.8% ⚠️  |
 
-# 시각적 회귀 테스트
-npm run test:visual
+## 🔗 **관련 문서**
 
-# 접근성 테스트
-npm run test:a11y
-```
-
-## 🔗 **API 연동**
-
-### **Backend API 호출**
-```typescript
-// Extension에서 Backend API 호출
-class ApiClient {
-  async generateCode(question: string): Promise<CodeResponse> {
-    const response = await fetch(`${this.baseURL}/code/generate`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': this.apiKey
-      },
-      body: JSON.stringify({ user_question: question })
-    });
-    
-    return response.json();
-  }
-  
-  // 🌊 스트리밍 응답 처리
-  async generateCodeStream(question: string): Promise<ReadableStream> {
-    const response = await fetch(`${this.baseURL}/code/generate/stream`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': this.apiKey
-      },
-      body: JSON.stringify({ user_question: question })
-    });
-    
-    return response.body!;
-  }
-}
-```
-
-### **DB-Module 연동**
-```typescript
-// 사용자 인증 및 설정 관리
-class DbModuleClient {
-  async login(email: string): Promise<AuthResponse> {
-    const response = await fetch(`${this.dbModuleURL}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, username: email.split('@')[0] })
-    });
-    
-    return response.json();
-  }
-  
-  async getUserSettings(token: string): Promise<UserSettings> {
-    const response = await fetch(`${this.dbModuleURL}/settings/me`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    
-    return response.json();
-  }
-}
-```
+- **API 문서**: http://localhost:8000/docs (Swagger UI)
+- **시스템 모니터링**: http://localhost:9090 (Prometheus)
+- **오류 대시보드**: `/api/v1/analytics/dashboard`
 
 ## 🆘 **문제 해결**
 
 ### **자주 발생하는 문제**
 
-**Q: Extension이 활성화되지 않음**
+**Q: API 키 인증 실패**
+
 ```bash
-# 해결: Python 파일을 열어야 Extension 활성화
-# 또는 Command Palette에서 "HAPA" 검색
+# 해결: API 키 재발급
+curl -X POST "http://localhost:8000/api/v1/users/generate-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "your@email.com"}'
 ```
 
-**Q: API 연결 실패** 
-```bash
-# 해결: Backend 서버 상태 확인
-curl http://localhost:8000/health
+**Q: vLLM 서버 연결 실패**
 
-# 네트워크 설정 확인
-# VSCode Settings → HAPA → API URL 확인
+```bash
+# 해결: 서버 상태 확인
+curl http://3.13.240.111:8002/health
 ```
 
-**Q: 웹앱이 로드되지 않음**
+**Q: Redis 연결 오류**
+
 ```bash
-# 해결: 의존성 재설치
-rm -rf node_modules package-lock.json
-npm install
-npm start
+# 해결: Redis 서비스 재시작
+docker-compose restart redis
 ```
-
-## 📈 **성능 지표**
-
-| 메트릭 | VSCode Extension | React Landing Page |
-|--------|------------------|-------------------|
-| **번들 크기** | < 2MB | < 1MB |
-| **메모리 사용** | < 50MB | < 30MB |
-| **초기 로딩** | < 1초 | < 2초 |
-| **API 응답** | < 3초 | < 3초 |
 
 ---
