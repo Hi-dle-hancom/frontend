@@ -115,8 +115,12 @@ class UserService:
             logger.info(f"🔍 Backend → DB Module 사용자 정보 조회 시작")
             logger.info(f"🔍 DB_MODULE_URL: {self.db_module_url}")
             logger.info(f"🔍 Access Token 길이: {len(access_token)}")
-            logger.info(f"🔍 Access Token prefix: {access_token[:50]}...")
-            
+            try:
+                safe_token_prefix = access_token[:50].encode('ascii', 'replace').decode('ascii')
+                logger.info(f"🔍 Access Token prefix: {safe_token_prefix}...")
+            except Exception:
+                logger.info("🔍 Access Token prefix: [인코딩 문제로 생략]")
+
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.get(
                     f"{self.db_module_url}/users/me",
@@ -135,7 +139,12 @@ class UserService:
                     logger.error(f"❌ 사용자 정보 조회 실패: {response.status_code}")
                     logger.error(f"❌ 응답 본문: {response.text}")
                     logger.error(f"❌ 요청 URL: {self.db_module_url}/users/me")
-                    logger.error(f"❌ Authorization 헤더: Bearer {access_token[:20]}...")
+                    # 안전한 JWT 토큰 로깅
+                    try:
+                        safe_token_prefix = access_token[:20].encode('ascii', 'replace').decode('ascii')
+                        logger.error(f"❌ Authorization 헤더: Bearer {safe_token_prefix}...")
+                    except Exception:
+                        logger.error("❌ Authorization 헤더: Bearer [인코딩 문제로 토큰 생략]...")
                     
                     # HTTP 상태코드별 상세 디버깅
                     if response.status_code == 401:

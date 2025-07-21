@@ -478,7 +478,12 @@ async def get_current_user_from_jwt(
             detail="JWT Bearer 토큰이 필요합니다.",
             headers={"WWW-Authenticate": "Bearer"}
         )
-    print("bearer_token", bearer_token)
+    try:
+        safe_token_info = f"Bearer token scheme: {bearer_token.scheme}, length: {len(bearer_token.credentials)}"
+        print("bearer_token", safe_token_info)
+    except Exception:
+        print("bearer_token", "[인코딩 문제로 토큰 정보 생략]")
+        
     jwt_token = bearer_token.credentials
     
     # 블랙리스트 확인
