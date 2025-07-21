@@ -1,379 +1,506 @@
-# 🗃️ HAPA DB-Module
+# 🎨 HAPA Frontend
 
-> **사용자 관리 & 데이터베이스 전담 마이크로서비스**  
-> PostgreSQL + MongoDB 이중 DB 구조로 안전하고 효율적인 데이터 관리
+> **사용자와 만나는 최전선 인터페이스**  
+> VSCode Extension + React Landing Page로 완벽한 AI 코딩 경험 제공
 
-## 🤔 **DB-Module이 하는 일**
+## 🤔 **Frontend가 하는 일**
 
-**간단히 설명하면**: HAPA의 모든 데이터를 안전하게 관리하는 전용 서버입니다! 🏦
+**간단히 설명하면**: 사용자가 AI 코딩 어시스턴트를 편리하게 사용할 수 있는 화면과 기능을 제공합니다! ✨
 
 ```mermaid
 graph TB
-    A[👤 사용자 요청] --> B[🗃️ DB-Module]
-    B --> C[🔐 PostgreSQL<br/>사용자 인증/설정]
-    B --> D[📚 MongoDB<br/>대화 히스토리]
-
-    B --> E[🎫 JWT 토큰 발급]
-    B --> F[⚙️ 개인화 설정]
-    B --> G[📊 히스토리 관리]
+    A[👤 사용자] --> B[🎨 Frontend]
+    B --> C[📝 VSCode Extension<br/>실제 코딩 환경]
+    B --> D[🌐 React Landing Page<br/>웹 데모 & 가이드]
+    
+    C --> E[🤖 실시간 코드 생성]
+    C --> F[💡 자동 완성]
+    C --> G[📚 히스토리 관리]
+    
+    D --> H[🎮 라이브 데모]
+    D --> I[📖 사용 가이드]
+    D --> J[🔗 API 테스트]
 ```
 
-## 🎯 **핵심 기능**
+## 🌟 **두 가지 Frontend**
 
-### **🔐 사용자 인증 & 보안**
+### **📝 1. VSCode Extension (메인 인터페이스)**
+> **개발자가 실제로 코딩할 때 사용하는 핵심 도구**
 
-- **JWT 토큰 시스템**: 액세스 토큰(30분) + 리프레시 토큰(7일)
-- **자동 사용자 등록**: 이메일만으로 즉시 계정 생성
-- **토큰 블랙리스트**: 로그아웃된 토큰 무효화
+**주요 기능:**
+- **🤖 실시간 AI 코드 생성**: 주석만 써도 자동으로 코드 완성
+- **💡 스마트 자동완성**: 컨텍스트 기반 지능형 제안
+- **📚 히스토리 관리**: 과거 질문-답변 저장 및 재사용
+- **⚙️ 개인화 설정**: 스킬 레벨별 맞춤 코드 생성
+- **🎯 멀티 에이전트**: 웹 개발자, 데이터 사이언티스트 등 역할별 AI
 
-### **⚙️ 개인화 설정 관리**
+### **🌐 2. React Landing Page (데모 & 가이드)**
+> **HAPA를 처음 접하는 사람들을 위한 웹 인터페이스**
 
-- **16가지 설정 카테고리**: Python 스킬, 코드 스타일, 설명 방식 등
-- **실시간 설정 동기화**: 변경사항 즉시 반영
-- **프로필 기반 맞춤화**: 사용자별 AI 응답 개인화
+**주요 기능:**
+- **🎮 라이브 데모**: 웹에서 바로 AI 코드 생성 체험
+- **📖 사용 가이드**: 설치부터 고급 사용법까지
+- **🔗 API 테스트**: REST API 실시간 테스트
+- **📊 상태 모니터링**: 백엔드 서버 상태 실시간 확인
 
-### **📚 히스토리 관리 (MongoDB)**
+## 📁 **프로젝트 구조**
+Frontend/
+├── vscode-extension/ # 🎯 메인 Extension
+│ ├── src/
+│ │ ├── providers/ # 5개 핵심 Provider
+│ │ │ ├── SidebarProvider.ts # 메인 AI 인터페이스
+│ │ │ ├── OnboardingProvider.ts # 온보딩 가이드
+│ │ │ ├── SettingsProvider.ts # 개인화 설정
+│ │ │ ├── GuideProvider.ts # 사용법 가이드
+│ │ │ └── BaseWebviewProvider.ts # 공통 기능
+│ │ ├── services/ # 12개 전문 서비스
+│ │ ├── modules/ # 6개 핵심 모듈
+│ │ ├── core/ # 5개 핵심 시스템
+│ │ └── templates/ # UI 템플릿 & 스타일
+│ ├── package.json # Extension 설정
+│ └── README.md # Extension 가이드
 
-- **대화 세션 관리**: 질문-답변 쌍 체계적 저장
-- **실시간 검색**: 과거 대화 내용 빠른 검색
-- **통계 분석**: 사용 패턴 및 효율성 분석
 
-## 🏗️ **데이터베이스 구조**
-
-### **PostgreSQL (사용자 데이터)**
-
-```sql
--- 사용자 테이블
-users {
-  id: SERIAL PRIMARY KEY
-  email: VARCHAR UNIQUE
-  username: VARCHAR
-  created_at: TIMESTAMP
-}
-
--- 설정 옵션
-setting_options {
-  id: SERIAL PRIMARY KEY
-  setting_type: VARCHAR     -- 설정 카테고리
-  option_value: VARCHAR     -- 설정 값
-  description: TEXT
-}
-
--- 사용자 선택 설정
-user_selected_options {
-  user_id: INTEGER
-  option_id: INTEGER
-  created_at: TIMESTAMP
-}
-```
-
-### **MongoDB (히스토리 데이터)**
-
-```javascript
-// 세션 문서 (hapa.history 컬렉션)
-{
-  "document_type": "session",
-  "session_id": "session_abc123",
-  "user_id": 1,
-  "session_title": "Python 기초 학습",
-  "status": "active",
-  "primary_language": "python",
-  "total_entries": 4,
-  "created_at": ISODate("2024-12-28T...")
-}
-
-// 대화 엔트리 문서
-{
-  "document_type": "entry",
-  "entry_id": "entry_xyz789",
-  "session_id": "session_abc123",
-  "conversation_type": "question",
-  "content": "Python에서 리스트 정렬 방법은?",
-  "created_at": ISODate("2024-12-28T...")
-}
-```
-
-## 📡 **API 엔드포인트**
-
-### **🔐 인증 관리**
-
-```http
-POST /auth/login
-# 로그인/자동 회원가입
-
-POST /auth/logout
-# 로그아웃 (토큰 무효화)
-
-POST /auth/refresh
-# 토큰 갱신
-```
-
-### **👤 사용자 관리**
-
-```http
-GET /users/me
-# 내 정보 조회
-```
-
-### **⚙️ 설정 관리**
-
-```http
-GET /settings/options
-# 사용 가능한 설정 옵션 조회
-
-GET /settings/me
-# 내 설정 조회
-
-POST /settings/me
-# 설정 업데이트
-```
-
-### **📚 히스토리 관리 (MongoDB)**
-
-```http
-POST /history/sessions
-# 새 대화 세션 생성
-
-GET /history/sessions
-# 세션 목록 조회
-
-GET /history/sessions/{session_id}
-# 특정 세션의 대화 내용
-
-POST /history/entries
-# 새 대화 엔트리 추가
-
-POST /history/search
-# 히스토리 검색
-
-GET /history/stats
-# 사용 통계 조회
-```
-
-### **🏥 시스템 관리**
-
-```http
-GET /health
-# 전체 시스템 상태 (PostgreSQL + MongoDB)
-
-POST /admin/init-db
-# 데이터베이스 초기화
-```
 
 ## 🚀 **빠른 시작**
 
-### **1. 환경 설정**
+### **📝 VSCode Extension 개발**
 
 ```bash
-# 환경 변수 파일 생성
-cp .env.example .env
+# 1. Extension 개발 환경 설정
+cd Frontend/vscode-extension
+npm install
 
-# 필수 환경 변수 설정
-DATABASE_URL=postgresql://username:password@localhost:5432/hidle
-MONGODB_URL=mongodb://localhost:27017/hapa
-JWT_SECRET_KEY=your-32-character-secret-key
+# 2. TypeScript 컴파일
+npm run compile
+
+# 3. Extension 테스트
+# VSCode에서 F5 키 → Extension Development Host 실행
+
+# 4. 사용 방법
+# Python 파일에서 다음 주석 입력:
+# 파이썬 리스트 정렬하는 함수 만들어줘
+# → 자동으로 코드 생성!
 ```
 
-### **2. 의존성 설치**
+### **🌐 React Landing Page 개발**
 
 ```bash
-pip install -r requirements.txt
+# 1. 웹앱 개발 환경 설정
+cd Frontend/landing-page
+npm install
+
+# 2. 개발 서버 시작
+npm start
+# → http://localhost:3000에서 확인
+
+# 3. 프로덕션 빌드
+npm run build
 ```
 
-### **3. 데이터베이스 초기화**
+### **🐳 Docker로 전체 실행**
 
 ```bash
-# 서버 실행
-python main.py
+# 전체 Frontend 서비스 시작
+docker-compose up frontend
 
-# 데이터베이스 테이블 생성
-curl -X POST http://localhost:8001/admin/init-db
+# 또는 개별 실행
+docker-compose up landing-page
 ```
 
-### **4. API 테스트**
+## 💻 **VSCode Extension 상세**
 
-```bash
-# 헬스 체크
-curl http://localhost:8001/health
+### **🎯 핵심 Provider 시스템**
 
-# 사용자 로그인/등록
-curl -X POST "http://localhost:8001/auth/login" \
-  -H "Content-Type: application/json" \
-  -d '{"email": "test@example.com", "username": "testuser"}'
-
-# 설정 옵션 조회
-curl -X GET "http://localhost:8001/settings/options" \
-  -H "Authorization: Bearer YOUR_TOKEN"
-```
-
-## 🔧 **Docker 배포**
-
-### **docker-compose.yml 설정**
-
-```yaml
-# PostgreSQL 서비스 (기존)
-postgres:
-  image: postgres:14
-  environment:
-    POSTGRES_DB: hidle
-    POSTGRES_USER: username
-    POSTGRES_PASSWORD: password
-
-# MongoDB 서비스 (NEW)
-mongodb:
-  image: mongo:7.0
-  environment:
-    MONGO_INITDB_ROOT_USERNAME: admin
-    MONGO_INITDB_ROOT_PASSWORD: hapa_mongodb_password
-    MONGO_INITDB_DATABASE: hapa
-
-# DB-Module 서비스
-db_module:
-  build: ./DB-Module
-  environment:
-    - DATABASE_URL=postgresql://username:password@postgres:5432/hidle
-    - MONGODB_URL=mongodb://admin:hapa_mongodb_password@mongodb:27017/hapa?authSource=admin
-  depends_on:
-    - postgres
-    - mongodb
-```
-
-### **실행**
-
-```bash
-# 전체 서비스 시작
-docker-compose up -d
-
-# DB-Module만 시작
-docker-compose up db_module
-```
-
-## 📁 **프로젝트 구조**
-
-DB-Module/
-├── main.py # FastAPI 애플리케이션 진입점
-├── auth.py # JWT 인증 시스템
-├── database.py # PostgreSQL + MongoDB 연결 관리
-├── models.py # Pydantic 데이터 모델
-├── routers/ # API 엔드포인트
-│ ├── auth_router.py # 인증 관련 API
-│ ├── users_router.py # 사용자 관리 API
-│ ├── settings_router.py # 설정 관리 API
-│ ├── history_router.py # 히스토리 관리 API (MongoDB)
-│ └── admin_router.py # 관리자 API
-├── requirements.txt # Python 의존성
-├── Dockerfile # Docker 설정
-└── README.md # 이 문서
-
-## 🛡️ **보안 & 인증**
-
-### **JWT 토큰 시스템**
-
-```python
-# 토큰 구조
-{
-  "sub": "user@example.com",      # 사용자 이메일
-  "user_id": 123,                 # 사용자 ID
-  "token_type": "access",         # 토큰 타입
-  "exp": 1640995200,             # 만료 시간
-  "iat": 1640991600              # 발급 시간
+#### **1. SidebarProvider** (메인 AI 인터페이스)
+```typescript
+// 실시간 AI 코드 생성 인터페이스
+class SidebarProvider {
+  // 🤖 AI 질문-답변 처리
+  async handleAIQuestion(question: string)
+  
+  // 🌊 실시간 스트리밍 코드 생성
+  async handleStreamingCodeGeneration(question: string)
+  
+  // 📚 히스토리 관리 (MongoDB 연동)
+  async loadHistoryFromDB()
+  async saveHistoryToDB()
+  
+  // 🎯 멀티 에이전트 지원
+  selectModel(modelType: string)
 }
 ```
 
-### **보안 기능**
+#### **2. OnboardingProvider** (온보딩 시스템)
+```typescript
+// 6단계 온보딩 프로세스
+class OnboardingProvider {
+  // 📧 이메일 입력 → 🎯 스킬 레벨 → ⚙️ 설정 → ✅ 완료
+  handleNextStep(stepData: any)
+  
+  // 🔗 자동 DB 연동 및 설정 저장
+  async saveUserProfileToDB()
+}
+```
 
-- **토큰 블랙리스트**: 로그아웃된 토큰 자동 무효화
-- **자동 만료**: 액세스 토큰 30분, 리프레시 토큰 7일
-- **환경별 시크릿**: 개발/운영 환경 분리
+### **🔧 주요 기능**
 
-## 📊 **모니터링 & 로깅**
+#### **🤖 AI 코드 생성**
+```javascript
+// 사용자가 주석 입력
+// 데이터베이스 연결 함수 만들어줘
 
-### **헬스 체크**
+// ↓ AI가 자동 생성
+import sqlite3
 
+def connect_database(db_path="database.db"):
+    """데이터베이스에 연결하는 함수"""
+    try:
+        conn = sqlite3.connect(db_path)
+        return conn
+    except sqlite3.Error as e:
+        print(f"데이터베이스 연결 오류: {e}")
+        return None
+```
+
+#### **📚 히스토리 관리**
+- **MongoDB 연동**: 모든 질문-답변 영구 저장
+- **빠른 검색**: 과거 대화 내용 실시간 검색
+- **재사용 기능**: 클릭 한 번으로 이전 답변 재사용
+
+#### **⚙️ 개인화 설정**
+- **스킬 레벨**: 초급자 → 상세 설명, 전문가 → 간결한 코드
+- **코딩 스타일**: 최소화, 표준, 상세, 포괄적
+- **설명 방식**: 간단, 표준, 상세, 교육용
+
+### **🎨 UI/UX 특징**
+
+#### **VSCode 네이티브 스타일**
+```css
+/* VSCode 테마 완벽 적용 */
+.vscode-sidebar-container {
+  background: var(--vscode-sidebar-background);
+  color: var(--vscode-sidebar-foreground);
+  border: 1px solid var(--vscode-sidebar-border);
+}
+
+/* 다크/라이트 테마 자동 전환 */
+.vscode-btn-primary {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+```
+
+#### **반응형 디자인**
+- **사이드바 모드**: 일반적인 개발 시 사용
+- **확장 모드**: 큰 화면에서 상세 작업
+- **자동 크기 조절**: 화면 크기에 맞춰 UI 자동 최적화
+
+## 🌐 **React Landing Page 상세**
+
+### **🎮 라이브 데모 시스템**
+
+#### **ThunderDemo Component**
+```typescript
+// 실시간 AI 코드 생성 체험
+const ThunderDemo: React.FC = () => {
+  const [input, setInput] = useState("");
+  const [output, setOutput] = useState("");
+  const [isStreaming, setIsStreaming] = useState(false);
+  
+  // 🌊 Server-Sent Events로 실시간 스트리밍
+  const handleSend = async () => {
+    const response = await fetch('/api/v1/code/generate/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_question: input })
+    });
+    
+    // 실시간으로 코드 생성 과정 표시
+    const reader = response.body?.getReader();
+    // ...
+  };
+};
+```
+
+### **📊 API 상태 모니터링**
+
+#### **ApiStatus Component**
+```typescript
+// 백엔드 서버 실시간 상태 체크
+const ApiStatus: React.FC = () => {
+  const [status, setStatus] = useState<"connected" | "disconnected">("checking");
+  
+  const checkApiHealth = async () => {
+    const startTime = Date.now();
+    const response = await fetch('http://3.13.240.111:8000/api/v1/health');
+    const responseTime = Date.now() - startTime;
+    
+    setStatus(response.ok ? "connected" : "disconnected");
+  };
+  
+  // 30초마다 자동 상태 체크
+  useEffect(() => {
+    const interval = setInterval(checkApiHealth, 30000);
+    return () => clearInterval(interval);
+  }, []);
+};
+```
+
+### **🎨 UI 컴포넌트 시스템**
+
+#### **주요 컴포넌트**
+- **ThunderButton**: VSCode 스타일 버튼
+- **ThunderCard**: 정보 카드 컴포넌트  
+- **LiveDemo**: 실시간 AI 데모
+- **ApiStatus**: 서버 상태 표시
+- **ToastNotification**: 알림 시스템
+
+#### **접근성 지원**
+```typescript
+// 스크린 리더, 키보드 내비게이션 등 완벽 지원
+export const useAccessibility = () => {
+  const [screenReader, setScreenReader] = useState(false);
+  const [keyboardNavigation, setKeyboardNavigation] = useState(false);
+  const [highContrast, setHighContrast] = useState(false);
+  
+  // 접근성 기능 자동 감지 및 적용
+};
+```
+
+## 🛠️ **개발 도구 & 설정**
+
+### **VSCode Extension**
+
+#### **package.json 주요 설정**
 ```json
 {
-  "status": "healthy",
-  "database": "connected",
-  "mongodb": "connected",
-  "environment": "development",
-  "connections": {
-    "postgresql": {
-      "host": "localhost:5432",
-      "database": "hidle",
-      "status": "connected"
+  "name": "hapa-ai-assistant",
+  "displayName": "HAPA AI Python Assistant",
+  "version": "1.0.0",
+  "engines": { "vscode": "^1.82.0" },
+  "categories": ["Other", "Snippets", "Machine Learning"],
+  "activationEvents": ["onLanguage:python"],
+  "contributes": {
+    "views": {
+      "explorer": [
+        {
+          "id": "hapa-sidebar",
+          "name": "HAPA AI Assistant",
+          "when": "true"
+        }
+      ]
     },
-    "mongodb": {
-      "host": "localhost:27017",
-      "database": "hapa",
-      "status": "connected"
+    "commands": [
+      {
+        "command": "hapa.showSidebar",
+        "title": "Show HAPA Assistant"
+      }
+    ]
+  }
+}
+```
+
+#### **TypeScript 설정**
+```json
+// tsconfig.json
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "commonjs",
+    "lib": ["ES2020"],
+    "outDir": "out",
+    "rootDir": "src",
+    "strict": true,
+    "esModuleInterop": true
+  }
+}
+```
+
+### **React Landing Page**
+
+#### **주요 의존성**
+```json
+{
+  "dependencies": {
+    "react": "^18.2.0",
+    "typescript": "^5.0.0",
+    "tailwindcss": "^3.3.0",
+    "@types/react": "^18.2.0"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test"
+  }
+}
+```
+
+#### **Tailwind CSS 설정**
+```javascript
+// tailwind.config.js
+module.exports = {
+  content: ["./src/**/*.{js,jsx,ts,tsx}"],
+  theme: {
+    extend: {
+      colors: {
+        'vscode-bg': 'var(--vscode-editor-background)',
+        'vscode-fg': 'var(--vscode-editor-foreground)',
+      }
     }
   }
 }
 ```
 
-### **로깅 시스템**
+## 🔧 **환경 설정**
 
-- **구조화된 로그**: JSON 형태로 체계적 기록
-- **DB 연결 추적**: 연결 상태 실시간 모니터링
-- **성능 메트릭**: 쿼리 실행 시간 측정
-
-## 🔧 **설정 시스템**
-
-### **개인화 설정 옵션**
-
-| 카테고리              | 옵션                                       | 설명             |
-| --------------------- | ------------------------------------------ | ---------------- |
-| **Python 스킬**       | beginner, intermediate, advanced, expert   | 코드 복잡도 조절 |
-| **코드 출력**         | minimal, standard, detailed, comprehensive | 출력 상세도      |
-| **설명 스타일**       | simple, standard, detailed, educational    | 설명 방식        |
-| **프로젝트 컨텍스트** | web, data_science, automation, general     | 분야별 최적화    |
-
-### **설정 API 사용 예시**
-
+### **개발 환경 변수**
 ```bash
-# 설정 업데이트
-curl -X POST "http://localhost:8001/settings/me" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"option_ids": [1, 5, 9, 13]}'
+# VSCode Extension
+VSCODE_HAPA_API_URL=http://localhost:8000/api/v1
+VSCODE_HAPA_DB_MODULE_URL=http://localhost:8001
+
+# React Landing Page  
+REACT_APP_API_BASE_URL=http://3.13.240.111:8000/api/v1
+REACT_APP_DEMO_MODE=true
+REACT_APP_ANALYTICS_ENABLED=false
+```
+
+### **프로덕션 설정**
+```bash
+# 운영 환경
+REACT_APP_API_BASE_URL=http://3.13.240.111:8000/api/v1
+REACT_APP_DEMO_MODE=false
+REACT_APP_ANALYTICS_ENABLED=true
+```
+
+## 📊 **성능 최적화**
+
+### **VSCode Extension**
+- **레이지 로딩**: 필요할 때만 Provider 활성화
+- **메모리 관리**: 사용하지 않는 웹뷰 자동 해제
+- **캐시 시스템**: 자주 사용하는 응답 로컬 캐시
+
+
+## 🧪 **테스트**
+
+### **Extension 테스트**
+```bash
+# 단위 테스트
+npm test
+
+# E2E 테스트
+npm run test:e2e
+
+# Extension 수동 테스트
+# F5 → Extension Development Host → Python 파일에서 테스트
+```
+
+### **React 테스트**
+```bash
+# 컴포넌트 테스트
+npm test
+
+# 시각적 회귀 테스트
+npm run test:visual
+
+# 접근성 테스트
+npm run test:a11y
+```
+
+## 🔗 **API 연동**
+
+### **Backend API 호출**
+```typescript
+// Extension에서 Backend API 호출
+class ApiClient {
+  async generateCode(question: string): Promise<CodeResponse> {
+    const response = await fetch(`${this.baseURL}/code/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': this.apiKey
+      },
+      body: JSON.stringify({ user_question: question })
+    });
+    
+    return response.json();
+  }
+  
+  // 🌊 스트리밍 응답 처리
+  async generateCodeStream(question: string): Promise<ReadableStream> {
+    const response = await fetch(`${this.baseURL}/code/generate/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': this.apiKey
+      },
+      body: JSON.stringify({ user_question: question })
+    });
+    
+    return response.body!;
+  }
+}
+```
+
+### **DB-Module 연동**
+```typescript
+// 사용자 인증 및 설정 관리
+class DbModuleClient {
+  async login(email: string): Promise<AuthResponse> {
+    const response = await fetch(`${this.dbModuleURL}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, username: email.split('@')[0] })
+    });
+    
+    return response.json();
+  }
+  
+  async getUserSettings(token: string): Promise<UserSettings> {
+    const response = await fetch(`${this.dbModuleURL}/settings/me`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    
+    return response.json();
+  }
+}
 ```
 
 ## 🆘 **문제 해결**
 
 ### **자주 발생하는 문제**
 
-**Q: PostgreSQL 연결 실패**
-
+**Q: Extension이 활성화되지 않음**
 ```bash
-# 해결: 연결 정보 확인
-echo $DATABASE_URL
-# postgresql://username:password@host:5432/database
+# 해결: Python 파일을 열어야 Extension 활성화
+# 또는 Command Palette에서 "HAPA" 검색
 ```
 
-**Q: MongoDB 연결 실패**
-
+**Q: API 연결 실패** 
 ```bash
-# 해결: MongoDB 서비스 상태 확인
-docker-compose ps mongodb
-mongosh mongodb://localhost:27017/hapa
+# 해결: Backend 서버 상태 확인
+curl http://localhost:8000/health
+
+# 네트워크 설정 확인
+# VSCode Settings → HAPA → API URL 확인
 ```
 
-**Q: JWT 토큰 만료**
-
+**Q: 웹앱이 로드되지 않음**
 ```bash
-# 해결: 리프레시 토큰으로 갱신
-curl -X POST "http://localhost:8001/auth/refresh" \
-  -H "Content-Type: application/json" \
-  -d '{"refresh_token": "YOUR_REFRESH_TOKEN"}'
+# 해결: 의존성 재설치
+rm -rf node_modules package-lock.json
+npm install
+npm start
 ```
 
 ## 📈 **성능 지표**
 
-| 메트릭           | 목표    | 현재 상태 |
-| ---------------- | ------- | --------- |
-| 로그인 응답 시간 | < 500ms | 200ms ✅  |
-| DB 쿼리 시간     | < 100ms | 50ms ✅   |
-| 동시 접속        | 100명   | 지원됨 ✅ |
-| 가용성           | 99.9%   | 99.8% ⚠️  |
+| 메트릭 | VSCode Extension | React Landing Page |
+|--------|------------------|-------------------|
+| **번들 크기** | < 2MB | < 1MB |
+| **메모리 사용** | < 50MB | < 30MB |
+| **초기 로딩** | < 1초 | < 2초 |
+| **API 응답** | < 3초 | < 3초 |
 
 ---
