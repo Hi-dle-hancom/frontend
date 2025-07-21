@@ -49,14 +49,14 @@ from app.core.security import (
 # =============================================================================
 
 import httpx
-import jwt
+from jose import jwt, JWTError
 from app.core.config import settings
 
 async def decode_jwt_and_get_user_id(access_token: str) -> Optional[str]:
     """JWT 토큰에서 사용자 ID 추출"""
     try:
         # JWT 시크릿 키 가져오기 (환경변수 또는 설정에서)
-        secret_key = settings.security.jwt_secret_key
+        secret_key = settings.JWT_SECRET_KEY
         
         # JWT 토큰 디코딩
         payload = jwt.decode(access_token, secret_key, algorithms=["HS256"])
@@ -82,7 +82,7 @@ async def decode_jwt_and_get_user_id(access_token: str) -> Optional[str]:
         return None
 
 
-async def fetch_user_settings_from_db(user_id: str) -> Optional[Dict[str, Any]]:
+async def fetch_user_settings_from_db(user_id: str, access_token: str) -> Optional[Dict[str, Any]]:
     """DB-Module에서 사용자 개인화 설정 조회"""
     try:
         # DB-Module API 엔드포인트
@@ -93,7 +93,7 @@ async def fetch_user_settings_from_db(user_id: str) -> Optional[Dict[str, Any]]:
         async with httpx.AsyncClient() as client:
             response = await client.get(
                 f"{db_module_url}/settings/me",
-                headers={"Authorization": f"Bearer {user_id}"},  # 임시: user_id를 토큰으로 사용
+                headers={"Authorization": f"Bearer {access_token}"},  # ✅ 실제 JWT 토큰 사용
                 timeout=timeout
             )
             
@@ -198,7 +198,7 @@ async def _get_user_preferences(
             
             if jwt_user_id:
                 # DB에서 사용자 설정 조회
-                db_settings = await fetch_user_settings_from_db(jwt_user_id)
+                db_settings = await fetch_user_settings_from_db(jwt_user_id, access_token)
                 
                 if db_settings:
                     # DB 설정을 AI 선호도로 변환

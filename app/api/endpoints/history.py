@@ -9,6 +9,7 @@ from app.core.security import (
     check_permission,
     check_rate_limit_dependency,
     get_current_api_key,
+    get_current_user,
 )
 from app.schemas.history import (
     ConversationEntry,

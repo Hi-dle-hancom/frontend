@@ -47,8 +47,8 @@ aiohttp>=3.9.4
 # PostgreSQL 비동기 클라이언트
 asyncpg==0.29.0
 
-# JWT 토큰 처리
-PyJWT==2.8.0
+# JWT 토큰 처리 (python-jose로 통일)
+python-jose[cryptography]==3.3.0
 
 # User-Agent 파싱
 user-agents==2.2.0
