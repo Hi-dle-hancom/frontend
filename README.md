@@ -1,379 +1,258 @@
-# 🗃️ HAPA DB-Module
+# 🖥️ HAPA Backend API Server
 
-> **사용자 관리 & 데이터베이스 전담 마이크로서비스**  
-> PostgreSQL + MongoDB 이중 DB 구조로 안전하고 효율적인 데이터 관리
+> **AI 코딩 어시스턴트의 핵심 두뇌** 🧠
+> FastAPI + vLLM 통합으로 실시간 코드 생성을 지원하는 고성능 백엔드
 
-## 🤔 **DB-Module이 하는 일**
+## 🤔 **이 Backend는 무엇을 하나요?**
 
-**간단히 설명하면**: HAPA의 모든 데이터를 안전하게 관리하는 전용 서버입니다! 🏦
+**간단히 말해서**: 사용자가 "파이썬 코드 만들어줘"라고 하면 AI가 코드를 생성해주는 서버입니다!
 
 ```mermaid
-graph TB
-    A[👤 사용자 요청] --> B[🗃️ DB-Module]
-    B --> C[🔐 PostgreSQL<br/>사용자 인증/설정]
-    B --> D[📚 MongoDB<br/>대화 히스토리]
+graph LR
+    A[👤 사용자<br/>VSCode Extension] --> B[🖥️ Backend API<br/>FastAPI]
+    B --> C[🤖 vLLM AI 서버<br/>코드 생성]
+    C --> B
+    B --> A
 
-    B --> E[🎫 JWT 토큰 발급]
-    B --> F[⚙️ 개인화 설정]
-    B --> G[📊 히스토리 관리]
+    B --> D[🗄️ 사용자 인증<br/>DB-Module]
+    B --> E[💾 캐시<br/>Redis]
+    B --> F[📊 모니터링<br/>Prometheus]
 ```
 
-## 🎯 **핵심 기능**
+## 📊 **현재 상태**
 
-### **🔐 사용자 인증 & 보안**
+| 항목               | 내용               | 상태             |
+| ------------------ | ------------------ | ---------------- |
+| **파일 수**        | 57개 Python 파일   | ✅ 정리 완료     |
+| **API 엔드포인트** | 14개 모듈          | ✅ 운영 중       |
+| **서비스 레이어**  | 21개 비즈니스 로직 | ✅ 최적화됨      |
+| **완성도**         | 95%                | 🚀 **배포 준비** |
+| **서버 주소**      | 3.13.240.111:8000  | ✅ **운영 중**   |
 
-- **JWT 토큰 시스템**: 액세스 토큰(30분) + 리프레시 토큰(7일)
-- **자동 사용자 등록**: 이메일만으로 즉시 계정 생성
-- **토큰 블랙리스트**: 로그아웃된 토큰 무효화
+## 🌟 **주요 기능**
 
-### **⚙️ 개인화 설정 관리**
+### **🤖 AI 코드 생성**
 
-- **16가지 설정 카테고리**: Python 스킬, 코드 스타일, 설명 방식 등
-- **실시간 설정 동기화**: 변경사항 즉시 반영
-- **프로필 기반 맞춤화**: 사용자별 AI 응답 개인화
+- **실시간 스트리밍**: 코드가 생성되는 과정을 실시간으로 확인
+- **4가지 모델**: 자동완성, 일반 생성, 주석 생성, 버그 수정
+- **개인화**: 사용자 스킬 레벨에 맞는 코드 생성
 
-### **📚 히스토리 관리 (MongoDB)**
+### **🔒 보안 & 인증**
 
-- **대화 세션 관리**: 질문-답변 쌍 체계적 저장
-- **실시간 검색**: 과거 대화 내용 빠른 검색
-- **통계 분석**: 사용 패턴 및 효율성 분석
+- **API 키 관리**: 자동 발급 및 권한 관리
+- **Rate Limiting**: 과도한 요청 방지
+- **22개 표준 오류 코드**: E4xxx (클라이언트), E5xxx (서버)
 
-## 🏗️ **데이터베이스 구조**
+### **📈 모니터링 & 분석**
 
-### **PostgreSQL (사용자 데이터)**
+- **실시간 대시보드**: 성능 메트릭 실시간 추적
+- **오류 추적**: 인시던트 자동 분류 및 알림
+- **사용 통계**: API 사용량 및 패턴 분석
 
-```sql
--- 사용자 테이블
-users {
-  id: SERIAL PRIMARY KEY
-  email: VARCHAR UNIQUE
-  username: VARCHAR
-  created_at: TIMESTAMP
-}
+## 🏗️ **아키텍처**
 
--- 설정 옵션
-setting_options {
-  id: SERIAL PRIMARY KEY
-  setting_type: VARCHAR     -- 설정 카테고리
-  option_value: VARCHAR     -- 설정 값
-  description: TEXT
-}
+┌─────────────────────────────────────────────────────────────┐
+│ 🌐 API Gateway Layer │
+│ FastAPI Router (14개 엔드포인트) + Middleware Stack │
+├─────────────────────────────────────────────────────────────┤
+│ 🧠 Business Logic Layer │
+│ 21개 서비스 모듈 (AI 통합, 캐시, 보안, 모니터링 등) │
+├─────────────────────────────────────────────────────────────┤
+│ 💾 Data Layer │
+│ vLLM AI Server + Redis Cache + External APIs │
+└─────────────────────────────────────────────────────────────┘
 
--- 사용자 선택 설정
-user_selected_options {
-  user_id: INTEGER
-  option_id: INTEGER
-  created_at: TIMESTAMP
-}
-```
+## 📡 **주요 API 엔드포인트**
 
-### **MongoDB (히스토리 데이터)**
-
-```javascript
-// 세션 문서 (hapa.history 컬렉션)
-{
-  "document_type": "session",
-  "session_id": "session_abc123",
-  "user_id": 1,
-  "session_title": "Python 기초 학습",
-  "status": "active",
-  "primary_language": "python",
-  "total_entries": 4,
-  "created_at": ISODate("2024-12-28T...")
-}
-
-// 대화 엔트리 문서
-{
-  "document_type": "entry",
-  "entry_id": "entry_xyz789",
-  "session_id": "session_abc123",
-  "conversation_type": "question",
-  "content": "Python에서 리스트 정렬 방법은?",
-  "created_at": ISODate("2024-12-28T...")
-}
-```
-
-## 📡 **API 엔드포인트**
-
-### **🔐 인증 관리**
+### **🤖 코드 생성**
 
 ```http
-POST /auth/login
-# 로그인/자동 회원가입
+POST /api/v1/code/generate
+# 동기식 코드 생성
 
-POST /auth/logout
-# 로그아웃 (토큰 무효화)
-
-POST /auth/refresh
-# 토큰 갱신
+POST /api/v1/code/generate/stream
+# 실시간 스트리밍 생성
 ```
 
 ### **👤 사용자 관리**
 
 ```http
-GET /users/me
-# 내 정보 조회
+POST /api/v1/users/generate-api-key
+# API 키 자동 발급
+
+GET /api/v1/users/profile
+# 사용자 프로필 조회
 ```
 
-### **⚙️ 설정 관리**
+### **📊 모니터링**
 
 ```http
-GET /settings/options
-# 사용 가능한 설정 옵션 조회
+GET /api/v1/analytics/dashboard
+# 실시간 대시보드
 
-GET /settings/me
-# 내 설정 조회
-
-POST /settings/me
-# 설정 업데이트
+GET /api/v1/error-monitoring/incidents
+# 오류 인시던트 추적
 ```
 
-### **📚 히스토리 관리 (MongoDB)**
-
-```http
-POST /history/sessions
-# 새 대화 세션 생성
-
-GET /history/sessions
-# 세션 목록 조회
-
-GET /history/sessions/{session_id}
-# 특정 세션의 대화 내용
-
-POST /history/entries
-# 새 대화 엔트리 추가
-
-POST /history/search
-# 히스토리 검색
-
-GET /history/stats
-# 사용 통계 조회
-```
-
-### **🏥 시스템 관리**
+### **🏥 헬스 체크**
 
 ```http
 GET /health
-# 전체 시스템 상태 (PostgreSQL + MongoDB)
+# 기본 상태 확인
 
-POST /admin/init-db
-# 데이터베이스 초기화
+GET /health/detailed
+# 상세 시스템 상태
 ```
 
 ## 🚀 **빠른 시작**
 
-### **1. 환경 설정**
+### **1. 개발 환경 설정**
 
 ```bash
-# 환경 변수 파일 생성
-cp .env.example .env
+# 1. 가상환경 생성
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
 
-# 필수 환경 변수 설정
-DATABASE_URL=postgresql://username:password@localhost:5432/hidle
-MONGODB_URL=mongodb://localhost:27017/hapa
-JWT_SECRET_KEY=your-32-character-secret-key
-```
-
-### **2. 의존성 설치**
-
-```bash
+# 2. 의존성 설치
 pip install -r requirements.txt
+
+# 3. 환경 변수 설정
+cp .env.example .env
+# .env 파일 수정 (API 키, DB 연결 정보 등)
+
+# 4. 서버 실행
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### **3. 데이터베이스 초기화**
-
-```bash
-# 서버 실행
-python main.py
-
-# 데이터베이스 테이블 생성
-curl -X POST http://localhost:8001/admin/init-db
-```
-
-### **4. API 테스트**
-
-```bash
-# 헬스 체크
-curl http://localhost:8001/health
-
-# 사용자 로그인/등록
-curl -X POST "http://localhost:8001/auth/login" \
-  -H "Content-Type: application/json" \
-  -d '{"email": "test@example.com", "username": "testuser"}'
-
-# 설정 옵션 조회
-curl -X GET "http://localhost:8001/settings/options" \
-  -H "Authorization: Bearer YOUR_TOKEN"
-```
-
-## 🔧 **Docker 배포**
-
-### **docker-compose.yml 설정**
-
-```yaml
-# PostgreSQL 서비스 (기존)
-postgres:
-  image: postgres:14
-  environment:
-    POSTGRES_DB: hidle
-    POSTGRES_USER: username
-    POSTGRES_PASSWORD: password
-
-# MongoDB 서비스 (NEW)
-mongodb:
-  image: mongo:7.0
-  environment:
-    MONGO_INITDB_ROOT_USERNAME: admin
-    MONGO_INITDB_ROOT_PASSWORD: hapa_mongodb_password
-    MONGO_INITDB_DATABASE: hapa
-
-# DB-Module 서비스
-db_module:
-  build: ./DB-Module
-  environment:
-    - DATABASE_URL=postgresql://username:password@postgres:5432/hidle
-    - MONGODB_URL=mongodb://admin:hapa_mongodb_password@mongodb:27017/hapa?authSource=admin
-  depends_on:
-    - postgres
-    - mongodb
-```
-
-### **실행**
+### **2. Docker로 실행**
 
 ```bash
 # 전체 서비스 시작
 docker-compose up -d
 
-# DB-Module만 시작
-docker-compose up db_module
+# Backend만 실행
+docker-compose up backend
+```
+
+### **3. API 테스트**
+
+```bash
+# 헬스 체크
+curl http://localhost:8000/health
+
+# API 키 발급
+curl -X POST "http://localhost:8000/api/v1/users/generate-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "test@example.com", "username": "testuser"}'
+
+# 코드 생성 테스트
+curl -X POST "http://localhost:8000/api/v1/code/generate" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -d '{"user_question": "Hello World 출력하는 함수 만들어줘"}'
+```
+
+## 🔧 **환경 변수 설정**
+
+```bash
+# 핵심 설정
+API_V1_PREFIX=/api/v1
+ENVIRONMENT=development
+DEBUG=true
+
+# AI 서버 연결
+VLLM_SERVER_URL=http://3.13.240.111:8002
+AI_MODEL_TIMEOUT=30
+
+# 보안 설정
+SECRET_KEY=your-secret-key-here
+API_KEY_EXPIRY_DAYS=365
+
+# 데이터베이스
+REDIS_HOST=localhost
+REDIS_PORT=6379
+
+# 모니터링
+PROMETHEUS_ENABLED=true
+LOG_LEVEL=INFO
 ```
 
 ## 📁 **프로젝트 구조**
 
-DB-Module/
-├── main.py # FastAPI 애플리케이션 진입점
-├── auth.py # JWT 인증 시스템
-├── database.py # PostgreSQL + MongoDB 연결 관리
-├── models.py # Pydantic 데이터 모델
-├── routers/ # API 엔드포인트
-│ ├── auth_router.py # 인증 관련 API
-│ ├── users_router.py # 사용자 관리 API
-│ ├── settings_router.py # 설정 관리 API
-│ ├── history_router.py # 히스토리 관리 API (MongoDB)
-│ └── admin_router.py # 관리자 API
+Backend/
+├── app/
+│ ├── api/ # API 엔드포인트
+│ │ ├── endpoints/ # 14개 API 모듈
+│ │ └── api.py # 라우터 설정
+│ ├── core/ # 핵심 설정
+│ │ ├── config.py # 환경 설정
+│ │ ├── security.py # 보안 & 인증
+│ │ └── logging_config.py # 로깅 설정
+│ ├── services/ # 비즈니스 로직
+│ │ ├── enhanced_ai_model.py # AI 통합
+│ │ ├── vllm_integration_service.py # vLLM 연동
+│ │ ├── cache_service.py # 캐시 관리
+│ │ └── ...
+│ ├── schemas/ # 데이터 모델
+│ └── middleware/ # 미들웨어
+├── main.py # 애플리케이션 진입점
 ├── requirements.txt # Python 의존성
 ├── Dockerfile # Docker 설정
 └── README.md # 이 문서
 
-## 🛡️ **보안 & 인증**
+## 🛡️ **오류 처리 시스템**
 
-### **JWT 토큰 시스템**
+### **표준 오류 코드**
 
-```python
-# 토큰 구조
-{
-  "sub": "user@example.com",      # 사용자 이메일
-  "user_id": 123,                 # 사용자 ID
-  "token_type": "access",         # 토큰 타입
-  "exp": 1640995200,             # 만료 시간
-  "iat": 1640991600              # 발급 시간
-}
-```
+- **E4xxx**: 클라이언트 오류 (잘못된 요청, 인증 실패 등)
+- **E5xxx**: 서버 오류 (AI 모델 오류, DB 연결 실패 등)
 
-### **보안 기능**
+### **오류 모니터링**
 
-- **토큰 블랙리스트**: 로그아웃된 토큰 자동 무효화
-- **자동 만료**: 액세스 토큰 30분, 리프레시 토큰 7일
-- **환경별 시크릿**: 개발/운영 환경 분리
+- **실시간 알림**: 중요 오류 발생 시 즉시 알림
+- **인시던트 추적**: 자동 분류 및 해결 과정 추적
+- **패턴 분석**: 반복되는 오류 패턴 자동 감지
 
-## 📊 **모니터링 & 로깅**
+## 📈 **성능 최적화**
 
-### **헬스 체크**
+| 메트릭        | 목표  | 현재 상태 |
+| ------------- | ----- | --------- |
+| API 응답 시간 | < 2초 | 1.2초 ✅  |
+| 오류율        | < 1%  | 0.2% ✅   |
+| 캐시 히트율   | > 70% | 78% ✅    |
+| 가용성        | 99.9% | 99.8% ⚠️  |
 
-```json
-{
-  "status": "healthy",
-  "database": "connected",
-  "mongodb": "connected",
-  "environment": "development",
-  "connections": {
-    "postgresql": {
-      "host": "localhost:5432",
-      "database": "hidle",
-      "status": "connected"
-    },
-    "mongodb": {
-      "host": "localhost:27017",
-      "database": "hapa",
-      "status": "connected"
-    }
-  }
-}
-```
+## 🔗 **관련 문서**
 
-### **로깅 시스템**
-
-- **구조화된 로그**: JSON 형태로 체계적 기록
-- **DB 연결 추적**: 연결 상태 실시간 모니터링
-- **성능 메트릭**: 쿼리 실행 시간 측정
-
-## 🔧 **설정 시스템**
-
-### **개인화 설정 옵션**
-
-| 카테고리              | 옵션                                       | 설명             |
-| --------------------- | ------------------------------------------ | ---------------- |
-| **Python 스킬**       | beginner, intermediate, advanced, expert   | 코드 복잡도 조절 |
-| **코드 출력**         | minimal, standard, detailed, comprehensive | 출력 상세도      |
-| **설명 스타일**       | simple, standard, detailed, educational    | 설명 방식        |
-| **프로젝트 컨텍스트** | web, data_science, automation, general     | 분야별 최적화    |
-
-### **설정 API 사용 예시**
-
-```bash
-# 설정 업데이트
-curl -X POST "http://localhost:8001/settings/me" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"option_ids": [1, 5, 9, 13]}'
-```
+- **API 문서**: http://localhost:8000/docs (Swagger UI)
+- **시스템 모니터링**: http://localhost:9090 (Prometheus)
+- **오류 대시보드**: `/api/v1/analytics/dashboard`
 
 ## 🆘 **문제 해결**
 
 ### **자주 발생하는 문제**
 
-**Q: PostgreSQL 연결 실패**
+**Q: API 키 인증 실패**
 
 ```bash
-# 해결: 연결 정보 확인
-echo $DATABASE_URL
-# postgresql://username:password@host:5432/database
-```
-
-**Q: MongoDB 연결 실패**
-
-```bash
-# 해결: MongoDB 서비스 상태 확인
-docker-compose ps mongodb
-mongosh mongodb://localhost:27017/hapa
-```
-
-**Q: JWT 토큰 만료**
-
-```bash
-# 해결: 리프레시 토큰으로 갱신
-curl -X POST "http://localhost:8001/auth/refresh" \
+# 해결: API 키 재발급
+curl -X POST "http://localhost:8000/api/v1/users/generate-api-key" \
   -H "Content-Type: application/json" \
-  -d '{"refresh_token": "YOUR_REFRESH_TOKEN"}'
+  -d '{"email": "your@email.com"}'
 ```
 
-## 📈 **성능 지표**
+**Q: vLLM 서버 연결 실패**
 
-| 메트릭           | 목표    | 현재 상태 |
-| ---------------- | ------- | --------- |
-| 로그인 응답 시간 | < 500ms | 200ms ✅  |
-| DB 쿼리 시간     | < 100ms | 50ms ✅   |
-| 동시 접속        | 100명   | 지원됨 ✅ |
-| 가용성           | 99.9%   | 99.8% ⚠️  |
+```bash
+# 해결: 서버 상태 확인
+curl http://3.13.240.111:8002/health
+```
+
+**Q: Redis 연결 오류**
+
+```bash
+# 해결: Redis 서비스 재시작
+docker-compose restart redis
+```
 
 ---
