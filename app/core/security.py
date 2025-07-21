@@ -365,8 +365,18 @@ async def verify_jwt_token_with_db(jwt_token: str) -> Optional[Dict[str, Any]]:
             return None
             
     except Exception as e:
-        logger.error(f"❌ Backend JWT 토큰 검증 중 예외 발생: {e}")
-        logger.error(f"❌ 예외 타입: {type(e).__name__}")
+        try:
+            safe_error_message = str(e).encode('ascii', 'replace').decode('ascii')
+            logger.error(f"❌ Backend JWT 토큰 검증 중 예외 발생: {safe_error_message}")
+        except Exception:
+            logger.error("❌ Backend JWT 토큰 검증 중 예외 발생: [인코딩 문제로 메시지 생략]")
+        
+        try:
+            safe_exception_type = type(e).__name__.encode('ascii', 'replace').decode('ascii')
+            logger.error(f"❌ 예외 타입: {safe_exception_type}")
+        except Exception:
+            logger.error("❌ 예외 타입: [인코딩 문제로 생략]")
+            
         return None
 
 
