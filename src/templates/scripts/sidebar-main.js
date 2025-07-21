@@ -948,6 +948,15 @@ const messageQueue = {
       case "restoreResponse":
         await this.handleRestoreResponse(message);
         break;
+      case "checkDOMReady":
+        await this.handleCheckDOMReady(message);
+        break;
+      case "syncUIState":
+        await this.handleSyncUIState(message);
+        break;
+      case "domReadyStatus":
+        // DOM 준비 상태 응답은 무시 (확장 뷰에서만 처리)
+        break;
       default:
         console.warn(`⚠️ 처리되지 않은 명령: ${command}`);
         break;
@@ -3472,20 +3481,31 @@ const messageQueue = {
     }
   },
 
-  // 히스토리 동기화 처리
+  // 히스토리 동기화 처리 (개선)
   async handleSyncHistory(message) {
     console.log("📚 히스토리 동기화 시작");
     
     try {
       const historyData = JSON.parse(message.history);
-      console.log("📚 히스토리 데이터:", historyData);
+      const metadata = message.metadata || {};
+      
+      console.log("📚 히스토리 데이터:", {
+        count: historyData.length,
+        source: metadata.source,
+        timestamp: metadata.timestamp
+      });
 
-      // 히스토리 컨테이너 찾기
-      const historyContainer = document.getElementById("historyContent");
+      // 히스토리 컨테이너 찾기 (재시도 메커니즘 포함)
+      const historyContainer = await this.waitForElement("historyContent", 5000);
       if (!historyContainer) {
         console.warn("⚠️ 히스토리 컨테이너를 찾을 수 없음");
         return;
       }
+
+      // 기존 히스토리와 비교하여 변경사항 확인
+      const currentHistoryHTML = historyContainer.innerHTML;
+      const isEmptyOrLoading = currentHistoryHTML.includes("히스토리를 불러오는 중") || 
+                             currentHistoryHTML.includes("아직 질문 기록이 없습니다");
 
       // 히스토리 항목이 있는지 확인
       if (!historyData || historyData.length === 0) {
@@ -3500,45 +3520,34 @@ const messageQueue = {
         return;
       }
 
-      // 히스토리 헤더 추가
-      const historyHeader = `
-        <div class="history-header">
-          <button class="history-refresh-btn" onclick="refreshHistory()">
-            🔄
-          </button>
-        </div>
-      `;
+      // 히스토리 HTML 생성 (개선된 버전)
+      const historyHTML = this.generateHistoryHTML(historyData);
+      
+      // 애니메이션 효과와 함께 업데이트
+      if (isEmptyOrLoading) {
+        // 빈 상태에서 데이터 로드 시 페이드인 효과
+        historyContainer.style.opacity = '0';
+        historyContainer.innerHTML = historyHTML;
+        
+        // 페이드인 애니메이션
+        requestAnimationFrame(() => {
+          historyContainer.style.transition = 'opacity 0.3s ease-in-out';
+          historyContainer.style.opacity = '1';
+        });
+      } else {
+        // 기존 데이터 업데이트 시 부드러운 전환
+        historyContainer.innerHTML = historyHTML;
+      }
 
-      // 히스토리 HTML 생성
-      const historyHTML = historyData.map(item => {
-        const timestamp = new Date(item.timestamp).toLocaleString('ko-KR');
-        const questionPreview = item.question.length > 50 ? 
-          item.question.substring(0, 50) + '...' : 
-          item.question;
-        const responsePreview = item.response?.substring(0, 100) + '...' || '응답 생성 중...';
-
-        return `
-          <div class="history-item" data-timestamp="${item.timestamp}">
-            <div class="history-question">
-              <div class="history-meta">${timestamp}</div>
-              <div class="question-text">${this.escapeHtml(questionPreview)}</div>
-            </div>
-            <div class="history-response">
-              <div class="response-preview">${this.escapeHtml(responsePreview)}</div>
-            </div>
-            <div class="history-actions">
-              <button class="history-action-btn" onclick="deleteHistoryItem('${item.timestamp}')">
-                🗑️
-              </button>
-            </div>
-          </div>
-        `;
-      }).join('');
-
-      // 히스토리 컨테이너 업데이트
-      historyContainer.innerHTML = historyHeader + historyHTML;
+      // 스크롤 위치 복원 (새로운 항목이 추가된 경우 최상단으로)
+      if (metadata.source === "newItem") {
+        historyContainer.scrollTop = 0;
+      }
 
       console.log("✅ 히스토리 동기화 완료:", historyData.length, "개 항목");
+      
+      // 동기화 완료 이벤트 발생
+      this.dispatchHistorySyncEvent(historyData.length);
       
     } catch (error) {
       console.error("❌ 히스토리 동기화 실패:", error);
@@ -3550,12 +3559,180 @@ const messageQueue = {
           <div class="empty-history">
             <div class="empty-history-icon">⚠️</div>
             <div class="empty-history-message">히스토리를 불러올 수 없습니다</div>
-            <div class="empty-history-submessage">나중에 다시 시도해 주세요</div>
+            <div class="empty-history-submessage">
+              <button onclick="refreshHistory()" class="retry-btn">🔄 다시 시도</button>
+            </div>
           </div>
         `;
       }
     }
   },
+
+  /**
+   * 요소가 DOM에 나타날 때까지 대기 (신규 추가)
+   */
+  async waitForElement(elementId, timeout = 5000) {
+    return new Promise((resolve) => {
+      const startTime = Date.now();
+      
+      const checkElement = () => {
+        const element = document.getElementById(elementId);
+        
+        if (element) {
+          console.log(`✅ 요소 '${elementId}' 찾음 (${Date.now() - startTime}ms)`);
+          resolve(element);
+          return;
+        }
+        
+        if (Date.now() - startTime > timeout) {
+          console.warn(`⚠️ 요소 '${elementId}' 타임아웃 (${timeout}ms)`);
+          resolve(null);
+          return;
+        }
+        
+        // 50ms 후 재시도
+        setTimeout(checkElement, 50);
+      };
+      
+      checkElement();
+    });
+  },
+
+  /**
+   * 히스토리 HTML 생성 (개선된 버전)
+   */
+  generateHistoryHTML(historyData) {
+    // 히스토리 헤더
+    const historyHeader = `
+      <div class="history-header">
+        <div class="history-info">
+          <span class="history-count">${historyData.length}개 항목</span>
+          <span class="history-updated">업데이트: ${new Date().toLocaleTimeString()}</span>
+        </div>
+        <button class="history-refresh-btn" onclick="refreshHistory()" title="새로고침">
+          🔄
+        </button>
+      </div>
+    `;
+
+    // 히스토리 항목들
+    const historyItems = historyData.map((item, index) => {
+      const timestamp = new Date(item.timestamp).toLocaleString('ko-KR');
+      const questionPreview = item.question.length > 60 ? 
+        item.question.substring(0, 60) + '...' : 
+        item.question;
+      const responsePreview = item.response ? 
+        (item.response.substring(0, 100) + '...') : 
+        '응답 생성 중...';
+
+      return `
+        <div class="history-item" data-index="${index}" data-timestamp="${item.timestamp}">
+          <div class="history-question">
+            <div class="history-meta">
+              <span class="history-date">${timestamp}</span>
+              <div class="history-actions">
+                <button class="history-action-btn load-btn" 
+                        onclick="loadHistoryItem(${index})" 
+                        title="응답 보기">
+                  👁️
+                </button>
+                <button class="history-action-btn delete-btn" 
+                        onclick="confirmDeleteHistoryItem(${index})" 
+                        title="삭제">
+                  🗑️
+                </button>
+              </div>
+            </div>
+            <div class="question-text" title="${this.escapeHtml(item.question)}">
+              ${this.escapeHtml(questionPreview)}
+            </div>
+          </div>
+          <div class="history-response">
+            <div class="response-preview" title="${this.escapeHtml(item.response || '')}">
+              ${this.escapeHtml(responsePreview)}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    return historyHeader + historyItems;
+  },
+
+  /**
+   * 히스토리 동기화 이벤트 발생 (신규 추가)
+   */
+  dispatchHistorySyncEvent(itemCount) {
+    const event = new CustomEvent('historySynced', {
+      detail: {
+        itemCount: itemCount,
+        timestamp: Date.now(),
+        source: window.isExpandedView ? 'expandedView' : 'sidebar'
+      }
+    });
+    
+    window.dispatchEvent(event);
+  },
+
+  /**
+   * DOM 준비 상태 확인 (신규 추가)
+   */
+  async handleCheckDOMReady(message) {
+    console.log("🔍 DOM 준비 상태 확인:", message.retryCount);
+    
+    const historyContainer = document.getElementById("historyContent");
+    const responseContainer = document.getElementById("response-content");
+    
+    const isReady = historyContainer && responseContainer;
+    
+    console.log(`📋 DOM 상태:`, {
+      historyContainer: !!historyContainer,
+      responseContainer: !!responseContainer,
+      isReady: isReady
+    });
+    
+    // 준비 완료 응답 전송
+    vscode.postMessage({
+      command: "domReadyStatus",
+      isReady: isReady,
+      retryCount: message.retryCount
+    });
+  },
+
+  /**
+   * UI 상태 동기화 (신규 추가)
+   */
+  async handleSyncUIState(message) {
+    console.log("🎨 UI 상태 동기화:", message.uiState);
+    
+    try {
+      const { activeTab, selectedModel } = message.uiState;
+      
+      // 탭 상태 동기화
+      if (activeTab) {
+        switchTab(activeTab);
+      }
+      
+      // 모델 선택 상태 동기화
+      if (selectedModel && window.selectedModel !== selectedModel) {
+        window.selectedModel = selectedModel;
+        
+        // 모델 탭 UI 업데이트
+        const modelTabs = document.querySelectorAll('.model-tab');
+        modelTabs.forEach(tab => {
+          tab.classList.remove('active');
+          if (tab.getAttribute('data-model') === selectedModel) {
+            tab.classList.add('active');
+          }
+        });
+      }
+      
+      console.log("✅ UI 상태 동기화 완료");
+      
+    } catch (error) {
+      console.error("❌ UI 상태 동기화 실패:", error);
+    }
+  }
 };
 
 // ============================================================================
@@ -5934,4 +6111,16 @@ function insertStructuredCode() {
     insertCode(state.code.content);
     console.log("📝 구조화된 코드 삽입 완료");
   }
+}
+
+// 히스토리 동기화 이벤트 리스너 (전역)
+window.addEventListener('historySynced', (event) => {
+  console.log("📚 히스토리 동기화 완료");
+});
+
+// 히스토리 동기화 확인 함수
+function checkHistorySync() {
+  vscode.postMessage({
+    command: "checkHistorySync",
+  });
 }

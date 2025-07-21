@@ -353,10 +353,10 @@ export class ExtensionManager {
     try {
       const sidebarProvider =
         this.providerRegistry.getProvider<SidebarProvider>("sidebar");
-      // 트리거 이벤트 처리 로직 (메서드가 private이므로 직접 호출 대신 로깅)
+      // 트리거 이벤트를 SidebarProvider로 전달 (public 메서드로 변경됨)
       if (sidebarProvider) {
-        console.log(`🎯 트리거 이벤트 감지: ${event.type}`);
-        // TODO: SidebarProvider에 public 메서드 추가 필요
+        console.log(`🎯 트리거 이벤트 감지: ${event.type}, SidebarProvider로 전달`);
+        await sidebarProvider.handleTriggerEvent(event);
       }
     } catch (error) {
       const errorService = EnhancedErrorService.getInstance();

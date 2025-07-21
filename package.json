@@ -229,6 +229,11 @@
           "default": "http://3.13.240.111:8000/api/v1",
           "description": "HAPA API 서버 주소"
         },
+        "hapa.dbModuleURL": {
+          "type": "string",
+          "default": "http://3.13.240.111:8001",
+          "description": "HAPA DB Module 서버 주소 (히스토리, 사용자 설정 관리)"
+        },
         "hapa.apiKey": {
           "type": "string",
           "default": "",

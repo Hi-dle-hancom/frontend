@@ -1959,17 +1959,32 @@ export class SettingsProvider extends BaseWebviewProvider {
     
     .api-key-group {
       display: flex;
-      gap: 8px;
-      align-items: flex-end;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      margin-bottom: 8px;
     }
     
-    .api-key-input {
+    .api-key-input-wrapper {
       flex: 1;
+      width: 100%;
+      max-width: calc(100% - 140px);  /* 버튼 크기 + gap 고려 */
+    }
+
+    .api-key-input-wrapper .form-input {
+      width: 100%;
     }
     
     .api-key-btn {
+      flex-shrink: 0;
       white-space: nowrap;
-      min-width: 120px;
+      width: 120px;  /* 고정 너비 */
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-left: auto;  /* 오른쪽 끝에 고정 */
     }
     
     /* 로딩 및 메시지 스타일 */
@@ -2255,33 +2270,7 @@ export class SettingsProvider extends BaseWebviewProvider {
             <p class="form-help">AI 설명의 상세도와 스타일을 선택합니다.</p>
             </div>
             
-            <div class="form-group">
-            <label class="form-label">주요 프로젝트 컨텍스트</label>
-              <div class="custom-select" data-select-id="projectContext">
-                <div class="select-button" tabindex="0">
-                  <span class="select-text">웹 개발 - Django, Flask, FastAPI</span>
-                  <span class="select-arrow">▼</span>
-                </div>
-                <div class="select-dropdown">
-                  <div class="select-option selected" data-value="web_development">
-                    <div class="select-option-main">웹 개발</div>
-                    <div class="select-option-desc">Django, Flask, FastAPI</div>
-                  </div>
-                  <div class="select-option" data-value="data_science">
-                    <div class="select-option-main">데이터 사이언스</div>
-                    <div class="select-option-desc">NumPy, Pandas, ML</div>
-                  </div>
-                  <div class="select-option" data-value="automation">
-                    <div class="select-option-main">자동화</div>
-                    <div class="select-option-desc">스크립팅, 업무 자동화</div>
-                  </div>
-                  <div class="select-option" data-value="general_purpose">
-                    <div class="select-option-main">범용 개발</div>
-                    <div class="select-option-desc">다양한 목적</div>
-                  </div>
-                </div>
-              </div>
-            <p class="form-help">주요 개발 분야에 맞는 라이브러리와 패턴을 제안합니다.</p>
+            
           </div>
           
           <div class="form-group">
@@ -2353,15 +2342,15 @@ export class SettingsProvider extends BaseWebviewProvider {
             
             <div class="form-group">
               <label class="form-label">API 키</label>
-            <div class="api-key-group">
-              <div class="api-key-input">
-                <input type="password" id="apiKey" class="form-input" placeholder="API 키를 입력하세요">
-                <p class="form-help">HAPA API 접근을 위한 인증 키입니다.</p>
+              <div class="api-key-group">
+                <div class="api-key-input-wrapper">
+                  <input type="password" id="apiKey" class="form-input" placeholder="API 키를 입력하세요">
+                </div>
+                <button type="button" class="btn btn-secondary api-key-btn" id="generateApiKeyBtn">
+                  🔑 API 키 발급
+                </button>
               </div>
-              <button type="button" class="btn btn-secondary api-key-btn" id="generateApiKeyBtn">
-                🔑 API 키 발급
-              </button>
-            </div>
+              <p class="form-help">HAPA API 접근을 위한 인증 키입니다.</p>
             </div>
             
             <div class="form-group">

@@ -277,13 +277,22 @@ export class TriggerDetector {
    * 개선된 주석 트리거 여부 판단
    */
   private isCommentTrigger(text: string, change: vscode.TextDocumentContentChangeEvent): boolean {
+    console.log("🔍 주석 트리거 검사:", {
+      text: text.substring(0, 100),
+      hasHash: text.includes("#"),
+      hasNewline: text.includes("\n"),
+      length: text.length
+    });
+
     // 단순 # 문자만으로는 트리거하지 않음
     if (!text.includes("#")) {
+      console.log("❌ # 문자 없음");
       return false;
     }
 
     // 줄바꿈으로 끝나는 주석만 트리거 (완성된 주석)
     if (!text.includes("\n")) {
+      console.log("❌ 줄바꿈 없음 (완성되지 않은 주석)");
       return false;
     }
 
@@ -299,10 +308,30 @@ export class TriggerDetector {
     ];
 
     const lines = text.split('\n');
-    return lines.some(line => 
-      line.trim().length > 5 && // 최소 5자 이상
-      commentPatterns.some(pattern => pattern.test(line))
-    );
+    const result = lines.some(line => {
+      const trimmed = line.trim();
+      const hasMinLength = trimmed.length > 5;
+      const matchesPattern = commentPatterns.some(pattern => pattern.test(line));
+      
+      if (trimmed.startsWith('#')) {
+        console.log("🔍 주석 라인 분석:", {
+          line: line,
+          hasMinLength,
+          matchesPattern,
+          patterns: commentPatterns.map(p => ({ pattern: p.toString(), matches: p.test(line) }))
+        });
+      }
+      
+      return hasMinLength && matchesPattern;
+    });
+    
+    if (result) {
+      console.log("✅ 주석 트리거 조건 만족!");
+    } else {
+      console.log("❌ 주석 트리거 조건 불만족");
+    }
+    
+    return result;
   }
 
   /**

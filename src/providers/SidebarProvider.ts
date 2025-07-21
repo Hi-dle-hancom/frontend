@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import { BaseWebviewProvider } from "./BaseWebviewProvider";
-import { TriggerDetector, TriggerEvent } from "../modules/triggerDetector";
+import { TriggerEvent } from "../modules/triggerDetector";
 import { ExtractedPrompt } from "../modules/promptExtractor";
 import { CodeGenerationRequest } from "../modules/apiClient";
 import { SidebarHtmlGenerator } from "../templates/SidebarHtmlGenerator";
@@ -14,7 +14,6 @@ import { ConfigService } from "../services/ConfigService";
  * - DB 연동된 사용자 컨텍스트 사용
  */
 export class SidebarProvider extends BaseWebviewProvider {
-  private triggerDetector: TriggerDetector;
   private selectedModel: string | undefined;
   private configService: ConfigService;
 
@@ -57,9 +56,7 @@ export class SidebarProvider extends BaseWebviewProvider {
     super(extensionUri);
     this.configService = ConfigService.getInstance();
 
-    // TriggerDetector 초기화 및 이벤트 리스너 설정
-    this.triggerDetector = new TriggerDetector();
-    this.triggerDetector.onTrigger(this.handleTriggerEvent.bind(this));
+    // TriggerDetector는 ExtensionManager에서 관리하므로 여기서 제거
 
     // 히스토리 로드 (비동기)
     this.loadHistory().catch(error => {
@@ -247,8 +244,9 @@ export class SidebarProvider extends BaseWebviewProvider {
       }
 
       const config = vscode.workspace.getConfiguration("hapa");
-      const apiBaseURL =
-        config.get<string>("apiBaseURL") || "http://3.13.240.111:8000/api/v1";
+      // DB-Module API 사용으로 변경
+      const dbModuleURL = config.get<string>("dbModuleURL") || "http://3.13.240.111:8001";
+      const apiBaseURL = `${dbModuleURL}/history`;
 
       console.log("🔄 DB 히스토리 저장 시작...");
 
@@ -2230,9 +2228,9 @@ ${previousContent}
   }
 
   /**
-   * TriggerDetector에서 발생한 이벤트 처리
+   * TriggerDetector에서 발생한 이벤트 처리 (public으로 변경)
    */
-  private async handleTriggerEvent(event: TriggerEvent) {
+  public async handleTriggerEvent(event: TriggerEvent) {
     if (!this._view?.webview) {
       return;
     }
@@ -2417,7 +2415,7 @@ ${previousContent}
   }
 
   /**
-   * 확장된 뷰의 메시지 처리
+   * 확장된 뷰의 메시지 처리 (개선)
    */
   private async handleExpandedViewMessage(
     message: any,
@@ -2535,6 +2533,18 @@ ${previousContent}
       case "refreshConnection":
         // 연결 새로고침 (상태 표시용)
         vscode.window.showInformationMessage("연결이 새로고침되었습니다.");
+        return;
+      case "domReadyStatus":
+        // DOM 준비 상태 응답 처리
+        console.log("✅ 확장 뷰 DOM 준비 상태:", message.isReady);
+        if (message.isReady) {
+          // DOM 준비 완료 후 즉시 동기화
+          this.syncExpandedViewState(panel);
+        }
+        return;
+      case "historySynced":
+        // 히스토리 동기화 완료 확인
+        console.log("✅ 확장 뷰 히스토리 동기화 완료 확인");
         return;
     }
   }
@@ -3529,8 +3539,8 @@ ${previousContent}
       }
 
       const config = vscode.workspace.getConfiguration("hapa");
-      const apiBaseURL =
-        config.get<string>("apiBaseURL") || "http://3.13.240.111:8000/api/v1";
+      // DB-Module API 사용으로 변경
+      const dbModuleURL = config.get<string>("dbModuleURL") || "http://3.13.240.111:8001";
       const accessToken = this.getJWTToken();
 
       if (!accessToken) {
@@ -3542,7 +3552,7 @@ ${previousContent}
 
       console.log("⚙️ SidebarProvider: DB에서 사용자 설정 조회 시작");
 
-      const response = await fetch(`${apiBaseURL}/users/settings`, {
+      const response = await fetch(`${dbModuleURL}/settings/me`, {
         method: "GET",
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -3771,6 +3781,189 @@ ${previousContent}
     } catch (error) {
       console.error("❌ SidebarProvider getUserProjectContext 오류:", error);
       return "범용";
+    }
+  }
+
+  /**
+   * 확장 뷰 초기화 및 상태 동기화 (강화)
+   */
+  private async initializeExpandedView(panel: vscode.WebviewPanel) {
+    console.log("🔄 확장 뷰 초기화 시작");
+    
+    // 확장 뷰 플래그 전송
+    await panel.webview.postMessage({
+      command: "setExpandedViewFlag",
+      isExpandedView: true
+    });
+    
+    // DOM 준비 대기
+    let retryCount = 0;
+    const maxRetries = 15; // 재시도 횟수 증가
+    const retryInterval = 200; // 간격 단축
+
+    const waitForExpandedViewReady = async (): Promise<boolean> => {
+      return new Promise((resolve) => {
+        const checkReady = async () => {
+          retryCount++;
+          console.log(`🔍 확장 뷰 DOM 준비 확인 (${retryCount}/${maxRetries})`);
+          
+          try {
+            // 확장 뷰 준비 상태 확인
+            await panel.webview.postMessage({
+              command: "checkExpandedViewReady",
+              retryCount: retryCount,
+              maxRetries: maxRetries
+            });
+            
+            // 잠시 대기 후 동기화 시도
+            setTimeout(() => {
+              this.syncExpandedViewState(panel);
+              resolve(true);
+            }, 100);
+            
+          } catch (error) {
+            console.warn(`⚠️ 확장 뷰 준비 확인 실패 (${retryCount}/${maxRetries}):`, error);
+            
+            if (retryCount < maxRetries) {
+              setTimeout(checkReady, retryInterval);
+            } else {
+              console.error("❌ 확장 뷰 준비 확인 최대 재시도 초과");
+              // 실패해도 강제 동기화 시도
+              setTimeout(() => {
+                this.syncExpandedViewState(panel);
+              }, 500);
+              resolve(false);
+            }
+          }
+        };
+        
+        // 초기 지연 후 시작
+        setTimeout(checkReady, 300);
+      });
+    };
+
+    // 확장 뷰 준비 완료 대기
+    await waitForExpandedViewReady();
+  }
+
+  /**
+   * 확장 뷰 상태 동기화 (강화된 에러 처리)
+   */
+  private async syncExpandedViewState(panel: vscode.WebviewPanel) {
+    console.log("🔄 확장 뷰 상태 동기화 시작");
+    
+    try {
+      // 현재 히스토리 데이터 준비
+      const syncData = {
+        history: JSON.stringify(this.questionHistory),
+        historyCount: this.questionHistory.length,
+        timestamp: Date.now()
+      };
+
+      console.log("📚 확장 뷰 히스토리 동기화:", {
+        count: syncData.historyCount,
+        dataSize: syncData.history.length,
+        sampleData: this.questionHistory.slice(0, 2).map(h => ({
+          question: h.question.substring(0, 30) + '...',
+          timestamp: h.timestamp
+        }))
+      });
+
+      // 1. 확장 뷰 식별자 설정
+      await panel.webview.postMessage({
+        command: "setExpandedViewMode",
+        isExpanded: true
+      });
+
+      // 2. 히스토리 동기화 (재시도 메커니즘 포함)
+      let historySync = false;
+      for (let i = 0; i < 3; i++) {
+        try {
+          await panel.webview.postMessage({
+            command: "syncHistory",
+            history: syncData.history,
+            metadata: {
+              count: syncData.historyCount,
+              timestamp: syncData.timestamp,
+              source: "expandedViewInit",
+              attempt: i + 1
+            }
+          });
+          historySync = true;
+          console.log(`✅ 확장 뷰 히스토리 동기화 성공 (${i + 1}번째 시도)`);
+          break;
+        } catch (error) {
+          console.warn(`⚠️ 히스토리 동기화 실패 (${i + 1}/3):`, error);
+          if (i < 2) {
+            await new Promise(resolve => setTimeout(resolve, 300 * (i + 1)));
+          }
+        }
+      }
+
+      if (!historySync) {
+        console.error("❌ 확장 뷰 히스토리 동기화 최종 실패");
+      }
+
+      // 3. 코드 맥락 정보 동기화
+      const contextInfo = this.getCodeContextInfo();
+      await panel.webview.postMessage({
+        command: "updateCodeContext",
+        context: contextInfo,
+      });
+
+      // 4. 현재 응답 상태 동기화
+      const shouldRestoreResponse = this.currentResponseState.isValid && 
+                                   this.currentResponseState.response &&
+                                   this.currentResponseState.timestamp &&
+                                   (Date.now() - this.currentResponseState.timestamp) < 30 * 60 * 1000;
+
+      if (shouldRestoreResponse) {
+        console.log("🔄 확장 뷰에 마지막 응답 상태 동기화");
+        await panel.webview.postMessage({
+          command: "restoreResponse",
+          response: this.currentResponseState.response,
+        });
+      } else {
+        console.log("📤 확장 뷰에 빈 상태 초기화");
+        await panel.webview.postMessage({
+          command: "initializeEmptyStates",
+        });
+      }
+
+      // 5. UI 상태 동기화
+      await panel.webview.postMessage({
+        command: "syncUIState",
+        uiState: {
+          activeTab: "response",
+          selectedModel: this.selectedModel || "autocomplete",
+          timestamp: Date.now(),
+          isExpandedView: true
+        }
+      });
+
+      // 6. 동기화 완료 확인
+      await panel.webview.postMessage({
+        command: "syncComplete",
+        summary: {
+          historyItems: syncData.historyCount,
+          hasResponse: shouldRestoreResponse,
+          timestamp: Date.now()
+        }
+      });
+
+      console.log("✅ 확장 뷰 상태 동기화 완료");
+      
+    } catch (error) {
+      console.error("❌ 확장 뷰 상태 동기화 실패:", error);
+      
+      // 실패 시 기본 상태로 초기화 시도
+      setTimeout(() => {
+        console.log("🔄 확장 뷰 기본 상태 초기화 시도");
+        panel.webview.postMessage({
+          command: "initializeEmptyStates",
+          fallback: true
+        });
+      }, 1000);
     }
   }
 }
