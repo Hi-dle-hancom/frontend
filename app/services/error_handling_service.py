@@ -788,6 +788,37 @@ class ErrorHandlingService:
                 max_retries=3,
             ),
         }
+    
+    async def log_error(
+        self,
+        error_code: StandardErrorCode,
+        message: str,
+        user_id: Optional[str] = None,
+        request_data: Optional[Dict[str, Any]] = None,
+        severity: ErrorSeverity = ErrorSeverity.MEDIUM,
+        correlation_id: Optional[str] = None,
+    ) -> None:
+        """오류 로깅 메서드"""
+        try:
+            # 오류 통계 업데이트
+            self._update_error_stats(error_code, user_id, severity)
+            
+            # 로그 출력
+            logger.error(
+                f"Error logged: {error_code.value} - {message}",
+                extra={
+                    "error_code": error_code.value,
+                    "message": message,
+                    "user_id": user_id,
+                    "severity": severity.value,
+                    "request_data": request_data or {},
+                    "correlation_id": correlation_id,
+                    "timestamp": datetime.now().isoformat(),
+                }
+            )
+            
+        except Exception as e:
+            logger.error(f"Error logging failed: {e}")    
 
 
 # 전역 서비스 인스턴스
