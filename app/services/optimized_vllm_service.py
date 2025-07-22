@@ -216,7 +216,7 @@ class FastVLLMClient:
             ) as session:
                 
                 async with session.post(
-                    f"{self.server_url}/v1/completions",
+                    f"{self.server_url}/generate/stream",
                     json=vllm_request,
                     headers={"Content-Type": "application/json"}
                 ) as response:

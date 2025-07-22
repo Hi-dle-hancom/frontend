@@ -553,7 +553,7 @@ Python 코드:
                 await self.connect()
 
             async with self.session.post(
-                f"{self.base_url}/v1/completions",
+                f"{self.base_url}/generate/stream",
                 json=payload,
                 headers={"Content-Type": "application/json"}
             ) as response:
