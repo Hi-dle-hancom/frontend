@@ -420,7 +420,7 @@ class VLLMIntegrationService:
             if self.connection_retries < self.max_retries:
                 await asyncio.sleep(2 ** self.connection_retries)  # 지수 백오프
                 await self.connect()
-        else:
+            else:
                 raise ConnectionError("vLLM 서버 연결 최대 재시도 횟수 초과")
 
     async def disconnect(self):
@@ -469,7 +469,7 @@ Python 코드:
         else:
             return base_prompt
 
-    def _prepare_vllm_payload(self, request: CodeGenerationRequest, complexity, user_preferences: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def _prepare_vllm_payload(self, request: CodeGenerationRequest, complexity, user_id: str, user_preferences: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """vLLM 요청 페이로드 준비 (개인화 정보 반영)"""
         
         # 사용자 선호도에 따른 파라미터 조정
@@ -517,16 +517,15 @@ Python 코드:
         # 개인화된 프롬프트 구성
         enhanced_prompt = self._build_enhanced_prompt(request, user_preferences)
         
+        # vLLM 서버가 기대하는 스키마에 맞춰 페이로드 구성
         payload = {
-            "model": "CodeLlama-7b-Python-hf",
+            "user_id": int(user_id.split("_")[-1]) if user_id and "_" in user_id else 1,  # user_id 추출 또는 기본값
             "prompt": enhanced_prompt,
+            "model_type": self._map_model_type_to_vllm(request.model_type),
+            "user_select_options": user_preferences or {},  # 필수 필드
             "temperature": temperature,
             "max_tokens": max_tokens,
             "top_p": top_p,
-            "frequency_penalty": 0.1,
-            "presence_penalty": 0.1,
-            "stream": True,
-            "stop": ["[DONE]"]
         }
         
         if user_preferences:
@@ -535,6 +534,23 @@ Python 코드:
             logger.debug(f"기본 vLLM 페이로드 준비 완료 (복잡도: {complexity.value})")
         
         return payload
+
+    def _map_model_type_to_vllm(self, model_type) -> str:
+        """Backend ModelType을 vLLM 서버의 model_type으로 매핑"""
+        from app.schemas.code_generation import ModelType
+        
+        mapping = {
+            ModelType.CODE_GENERATION: "prompt",
+            ModelType.CODE_COMPLETION: "autocomplete",
+            ModelType.CODE_EXPLANATION: "comment",
+            ModelType.BUG_FIX: "error_fix",
+            ModelType.CODE_OPTIMIZATION: "prompt",
+            ModelType.UNIT_TEST_GENERATION: "prompt",
+            ModelType.CODE_REVIEW: "comment",
+            ModelType.DOCUMENTATION: "comment"
+        }
+        
+        return mapping.get(model_type, "prompt")
 
     async def generate_code_streaming(
         self,
@@ -557,7 +573,7 @@ Python 코드:
             )
             
             # 개인화된 요청 준비
-            payload = self._prepare_vllm_payload(request, complexity, user_preferences)
+            payload = self._prepare_vllm_payload(request, complexity, user_id, user_preferences)
             
             personalization_info = f"(개인화: {bool(user_preferences)})" if user_preferences else "(기본 모드)"
             logger.info(f"구조화된 스트리밍 요청 시작 {personalization_info} (복잡도: {complexity.value})")
@@ -708,18 +724,66 @@ Python 코드:
             personalization_msg = f" (개인화 적용: {user_preferences.get('skill_level', 'unknown')})" if user_preferences else ""
             logger.info(f"구조화된 스트리밍 완료{personalization_msg} (응답시간: {response_time:.2f}초)")
 
+        except aiohttp.ClientConnectorError as e:
+            self.failed_requests += 1
+            response_time = time.time() - start_time
+            self._update_metrics(response_time, False)
+            
+            logger.error(f"❌ vLLM 서버 연결 실패 (ClientConnectorError): {e}")
+            logger.error(f"❌ 시도한 URL: {self.base_url}/generate/stream")
+            logger.error(f"❌ 연결 상태: is_connected={self.is_connected}")
+            
+            yield {
+                "type": "error", 
+                "content": f"vLLM 서버 연결 실패: {str(e)}",
+                "is_complete": True,
+                "error": f"ClientConnectorError: {str(e)}",
+                "personalized": bool(user_preferences)
+            }
+        except aiohttp.ClientResponseError as e:
+            self.failed_requests += 1
+            response_time = time.time() - start_time
+            self._update_metrics(response_time, False)
+            
+            logger.error(f"❌ vLLM API 응답 오류: {e.status} - {e.message}")
+            logger.error(f"❌ URL: {e.request_info.url}")
+            
+            yield {
+                "type": "error",
+                "content": f"vLLM API 응답 오류: {e.status}",
+                "is_complete": True,
+                "error": f"ClientResponseError: {str(e)}",
+                "personalized": bool(user_preferences)
+            }
+        except asyncio.TimeoutError as e:
+            self.failed_requests += 1
+            response_time = time.time() - start_time
+            self._update_metrics(response_time, False)
+            
+            logger.error(f"❌ vLLM 서버 연결 타임아웃: {e}")
+            logger.error(f"❌ 시도한 URL: {self.base_url}/generate/stream")
+            
+            yield {
+                "type": "error",
+                "content": f"vLLM 서버 연결 타임아웃: {str(e)}",
+                "is_complete": True,
+                "error": f"TimeoutError: {str(e)}",
+                "personalized": bool(user_preferences)
+            }
         except Exception as e:
             self.failed_requests += 1
             response_time = time.time() - start_time
             self._update_metrics(response_time, False)
             
-            logger.error(f"구조화된 스트리밍 생성 오류: {e}")
+            logger.error(f"❌ 구조화된 스트리밍 생성 오류: {type(e).__name__}: {e}")
+            logger.error(f"❌ vLLM URL: {self.base_url}")
+            logger.error(f"❌ 연결 상태: is_connected={self.is_connected}")
             
             yield {
                 "type": "error",
                 "content": f"코드 생성 중 오류가 발생했습니다: {str(e)}",
                 "is_complete": True,
-                "error": str(e),
+                "error": f"{type(e).__name__}: {str(e)}",
                 "personalized": bool(user_preferences)
             }
 
