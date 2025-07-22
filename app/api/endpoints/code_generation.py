@@ -711,7 +711,7 @@ async def generate_code_stream(
     background_tasks: BackgroundTasks,
     enhanced: bool = Query(False, description="Enhanced 모드 활성화 (개인화+보안)"),
     authorization: str = Header(None, description="JWT Bearer 토큰 (Enhanced 모드 전용)"),
-    http_request: Request = None,
+    # http_request: Request = None,
     api_key: str = Depends(get_api_key),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
@@ -750,7 +750,7 @@ async def generate_code_stream(
         # 사용자 개인화 설정 조회
         user_preferences = await _get_user_preferences(
             access_token, 
-            getattr(http_request, 'userProfile', None) if http_request else None,
+            None,  # http_request 의존성 완전 제거
             user_id
         )
 
@@ -855,7 +855,7 @@ async def generate_code(
     background_tasks: BackgroundTasks,
     enhanced: bool = Query(False, description="Enhanced 모드 활성화 (개인화+보안)"),
     authorization: str = Header(None, description="JWT Bearer 토큰 (Enhanced 모드 전용)"),
-    http_request: Request = None,
+    # http_request: Request = None,
     api_key: str = Depends(get_api_key),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
@@ -891,7 +891,7 @@ async def generate_code(
         # 사용자 개인화 설정 조회
         user_preferences = await _get_user_preferences(
             access_token, 
-            getattr(http_request, 'userProfile', None) if http_request else None,
+            None,  # http_request 의존성 완전 제거
             user_id
         )
 
