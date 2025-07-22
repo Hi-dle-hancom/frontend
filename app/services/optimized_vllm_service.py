@@ -179,6 +179,7 @@ class FastVLLMClient:
         """지연 연결 생성"""
         if self.connector is None:
             self.connector = aiohttp.TCPConnector(
+                ssl=False,
                 limit=20,           # 동시 연결 수
                 limit_per_host=10,  # 호스트당 연결 수
                 ttl_dns_cache=300,  # DNS 캐시
@@ -303,7 +304,11 @@ class OptimizedVLLMService:
     async def check_health(self) -> Dict[str, Any]:
         """빠른 헬스 체크"""
         try:
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
+            connector = aiohttp.TCPConnector(ssl=False)
+            async with aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=5),
+                connector=connector
+            ) as session:
                 async with session.get(f"{self.client.server_url}/health") as response:
                     if response.status == 200:
                         data = await response.json()

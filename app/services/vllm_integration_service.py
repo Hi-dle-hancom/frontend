@@ -389,7 +389,20 @@ class VLLMIntegrationService:
         """vLLM 서버 연결"""
         if self.session is None:
             timeout = aiohttp.ClientTimeout(total=30)
-            self.session = aiohttp.ClientSession(timeout=timeout)
+            connector = aiohttp.TCPConnector(
+                ssl=False,  # SSL 완전 비활성화
+                limit=100,
+                limit_per_host=30,
+                ttl_dns_cache=300,
+                use_dns_cache=True,
+                keepalive_timeout=30,
+                enable_cleanup_closed=True
+            )
+        
+            self.session = aiohttp.ClientSession(
+                timeout=timeout,
+                connector=connector
+            )
         
         try:
             async with self.session.get(f"{self.base_url}/health") as response:
