@@ -133,10 +133,16 @@ async def generate_api_key(
                 ]
             )
             
+            try:
+                safe_api_key_prefix = api_key[:10].encode('ascii', 'replace').decode('ascii')
+                api_key_prefix = safe_api_key_prefix
+            except Exception:
+                api_key_prefix = "[encoding_error]"
+
             log_user_action(
                 "API 키 발급 성공",
                 user_data.email,
-                details={"api_key_prefix": api_key[:10]}
+                details={"api_key_prefix": api_key_prefix}  # ✅ 안전한 변수 사용
             )
             
             return {

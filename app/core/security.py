@@ -32,8 +32,12 @@ def validate_jwt_configuration():
     logger.info(f"🔐 Backend JWT 설정 초기화")
     logger.info(f"🔍 환경: {environment}")
     logger.info(f"🔍 JWT_SECRET_KEY 길이: {len(jwt_key)}")
-    logger.info(f"🔍 JWT_SECRET_KEY prefix: {jwt_key[:20]}...")
-    
+    try:
+        safe_key_prefix = jwt_key[:20].encode('ascii', 'replace').decode('ascii')
+        logger.info(f"🔍 JWT_SECRET_KEY prefix: {safe_key_prefix}...")
+    except Exception:
+        logger.info("🔍 JWT_SECRET_KEY prefix: [인코딩 문제로 생략]")
+            
     if environment == "production" and len(jwt_key) < 32:
         logger.error(f"🚨 [PRODUCTION] JWT_SECRET_KEY가 너무 짧습니다! 현재: {len(jwt_key)}자, 최소: 32자")
         raise ValueError(f"Production 환경에서 JWT_SECRET_KEY는 최소 32자 이상이어야 합니다.")
@@ -271,7 +275,11 @@ class APIKeyManager:
                         not api_key_model.expires_at or 
                         api_key_model.expires_at > datetime.now()
                     ):
-                        logger.info(f"기존 사용자 API 키 사용: {email} - {api_key[:20]}...")
+                        try:
+                            safe_api_key_prefix = api_key[:20].encode('ascii', 'replace').decode('ascii')
+                            logger.info(f"기존 사용자 API 키 사용: {email} - {safe_api_key_prefix}...")
+                        except Exception:
+                            logger.info(f"기존 사용자 API 키 사용: {email} - [인코딩 문제로 생략]...")
                         return api_key
             
             # 새로운 API 키 생성 (실제 DB 사용자 확인 후)
@@ -341,7 +349,12 @@ async def verify_jwt_token_with_db(jwt_token: str) -> Optional[Dict[str, Any]]:
         # 🔍 디버깅: Backend JWT 설정 로그
         logger.info(f"🔍 Backend JWT 검증 시작")
         logger.info(f"🔍 Backend JWT_SECRET_KEY 길이: {len(settings.JWT_SECRET_KEY)}")
-        logger.info(f"🔍 Backend JWT_SECRET_KEY prefix: {settings.JWT_SECRET_KEY[:20]}...")
+        try:
+            safe_secret_prefix = settings.JWT_SECRET_KEY[:20].encode('ascii', 'replace').decode('ascii')
+            logger.info(f"🔍 Backend JWT_SECRET_KEY prefix: {safe_secret_prefix}...")
+        except Exception:
+            logger.info("🔍 Backend JWT_SECRET_KEY prefix: [인코딩 문제로 생략]")
+
         logger.info(f"🔍 검증할 토큰 길이: {len(jwt_token)}")
         try:
             safe_token_prefix = jwt_token[:50].encode('ascii', 'replace').decode('ascii')
@@ -410,16 +423,10 @@ async def get_current_api_key(
         # JWT 토큰 블랙리스트 확인
         if BLACKLIST_ENABLED:
             try:
-                is_blacklisted = await token_blacklist_service.is_blacklisted(api_key)
-                if is_blacklisted:
-                    logger.warning(f"블랙리스트된 토큰 접근 시도: {api_key[:20]}...")
-                    raise HTTPException(
-                        status_code=401,
-                        detail="토큰이 무효화되었습니다 (로그아웃됨)",
-                        headers={"WWW-Authenticate": "Bearer"},
-                    )
-            except Exception as e:
-                logger.error(f"토큰 블랙리스트 확인 실패: {e}")
+                safe_api_key_prefix = api_key[:20].encode('ascii', 'replace').decode('ascii')
+                logger.warning(f"블랙리스트된 토큰 접근 시도: {safe_api_key_prefix}...")
+            except Exception:
+                logger.warning("블랙리스트된 토큰 접근 시도: [인코딩 문제로 토큰 생략]...")
 
         # DB 모듈에서 JWT 토큰 검증
         user_info = await verify_jwt_token_with_db(api_key)
@@ -483,7 +490,7 @@ async def get_current_user_from_jwt(
         print("bearer_token", safe_token_info)
     except Exception:
         print("bearer_token", "[인코딩 문제로 토큰 정보 생략]")
-        
+
     jwt_token = bearer_token.credentials
     
     # 블랙리스트 확인

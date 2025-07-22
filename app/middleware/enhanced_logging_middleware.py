@@ -227,8 +227,12 @@ class EnhancedLoggingMiddleware(BaseHTTPMiddleware):
         # API Key 헤더에서 추출
         api_key = request.headers.get("x-api-key", "")
         if api_key:
-            # API 키에서 사용자 정보 추출
-            user_id = f"api_user_{api_key[:8]}"
+            # API 키에서 사용자 정보 추출 (안전한 인코딩)
+            try:
+                safe_api_key_prefix = api_key[:8].encode('ascii', 'replace').decode('ascii')
+                user_id = f"api_user_{safe_api_key_prefix}"
+            except Exception:
+                user_id = "api_user_[encoding_error]"
             user_tier = "standard"
 
         return user_id, user_tier
