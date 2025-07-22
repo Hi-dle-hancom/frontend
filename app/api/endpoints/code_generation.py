@@ -707,11 +707,10 @@ async def get_available_models(api_key: str = Depends(get_api_key)):
 @router.post("/generate/stream", summary="실시간 스트리밍 코드 생성 (Enhanced 통합)")
 @limiter.limit("20/minute")
 async def generate_code_stream(
-    request: CodeGenerationRequest,
+    code_request: CodeGenerationRequest,
     background_tasks: BackgroundTasks,
     enhanced: bool = Query(False, description="Enhanced 모드 활성화 (개인화+보안)"),
     authorization: str = Header(None, description="JWT Bearer 토큰 (Enhanced 모드 전용)"),
-    # http_request: Request = None,
     api_key: str = Depends(get_api_key),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
@@ -750,7 +749,7 @@ async def generate_code_stream(
         # 사용자 개인화 설정 조회
         user_preferences = await _get_user_preferences(
             access_token, 
-            None,  # http_request 의존성 완전 제거
+            None,  # userProfile removed
             user_id
         )
 
@@ -760,9 +759,9 @@ async def generate_code_stream(
             f"{'Enhanced ' if enhanced else ''}스트리밍 코드 생성 요청",
             extra={
                 "user_id": user_id,
-                "model_type": request.model_type.value,
-                "prompt_length": len(request.prompt),
-                "has_context": bool(request.context),
+                "model_type": code_request.model_type.value,
+                "prompt_length": len(code_request.prompt),
+                "has_context": bool(code_request.context),
                 "enhanced_mode": enhanced,
                 "has_jwt_token": bool(access_token),
                 "user_preferences": user_preferences is not None,
@@ -795,14 +794,14 @@ async def generate_code_stream(
                 # Enhanced 모드에서는 개인화된 프롬프트 적용
                 if enhanced and user_preferences:
                     # 사용자 선호도에 따른 요청 최적화
-                    optimized_request = await _optimize_request_for_user(request, user_preferences)
+                    optimized_request = await _optimize_request_for_user(code_request, user_preferences)
                     # vLLM 서비스에 개인화 정보 전달
                     async for chunk in vllm_service.generate_code_streaming(optimized_request, user_id, user_preferences):
                         # vLLM에서 이미 개인화 메타데이터가 포함되어 있음
                         yield f"data: {json.dumps(chunk)}\n\n"
                 else:
                     # 🚀 기본 모드에서도 최적화 적용 (복잡도 분석 + 동적 파라미터)
-                    optimized_request = _apply_performance_optimization(request)
+                    optimized_request = _apply_performance_optimization(code_request)
                     async for chunk in vllm_service.generate_code_streaming(optimized_request, user_id):
                         yield f"data: {json.dumps(chunk)}\n\n"
 
@@ -819,7 +818,7 @@ async def generate_code_stream(
         background_tasks.add_task(
             _log_generation_usage,
             user_id,
-            request.model_type.value,
+            code_request.model_type.value,
             "streaming",
             enhanced=enhanced,
             has_preferences=user_preferences is not None
@@ -851,11 +850,10 @@ async def generate_code_stream(
 )
 @limiter.limit("15/minute")
 async def generate_code(
-    request: CodeGenerationRequest,
+    code_request: CodeGenerationRequest,
     background_tasks: BackgroundTasks,
     enhanced: bool = Query(False, description="Enhanced 모드 활성화 (개인화+보안)"),
     authorization: str = Header(None, description="JWT Bearer 토큰 (Enhanced 모드 전용)"),
-    # http_request: Request = None,
     api_key: str = Depends(get_api_key),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
@@ -891,7 +889,7 @@ async def generate_code(
         # 사용자 개인화 설정 조회
         user_preferences = await _get_user_preferences(
             access_token, 
-            None,  # http_request 의존성 완전 제거
+            None,  # userProfile removed
             user_id
         )
 
@@ -901,8 +899,8 @@ async def generate_code(
             f"{'Enhanced ' if enhanced else ''}동기식 코드 생성 요청",
             extra={
                 "user_id": user_id,
-                "model_type": request.model_type.value,
-                "prompt_length": len(request.prompt),
+                "model_type": code_request.model_type.value,
+                "prompt_length": len(code_request.prompt),
                 "enhanced_mode": enhanced,
                 "has_jwt_token": bool(access_token),
                 "user_preferences": user_preferences is not None,
@@ -934,14 +932,14 @@ async def generate_code(
         # 코드 생성 실행 (Enhanced 개인화 적용)
         if enhanced and user_preferences:
             # 사용자 선호도에 따른 요청 최적화
-            optimized_request = await _optimize_request_for_user(request, user_preferences)
+            optimized_request = await _optimize_request_for_user(code_request, user_preferences)
             response = await vllm_service.generate_code_sync(optimized_request, user_id, user_preferences)
             
             # Enhanced 모드에서 품질 평가
             quality_score = await _evaluate_code_quality(response.generated_code, user_preferences)
         else:
             # 🚀 기본 모드에서도 최적화 적용 (복잡도 분석 + 동적 파라미터)
-            optimized_request = _apply_performance_optimization(request)
+            optimized_request = _apply_performance_optimization(code_request)
             response = await vllm_service.generate_code_sync(optimized_request, user_id)
 
         # 처리 시간 계산
@@ -992,7 +990,7 @@ async def generate_code(
         background_tasks.add_task(
             _log_generation_usage,
             user_id,
-            request.model_type.value,
+            code_request.model_type.value,
             "sync",
             response.success,
             processing_time,
