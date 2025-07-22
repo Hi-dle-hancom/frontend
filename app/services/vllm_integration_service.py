@@ -624,7 +624,7 @@ Python 코드:
                                     "metadata": {
                                         "chunk_type": "code",
                                         "complexity": complexity.value,
-                                        "parsing_confidence": parsed_response["metadata"]["parsing_confidence"],
+                                        "parsing_confidence": parsed_response.get("metadata", {}).get("parsing_confidence", 0.8),
                                         "personalized": bool(user_preferences),
                                         "user_preferences": user_preferences if user_preferences else {}
                                     }
@@ -637,7 +637,7 @@ Python 코드:
                                 "is_complete": True,
                                 "metadata": {
                                     **self.adaptive_buffer.get_metrics(),
-                                    **parsed_response["metadata"],
+                                    **parsed_response.get("metadata", {}),
                                     "personalized": bool(user_preferences),
                                     "personalization_applied": user_preferences if user_preferences else None
                                 }
@@ -826,7 +826,7 @@ Python 코드:
                 model_used="vllm",
                 processing_time=time.time() - start_time,
                 token_usage={"total_tokens": len(accumulated_content.split())},
-                confidence_score=parsed_response["metadata"]["parsing_confidence"]
+                confidence_score=parsed_response.get("metadata", {}).get("parsing_confidence", 0.8)
             )
             
             # 개인화 메타데이터 추가
