@@ -869,13 +869,36 @@ Python 코드:
     async def health_check(self) -> bool:
         """헬스 체크"""
         try:
+            logger.info(f"🔍 vLLM 헬스 체크 시작: {self.base_url}")
+            
             if not self.session:
+                logger.info("세션이 없어서 새로 연결합니다")
                 await self.connect()
             
-            async with self.session.get(f"{self.base_url}/health") as response:
-                return response.status == 200
+            health_url = f"{self.base_url}/health"
+            logger.info(f"🔍 요청 URL: {health_url}")
+            
+            async with self.session.get(health_url) as response:
+                status = response.status
+                logger.info(f"🔍 vLLM 헬스 체크 응답: {status}")
+                
+                if status == 200:
+                    response_text = await response.text()
+                    logger.info(f"✅ vLLM 서버 정상: {response_text}")
+                    return True
+                else:
+                    logger.warning(f"❌ vLLM 서버 응답 오류: {status}")
+                    return False
+                    
+        except aiohttp.ClientConnectorError as e:
+            logger.error(f"❌ vLLM 서버 연결 실패 (ClientConnectorError): {e}")
+            logger.error(f"❌ 시도한 URL: {self.base_url}/health")
+            return False
+        except asyncio.TimeoutError as e:
+            logger.error(f"❌ vLLM 서버 연결 타임아웃: {e}")
+            return False
         except Exception as e:
-            logger.error(f"헬스 체크 실패: {e}")
+            logger.error(f"❌ vLLM 헬스 체크 실패: {type(e).__name__}: {e}")
             return False
 
 # 호환성을 위한 별칭
