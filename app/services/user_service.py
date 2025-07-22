@@ -122,9 +122,17 @@ class UserService:
                 logger.info("🔍 Access Token prefix: [인코딩 문제로 생략]")
 
             async with httpx.AsyncClient(timeout=self.timeout) as client:
+                # 안전한 JWT 토큰 헤더 생성
+                try:
+                    # JWT 토큰을 안전하게 ASCII로 인코딩
+                    safe_access_token = access_token.encode('ascii', 'replace').decode('ascii')
+                except Exception:
+                    # 인코딩 실패 시 원본 토큰 사용 (httpx가 자동 처리)
+                    safe_access_token = access_token
+                
                 response = await client.get(
                     f"{self.db_module_url}/users/me",
-                    headers={"Authorization": f"Bearer {access_token}"},
+                    headers={"Authorization": f"Bearer {safe_access_token}"},
                 )
 
                 logger.info(f"🔍 DB Module 응답 상태코드: {response.status_code}")

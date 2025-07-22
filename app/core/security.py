@@ -423,19 +423,25 @@ async def get_current_api_key(
         # JWT 토큰 블랙리스트 확인
         if BLACKLIST_ENABLED:
             try:
-                safe_api_key_prefix = api_key[:20].encode('ascii', 'replace').decode('ascii')
-                logger.warning(f"블랙리스트된 토큰 접근 시도: {safe_api_key_prefix}...")
-            except Exception:
-                logger.warning("블랙리스트된 토큰 접근 시도: [인코딩 문제로 토큰 생략]...")
+                is_blacklisted = await token_blacklist_service.is_blacklisted(api_key)
+                if is_blacklisted:
+                    try:
+                        safe_api_key_prefix = api_key[:20].encode('ascii', 'replace').decode('ascii')
+                        logger.warning(f"블랙리스트된 토큰 접근 시도: {safe_api_key_prefix}...")
+                    except Exception:
+                        logger.warning("블랙리스트된 토큰 접근 시도: [인코딩 문제로 토큰 생략]...")
+                    raise HTTPException(
+                        status_code=401,
+                        detail="토큰이 무효화되었습니다 (로그아웃됨)",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.error(f"토큰 블랙리스트 확인 실패: {e}")
 
         # DB 모듈에서 JWT 토큰 검증
         user_info = await verify_jwt_token_with_db(api_key)
-        if not user_info:
-            raise HTTPException(
-                status_code=401, 
-                detail="유효하지 않거나 만료된 JWT 토큰입니다.",
-                headers={"WWW-Authenticate": "Bearer"}
-            )
         
         # JWT 토큰용 가상 APIKeyModel 생성
         return APIKeyModel(
