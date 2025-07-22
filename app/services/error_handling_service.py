@@ -808,7 +808,7 @@ class ErrorHandlingService:
                 f"Error logged: {error_code.value} - {message}",
                 extra={
                     "error_code": error_code.value,
-                    "message": message,
+                    "error_message": message,
                     "user_id": user_id,
                     "severity": severity.value,
                     "request_data": request_data or {},
