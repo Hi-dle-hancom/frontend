@@ -113,11 +113,17 @@ async def fetch_user_settings_from_db(user_id: str, access_token: str) -> Option
         return None
 
 
-def map_db_settings_to_ai_preferences(db_settings: Dict[str, Any]) -> Dict[str, Any]:
+def map_db_settings_to_ai_preferences(db_settings) -> Dict[str, Any]:
     """DB 설정을 AI 개인화 선호도로 매핑"""
     try:
         # DB 설정 옵션에서 사용자 선호도 추출
-        options = db_settings.get('options', [])
+        if isinstance(db_settings, list):
+            options = db_settings  # 리스트인 경우 그대로 사용
+        elif isinstance(db_settings, dict):
+            options = db_settings.get('options', [])  # 딕셔너리인 경우 options 키에서 추출
+        else:
+            logger.warning(f"예상하지 못한 db_settings 타입: {type(db_settings)}")
+            options = []
         
         # 기본값 설정
         preferences = {
@@ -735,7 +741,7 @@ async def generate_code_stream(
     - 스트림 종료: `data: [DONE]\\n\\n`
     """
 
-    user_id = current_user.get("user_id", "anonymous")
+    user_id = current_user.get("user_id", "anonymous") if current_user else "anonymous"
     
     # Enhanced 모드 설정
     user_preferences = None
@@ -859,7 +865,7 @@ async def generate_code(
 ):
     """
     vLLM 서버를 통해 동기식으로 코드를 생성합니다.
-
+햣 ㅁ
     **특징:**
     - 완전한 응답을 한 번에 반환
     - 모든 스트리밍 데이터를 수집하여 종합
@@ -873,7 +879,7 @@ async def generate_code(
     - 🎨 **스타일 적용**: 사용자 선호 코딩 스타일
     """
 
-    user_id = current_user.get("user_id", "anonymous")
+    user_id = current_user.get("user_id", "anonymous") if current_user else "anonymous"
     start_time = datetime.now()
     
     # Enhanced 모드 설정
