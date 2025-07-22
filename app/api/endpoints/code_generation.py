@@ -554,6 +554,9 @@ def _apply_performance_optimization(request: CodeGenerationRequest) -> CodeGener
     # 복잡한 요청 패턴 감지
     complex_patterns = [
         r'(class|def|async def)',
+        r'(함수|function)',          
+        r'(계산기|calculator)',       
+        r'(클래스|class)',
         r'(algorithm|알고리즘)',
         r'(database|데이터베이스|db)',
         r'(api|rest|graphql)',
