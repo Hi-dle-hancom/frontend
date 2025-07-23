@@ -132,9 +132,16 @@ export class StreamingCodeGenerator {
         "Content-Type": "application/json",
       };
 
-      // JWT 토큰이 있으면 Authorization Bearer 헤더로 전달
+      // JWT 토큰 유효성 검사 및 자동 갱신
       const config = vscode.workspace.getConfiguration("hapa");
-      const jwtToken: string | undefined = config.get<string>("auth.accessToken");
+      let jwtToken: string | undefined = config.get<string>("auth.accessToken");
+      
+      // JWT 토큰 만료 체크
+      if (jwtToken && this.configService.isJWTTokenExpired(jwtToken)) {
+        console.warn("🔑 JWT 토큰이 만료되었습니다. 새 토큰이 필요합니다.");
+        await this.configService.clearJWTToken();
+        jwtToken = undefined;
+      }
       
       if (jwtToken) {
         headers["Authorization"] = `Bearer ${jwtToken}`;

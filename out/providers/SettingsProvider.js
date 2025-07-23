@@ -1,776 +1,626 @@
-import * as vscode from "vscode";
-import { BaseWebviewProvider } from "./BaseWebviewProvider";
-
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.SettingsProvider = void 0;
+const vscode = __importStar(require("vscode"));
+const BaseWebviewProvider_1 = require("./BaseWebviewProvider");
 /**
  * 개선된 사용자 설정 웹뷰 프로바이더
  * - JWT 토큰 기반 실제 사용자 정보 조회
  * - DB 설정 동기화
  * - 하드코딩된 값 제거
  */
-export class SettingsProvider extends BaseWebviewProvider {
-  constructor(extensionUri: vscode.Uri) {
-    super(extensionUri);
-  }
-
-  /**
-   * 패널 타입 반환
-   */
-  protected getPanelType(): string {
-    return "hapa-settings";
-  }
-
-  /**
-   * 패널 제목 반환
-   */
-  protected getPanelTitle(): string {
-    return "HAPA 설정";
-  }
-
-  /**
-   * 웹뷰 패널용 public HTML 생성 메서드
-   */
-  public getPublicHtmlContent(webview: vscode.Webview): string {
-    return this.getHtmlContent(webview);
-  }
-
-  /**
-   * 웹뷰 패널용 public 메시지 핸들러 설정 메서드
-   */
-  public setupPublicHandlers(webview: vscode.Webview): void {
-    this.setupMessageHandlers(webview);
-  }
-
-  protected getHtmlContent(webview: vscode.Webview): string {
-    return this.generateSettingsHtml();
-  }
-
-  protected handleCustomMessage(message: any) {
-    switch (message.command) {
-      case "loadSettings":
+class SettingsProvider extends BaseWebviewProvider_1.BaseWebviewProvider {
+    constructor(extensionUri) {
+        super(extensionUri);
+    }
+    /**
+     * 패널 타입 반환
+     */
+    getPanelType() {
+        return "hapa-settings";
+    }
+    /**
+     * 패널 제목 반환
+     */
+    getPanelTitle() {
+        return "HAPA 설정";
+    }
+    /**
+     * 웹뷰 패널용 public HTML 생성 메서드
+     */
+    getPublicHtmlContent(webview) {
+        return this.getHtmlContent(webview);
+    }
+    /**
+     * 웹뷰 패널용 public 메시지 핸들러 설정 메서드
+     */
+    setupPublicHandlers(webview) {
+        this.setupMessageHandlers(webview);
+    }
+    getHtmlContent(webview) {
+        return this.generateSettingsHtml();
+    }
+    handleCustomMessage(message) {
+        switch (message.command) {
+            case "loadSettings":
+                this.loadAndSendSettings();
+                break;
+            case "saveSettings":
+                this.saveSettings(message.settings);
+                break;
+            case "resetSettings":
+                this.resetSettings();
+                break;
+            case "generateApiKey":
+                this.generateAPIKeyForEmail(message.email, message.username);
+                break;
+            case "openVSCodeSettings":
+                this.openVSCodeSettings();
+                break;
+            default:
+                console.log("🔍 알 수 없는 메시지 명령:", message.command);
+        }
+    }
+    /**
+     * 웹뷰가 준비되면 즉시 설정 로드
+     */
+    onWebviewReady() {
+        console.log("🔗 설정 웹뷰 준비 완료 - 설정 로드 시작");
+        // 즉시 설정 로드 시도
         this.loadAndSendSettings();
-        break;
-      case "saveSettings":
-        this.saveSettings(message.settings);
-        break;
-      case "resetSettings":
-        this.resetSettings();
-        break;
-      case "generateApiKey":
-        this.generateAPIKeyForEmail(message.email, message.username);
-        break;
-      case "openVSCodeSettings":
-        this.openVSCodeSettings();
-        break;
-      default:
-        console.log("🔍 알 수 없는 메시지 명령:", message.command);
+        // 안전장치: 500ms 후에도 다시 시도
+        setTimeout(() => {
+            console.log("🛟 설정 프로바이더 안전장치: 설정 재로드 시도");
+            this.loadAndSendSettings();
+        }, 500);
     }
-  }
-
-  /**
-   * 웹뷰가 준비되면 즉시 설정 로드
-   */
-  protected onWebviewReady(): void {
-    console.log("🔗 설정 웹뷰 준비 완료 - 설정 로드 시작");
-
-    // 즉시 설정 로드 시도
-    this.loadAndSendSettings();
-
-    // 안전장치: 500ms 후에도 다시 시도
-    setTimeout(() => {
-      console.log("🛟 설정 프로바이더 안전장치: 설정 재로드 시도");
-      this.loadAndSendSettings();
-    }, 500);
-  }
-
-  /**
-   * 백엔드에서 실제 사용자 정보 조회
-   */
-  private async fetchRealUserInfo(): Promise<{
-    success: boolean;
-    userInfo?: any;
-    error?: string;
-  }> {
-    try {
-      const config = vscode.workspace.getConfiguration("hapa");
-      const apiBaseURL = config.get<string>("apiBaseURL") || "http://3.13.240.111:8000/api/v1";
-      const accessToken = this.getJWTToken();
-
-      if (!accessToken) {
-        return {
-          success: false,
-          error: "JWT 토큰이 없습니다. 온보딩을 통해 로그인해주세요.",
-        };
-      }
-
-      console.log("👤 실제 사용자 정보 조회 시작:", {
-        hasToken: !!accessToken,
-        apiBaseURL,
-      });
-
-      const response = await fetch(`${apiBaseURL}/users/me`, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        timeout: 10000,
-      } as any);
-
-      if (!response.ok) {
-        console.error("❌ 사용자 정보 조회 실패:", response.status, response.statusText);
-
-        if (response.status === 401) {
-          return {
-            success: false,
-            error: "인증이 만료되었습니다. 다시 로그인해주세요.",
-          };
+    /**
+     * 백엔드에서 실제 사용자 정보 조회
+     */
+    async fetchRealUserInfo() {
+        try {
+            const config = vscode.workspace.getConfiguration("hapa");
+            const apiBaseURL = config.get("apiBaseURL") || "http://3.13.240.111:8000/api/v1";
+            const accessToken = this.getJWTToken();
+            if (!accessToken) {
+                return {
+                    success: false,
+                    error: "JWT 토큰이 없습니다. 온보딩을 통해 로그인해주세요.",
+                };
+            }
+            console.log("👤 실제 사용자 정보 조회 시작:", {
+                hasToken: !!accessToken,
+                apiBaseURL,
+            });
+            const response = await fetch(`${apiBaseURL}/users/me`, {
+                method: "GET",
+                headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                    "Content-Type": "application/json",
+                },
+                timeout: 10000,
+            });
+            if (!response.ok) {
+                console.error("❌ 사용자 정보 조회 실패:", response.status, response.statusText);
+                if (response.status === 401) {
+                    return {
+                        success: false,
+                        error: "인증이 만료되었습니다. 다시 로그인해주세요.",
+                    };
+                }
+                return {
+                    success: false,
+                    error: `서버 오류: ${response.status}`,
+                };
+            }
+            const userInfo = await response.json();
+            console.log("✅ 실제 사용자 정보 조회 성공:", {
+                email: userInfo.email,
+                username: userInfo.username,
+                id: userInfo.id,
+            });
+            return { success: true, userInfo };
         }
-
-        return {
-          success: false,
-          error: `서버 오류: ${response.status}`,
-        };
-      }
-
-      const userInfo = await response.json();
-      console.log("✅ 실제 사용자 정보 조회 성공:", {
-        email: userInfo.email,
-        username: userInfo.username,
-        id: userInfo.id,
-      });
-
-      return { success: true, userInfo };
-    } catch (error) {
-      console.error("❌ 사용자 정보 조회 중 예외:", error);
-      return {
-        success: false,
-        error: "네트워크 오류가 발생했습니다.",
-      };
-    }
-  }
-
-  /**
-   * DB 설정을 프론트엔드 설정으로 변환
-   */
-  private convertDBSettingsToFrontend(dbSettings: any[]): any {
-    try {
-      const frontendSettings = {
-        pythonSkillLevel: "intermediate",
-        codeOutputStructure: "standard",
-        explanationStyle: "standard",
-        projectContext: "general_purpose",
-        errorHandlingPreference: "basic",
-        preferredLanguageFeatures: ["type_hints"],
-      };
-
-      // DB 설정을 프론트엔드 설정으로 매핑
-      dbSettings.forEach(setting => {
-        switch (setting.setting_type) {
-          case "python_skill_level":
-            frontendSettings.pythonSkillLevel = setting.option_value;
-            break;
-          case "code_output_structure":
-            frontendSettings.codeOutputStructure = setting.option_value;
-            break;
-          case "explanation_style":
-            frontendSettings.explanationStyle = setting.option_value;
-            break;
+        catch (error) {
+            console.error("❌ 사용자 정보 조회 중 예외:", error);
+            return {
+                success: false,
+                error: "네트워크 오류가 발생했습니다.",
+            };
         }
-      });
-
-      console.log("🔄 DB 설정 변환 완료:", frontendSettings);
-      return frontendSettings;
-    } catch (error) {
-      console.error("❌ DB 설정 변환 실패:", error);
-      // 기본값 반환
-      return {
-        pythonSkillLevel: "intermediate",
-        codeOutputStructure: "standard",
-        explanationStyle: "standard",
-        projectContext: "general_purpose",
-        errorHandlingPreference: "basic",
-        preferredLanguageFeatures: ["type_hints"],
-      };
     }
-  }
-
-  /**
-   * 개선된 설정 저장 (DB 동기화 포함)
-   */
-  private async saveSettings(settings: any) {
-    try {
-      console.log("💾 개선된 설정 저장 시작:", settings);
-      const config = vscode.workspace.getConfiguration("hapa");
-
-      // 1단계: 로컬 VSCode 설정 저장
-      if (settings.userProfile) {
-        await config.update(
-          "userProfile.email",
-          settings.userProfile.email,
-          vscode.ConfigurationTarget.Global
-        );
-        await config.update(
-          "userProfile.username",
-          settings.userProfile.username,
-          vscode.ConfigurationTarget.Global
-        );
-        await config.update(
-          "userProfile.pythonSkillLevel",
-          settings.userProfile.pythonSkillLevel,
-          vscode.ConfigurationTarget.Global
-        );
-        await config.update(
-          "userProfile.codeOutputStructure",
-          settings.userProfile.codeOutputStructure,
-          vscode.ConfigurationTarget.Global
-        );
-        await config.update(
-          "userProfile.explanationStyle",
-          settings.userProfile.explanationStyle,
-          vscode.ConfigurationTarget.Global
-        );
-        await config.update(
-          "userProfile.projectContext",
-          settings.userProfile.projectContext,
-          vscode.ConfigurationTarget.Global
-        );
-        await config.update(
-          "userProfile.errorHandlingPreference",
-          settings.userProfile.errorHandlingPreference,
-          vscode.ConfigurationTarget.Global
-        );
-        await config.update(
-          "userProfile.preferredLanguageFeatures",
-          settings.userProfile.preferredLanguageFeatures || [],
-          vscode.ConfigurationTarget.Global
-        );
-      }
-
-      // API 설정
-      if (settings.api) {
-        await config.update(
-          "apiBaseURL",
-          settings.api.apiBaseURL,
-          vscode.ConfigurationTarget.Global
-        );
-        await config.update("apiKey", settings.api.apiKey, vscode.ConfigurationTarget.Global);
-        await config.update(
-          "apiTimeout",
-          settings.api.apiTimeout,
-          vscode.ConfigurationTarget.Global
-        );
-      }
-
-      // 주석 트리거 설정
-      if (settings.commentTrigger) {
-        await config.update(
-          "commentTrigger.resultDisplayMode",
-          settings.commentTrigger.resultDisplayMode,
-          vscode.ConfigurationTarget.Global
-        );
-        await config.update(
-          "commentTrigger.autoInsertDelay",
-          settings.commentTrigger.autoInsertDelay,
-          vscode.ConfigurationTarget.Global
-        );
-        await config.update(
-          "commentTrigger.showNotification",
-          settings.commentTrigger.showNotification,
-          vscode.ConfigurationTarget.Global
-        );
-      }
-
-      // 기능 설정
-      if (settings.features) {
-        await config.update(
-          "autoComplete",
-          settings.features.autoComplete,
-          vscode.ConfigurationTarget.Global
-        );
-        await config.update(
-          "maxSuggestions",
-          settings.features.maxSuggestions,
-          vscode.ConfigurationTarget.Global
-        );
-        await config.update(
-          "enableLogging",
-          settings.features.enableLogging,
-          vscode.ConfigurationTarget.Global
-        );
-        await config.update(
-          "enableCodeAnalysis",
-          settings.features.enableCodeAnalysis,
-          vscode.ConfigurationTarget.Global
-        );
-      }
-
-      console.log("✅ 로컬 설정 저장 완료");
-
-      // 2단계: DB에 설정 동기화 (JWT 토큰 필요)
-      const syncResult = await this.syncSettingsToDB(settings.userProfile);
-
-      if (syncResult.success) {
-        console.log("✅ DB 설정 동기화 완료");
-      } else {
-        console.warn("⚠️ DB 동기화 실패, 로컬 설정만 저장됨:", syncResult.error);
-      }
-
-      // 성공 메시지 전송
-      if (this._view) {
-        this._view.webview.postMessage({
-          command: "settingsSaved",
-          success: true,
-          dbSynced: syncResult.success,
-          message: syncResult.success
-            ? "설정이 저장되고 모든 기기에 동기화되었습니다."
-            : "설정이 로컬에 저장되었습니다. (DB 동기화 실패)",
-        });
-      }
-    } catch (error) {
-      console.error("❌ 설정 저장 실패:", error);
-
-      // 오류 메시지 전송
-      if (this._view) {
-        this._view.webview.postMessage({
-          command: "settingsError",
-          error: (error as Error).message,
-        });
-      }
-    }
-  }
-
-  /**
-   * 설정을 DB에 동기화
-   */
-  private async syncSettingsToDB(userProfile: any): Promise<{ success: boolean; error?: string }> {
-    try {
-      const accessToken = this.getJWTToken();
-      if (!accessToken) {
-        return { success: false, error: "JWT 토큰이 없습니다." };
-      }
-
-      // 프론트엔드 설정을 DB option_ids로 변환
-      const optionIds = this.convertFrontendSettingsToDBIds(userProfile);
-
-      if (optionIds.length === 0) {
-        return { success: false, error: "변환할 설정이 없습니다." };
-      }
-
-      const config = vscode.workspace.getConfiguration("hapa");
-      const apiBaseURL = config.get<string>("apiBaseURL") || "http://3.13.240.111:8000/api/v1";
-
-      console.log("🔄 DB 설정 동기화 시작:", {
-        optionIds,
-        hasToken: !!accessToken,
-      });
-
-      const response = await fetch(`${apiBaseURL}/users/settings`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ option_ids: optionIds }),
-        timeout: 10000,
-      } as any);
-
-      if (!response.ok) {
-        console.error("❌ DB 설정 동기화 실패:", response.status);
-        return { success: false, error: `DB 동기화 실패: ${response.status}` };
-      }
-
-      console.log("✅ DB 설정 동기화 성공");
-      return { success: true };
-    } catch (error) {
-      console.error("❌ DB 설정 동기화 중 예외:", error);
-      return { success: false, error: "DB 동기화 중 오류가 발생했습니다." };
-    }
-  }
-
-  /**
-   * 프론트엔드 설정을 DB option_ids로 변환
-   */
-  private convertFrontendSettingsToDBIds(userProfile: any): number[] {
-    const optionIds: number[] = [];
-
-    try {
-      // python_skill_level 매핑
-      if (userProfile.pythonSkillLevel) {
-        switch (userProfile.pythonSkillLevel) {
-          case "beginner":
-            optionIds.push(1);
-            break;
-          case "intermediate":
-            optionIds.push(2);
-            break;
+    /**
+     * DB 설정을 프론트엔드 설정으로 변환
+     */
+    convertDBSettingsToFrontend(dbSettings) {
+        try {
+            const frontendSettings = {
+                pythonSkillLevel: "intermediate",
+                codeOutputStructure: "standard",
+                explanationStyle: "standard",
+                projectContext: "general_purpose",
+                errorHandlingPreference: "basic",
+                preferredLanguageFeatures: ["type_hints"],
+            };
+            // DB 설정을 프론트엔드 설정으로 매핑
+            dbSettings.forEach(setting => {
+                switch (setting.setting_type) {
+                    case "python_skill_level":
+                        frontendSettings.pythonSkillLevel = setting.option_value;
+                        break;
+                    case "code_output_structure":
+                        frontendSettings.codeOutputStructure = setting.option_value;
+                        break;
+                    case "explanation_style":
+                        frontendSettings.explanationStyle = setting.option_value;
+                        break;
+                }
+            });
+            console.log("🔄 DB 설정 변환 완료:", frontendSettings);
+            return frontendSettings;
         }
-      }
-
-      // code_output_structure 매핑
-      if (userProfile.codeOutputStructure) {
-        switch (userProfile.codeOutputStructure) {
-          case "minimal":
-            optionIds.push(3);
-            break;
-          case "standard":
-            optionIds.push(4);
-            break;
-          case "detailed":
-            optionIds.push(5);
-            break;
+        catch (error) {
+            console.error("❌ DB 설정 변환 실패:", error);
+            // 기본값 반환
+            return {
+                pythonSkillLevel: "intermediate",
+                codeOutputStructure: "standard",
+                explanationStyle: "standard",
+                projectContext: "general_purpose",
+                errorHandlingPreference: "basic",
+                preferredLanguageFeatures: ["type_hints"],
+            };
         }
-      }
-
-      // explanation_style 매핑
-      if (userProfile.explanationStyle) {
-        switch (userProfile.explanationStyle) {
-          case "brief":
-            optionIds.push(6);
-            break;
-          case "standard":
-            optionIds.push(7);
-            break;
-          case "detailed":
-            optionIds.push(8);
-            break;
-          case "educational":
-            optionIds.push(9);
-            break;
+    }
+    /**
+     * 개선된 설정 저장 (DB 동기화 포함)
+     */
+    async saveSettings(settings) {
+        try {
+            console.log("💾 개선된 설정 저장 시작:", settings);
+            const config = vscode.workspace.getConfiguration("hapa");
+            // 1단계: 로컬 VSCode 설정 저장
+            if (settings.userProfile) {
+                await config.update("userProfile.email", settings.userProfile.email, vscode.ConfigurationTarget.Global);
+                await config.update("userProfile.username", settings.userProfile.username, vscode.ConfigurationTarget.Global);
+                await config.update("userProfile.pythonSkillLevel", settings.userProfile.pythonSkillLevel, vscode.ConfigurationTarget.Global);
+                await config.update("userProfile.codeOutputStructure", settings.userProfile.codeOutputStructure, vscode.ConfigurationTarget.Global);
+                await config.update("userProfile.explanationStyle", settings.userProfile.explanationStyle, vscode.ConfigurationTarget.Global);
+                await config.update("userProfile.projectContext", settings.userProfile.projectContext, vscode.ConfigurationTarget.Global);
+                await config.update("userProfile.errorHandlingPreference", settings.userProfile.errorHandlingPreference, vscode.ConfigurationTarget.Global);
+                await config.update("userProfile.preferredLanguageFeatures", settings.userProfile.preferredLanguageFeatures || [], vscode.ConfigurationTarget.Global);
+            }
+            // API 설정
+            if (settings.api) {
+                await config.update("apiBaseURL", settings.api.apiBaseURL, vscode.ConfigurationTarget.Global);
+                await config.update("apiKey", settings.api.apiKey, vscode.ConfigurationTarget.Global);
+                await config.update("apiTimeout", settings.api.apiTimeout, vscode.ConfigurationTarget.Global);
+            }
+            // 주석 트리거 설정
+            if (settings.commentTrigger) {
+                await config.update("commentTrigger.resultDisplayMode", settings.commentTrigger.resultDisplayMode, vscode.ConfigurationTarget.Global);
+                await config.update("commentTrigger.autoInsertDelay", settings.commentTrigger.autoInsertDelay, vscode.ConfigurationTarget.Global);
+                await config.update("commentTrigger.showNotification", settings.commentTrigger.showNotification, vscode.ConfigurationTarget.Global);
+            }
+            // 기능 설정
+            if (settings.features) {
+                await config.update("autoComplete", settings.features.autoComplete, vscode.ConfigurationTarget.Global);
+                await config.update("maxSuggestions", settings.features.maxSuggestions, vscode.ConfigurationTarget.Global);
+                await config.update("enableLogging", settings.features.enableLogging, vscode.ConfigurationTarget.Global);
+                await config.update("enableCodeAnalysis", settings.features.enableCodeAnalysis, vscode.ConfigurationTarget.Global);
+            }
+            console.log("✅ 로컬 설정 저장 완료");
+            // 2단계: DB에 설정 동기화 (JWT 토큰 필요)
+            const syncResult = await this.syncSettingsToDB(settings.userProfile);
+            if (syncResult.success) {
+                console.log("✅ DB 설정 동기화 완료");
+            }
+            else {
+                console.warn("⚠️ DB 동기화 실패, 로컬 설정만 저장됨:", syncResult.error);
+            }
+            // 성공 메시지 전송
+            if (this._view) {
+                this._view.webview.postMessage({
+                    command: "settingsSaved",
+                    success: true,
+                    dbSynced: syncResult.success,
+                    message: syncResult.success
+                        ? "설정이 저장되고 모든 기기에 동기화되었습니다."
+                        : "설정이 로컬에 저장되었습니다. (DB 동기화 실패)",
+                });
+            }
         }
-      }
-
-      console.log("🔄 설정 변환 완료:", {
-        frontend: userProfile,
-        dbIds: optionIds,
-      });
-
-      return optionIds;
-    } catch (error) {
-      console.error("❌ 설정 변환 실패:", error);
-      return [];
-    }
-  }
-
-  /**
-   * 설정에서 이메일을 위한 API 키 발급
-   */
-  private async generateAPIKeyForEmail(
-    email: string,
-    username?: string
-  ): Promise<{
-    success: boolean;
-    apiKey?: string;
-    error?: string;
-  }> {
-    try {
-      console.log("🔑 API 키 생성 시작:", { email, username });
-
-      const config = vscode.workspace.getConfiguration("hapa");
-      const apiBaseURL = config.get<string>("apiBaseURL") || "http://3.13.240.111:8000/api/v1";
-
-      console.log("🌐 API 엔드포인트:", apiBaseURL);
-
-      const response = await fetch(`${apiBaseURL}/users/generate-api-key`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email: email,
-          username: username || email.split("@")[0],
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("❌ API 키 생성 실패:", response.status, errorText);
-
-        // 웹뷰에 오류 메시지 전송
-        if (this._view) {
-          this._view.webview.postMessage({
-            command: "apiKeyGenerated",
-            success: false,
-            error: `HTTP ${response.status}: ${errorText}`,
-          });
+        catch (error) {
+            console.error("❌ 설정 저장 실패:", error);
+            // 오류 메시지 전송
+            if (this._view) {
+                this._view.webview.postMessage({
+                    command: "settingsError",
+                    error: error.message,
+                });
+            }
         }
-
-        return {
-          success: false,
-          error: `HTTP ${response.status}: ${errorText}`,
-        };
-      }
-
-      const result = await response.json();
-      console.log("✅ API 키 생성 성공:", result);
-
-      // 생성된 API 키를 VSCode 설정에 저장
-      if (result.api_key) {
-        await config.update("apiKey", result.api_key, vscode.ConfigurationTarget.Global);
-        console.log("💾 API 키 저장 완료");
-      }
-
-      // 웹뷰에 성공 메시지 전송
-      if (this._view) {
-        this._view.webview.postMessage({
-          command: "apiKeyGenerated",
-          success: true,
-          apiKey: result.api_key,
-        });
-      }
-
-      return {
-        success: true,
-        apiKey: result.api_key,
-      };
-    } catch (error) {
-      console.error("❌ API 키 생성 오류:", error);
-
-      // 웹뷰에 오류 메시지 전송
-      if (this._view) {
-        this._view.webview.postMessage({
-          command: "apiKeyGenerated",
-          success: false,
-          error: (error as Error).message,
-        });
-      }
-
-      return {
-        success: false,
-        error: (error as Error).message,
-      };
     }
-  }
-
-  /**
-   * 설정 초기화
-   */
-  private async resetSettings() {
-    const result = await vscode.window.showWarningMessage(
-      "모든 설정을 기본값으로 초기화하시겠습니까?",
-      "초기화",
-      "취소"
-    );
-
-    if (result === "초기화") {
-      try {
-        const config = vscode.workspace.getConfiguration("hapa");
-
-        // 사용자 프로필 기본값으로 초기화
-        await config.update(
-          "userProfile.pythonSkillLevel",
-          "intermediate",
-          vscode.ConfigurationTarget.Global
-        );
-        await config.update(
-          "userProfile.codeOutputStructure",
-          "standard",
-          vscode.ConfigurationTarget.Global
-        );
-        await config.update(
-          "userProfile.explanationStyle",
-          "standard",
-          vscode.ConfigurationTarget.Global
-        );
-        await config.update(
-          "userProfile.projectContext",
-          "general_purpose",
-          vscode.ConfigurationTarget.Global
-        );
-        await config.update(
-          "userProfile.errorHandlingPreference",
-          "basic",
-          vscode.ConfigurationTarget.Global
-        );
-        await config.update(
-          "userProfile.preferredLanguageFeatures",
-          ["type_hints", "f_strings"],
-          vscode.ConfigurationTarget.Global
-        );
-
-        // 기능 설정 기본값으로 초기화
-        await config.update("autoComplete", true, vscode.ConfigurationTarget.Global);
-        await config.update("maxSuggestions", 5, vscode.ConfigurationTarget.Global);
-        await config.update("enableLogging", false, vscode.ConfigurationTarget.Global);
-        await config.update("apiTimeout", 30000, vscode.ConfigurationTarget.Global);
-
-        // 주석 트리거 설정 기본값으로 초기화
-        await config.update(
-          "commentTrigger.resultDisplayMode",
-          "sidebar",
-          vscode.ConfigurationTarget.Global
-        );
-        await config.update("commentTrigger.autoInsertDelay", 0, vscode.ConfigurationTarget.Global);
-        await config.update(
-          "commentTrigger.showNotification",
-          true,
-          vscode.ConfigurationTarget.Global
-        );
-
-        vscode.window.showInformationMessage("🔄 설정이 기본값으로 초기화되었습니다.");
-
-        // 웹뷰 새로고침
-        this.loadAndSendSettings();
-      } catch (error) {
-        vscode.window.showErrorMessage(
-          `설정 초기화 중 오류가 발생했습니다: ${(error as Error).message}`
-        );
-      }
+    /**
+     * 설정을 DB에 동기화
+     */
+    async syncSettingsToDB(userProfile) {
+        try {
+            const accessToken = this.getJWTToken();
+            if (!accessToken) {
+                return { success: false, error: "JWT 토큰이 없습니다." };
+            }
+            // 프론트엔드 설정을 DB option_ids로 변환
+            const optionIds = this.convertFrontendSettingsToDBIds(userProfile);
+            if (optionIds.length === 0) {
+                return { success: false, error: "변환할 설정이 없습니다." };
+            }
+            const config = vscode.workspace.getConfiguration("hapa");
+            const apiBaseURL = config.get("apiBaseURL") || "http://3.13.240.111:8000/api/v1";
+            console.log("🔄 DB 설정 동기화 시작:", {
+                optionIds,
+                hasToken: !!accessToken,
+            });
+            const response = await fetch(`${apiBaseURL}/users/settings`, {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ option_ids: optionIds }),
+                timeout: 10000,
+            });
+            if (!response.ok) {
+                console.error("❌ DB 설정 동기화 실패:", response.status);
+                return { success: false, error: `DB 동기화 실패: ${response.status}` };
+            }
+            console.log("✅ DB 설정 동기화 성공");
+            return { success: true };
+        }
+        catch (error) {
+            console.error("❌ DB 설정 동기화 중 예외:", error);
+            return { success: false, error: "DB 동기화 중 오류가 발생했습니다." };
+        }
     }
-  }
-
-  /**
-   * 개선된 현재 설정 로드 및 웹뷰로 전송 (하드코딩 제거, DB 연동)
-   */
-  private async loadAndSendSettings() {
-    try {
-      console.log("⚙️ 개선된 설정 로드 시작 - JWT 토큰 기반 실제 사용자 정보 조회");
-      const config = vscode.workspace.getConfiguration("hapa");
-
-      // 1단계: 실제 사용자 정보 조회
-      const userResult = await this.fetchRealUserInfo();
-
-      // 2단계: DB에서 사용자 설정 조회
-      const settingsResult = await this.fetchUserSettingsFromDB();
-
-      // 3단계: 설정 구성
-      let userProfile: any;
-
-      if (userResult.success && userResult.userInfo) {
-        // 실제 사용자 정보 + DB 설정 사용
-        const dbSettings = settingsResult.success ? settingsResult.settings : [];
-        const convertedSettings = this.convertDBSettingsToFrontend(dbSettings || []);
-
-        userProfile = {
-          email: userResult.userInfo.email,
-          username: userResult.userInfo.username,
-          ...convertedSettings,
-        };
-
-        console.log("✅ 실제 사용자 정보 + DB 설정 로드 완료:", {
-          email: userProfile.email,
-          username: userProfile.username,
-          dbSettingsCount: dbSettings?.length || 0,
-        });
-      } else {
-        // JWT 토큰이 없거나 사용자 정보 조회 실패 시 로컬 설정 사용
-        console.log("⚠️ JWT 토큰 없음 - 로컬 설정 사용:", userResult.error);
-
-        userProfile = {
-          email: config.get("userProfile.email") || "",
-          username: config.get("userProfile.username") || "",
-          pythonSkillLevel: config.get("userProfile.pythonSkillLevel") || "intermediate",
-          codeOutputStructure: config.get("userProfile.codeOutputStructure") || "standard",
-          explanationStyle: config.get("userProfile.explanationStyle") || "standard",
-          projectContext: config.get("userProfile.projectContext") || "general_purpose",
-          errorHandlingPreference: config.get("userProfile.errorHandlingPreference") || "basic",
-          preferredLanguageFeatures: config.get("userProfile.preferredLanguageFeatures") || [
-            "type_hints",
-          ],
-        };
-      }
-
-      const currentSettings = {
-        userProfile,
-        api: {
-          apiBaseURL: config.get("apiBaseURL") || "http://3.13.240.111:8000/api/v1",
-          apiKey: config.get("apiKey") || "",
-          apiTimeout: config.get("apiTimeout") || 30000,
-        },
-        commentTrigger: {
-          resultDisplayMode: config.get("commentTrigger.resultDisplayMode") || "sidebar",
-          autoInsertDelay: config.get("commentTrigger.autoInsertDelay") || 0,
-          showNotification: config.get("commentTrigger.showNotification") ?? true,
-        },
-        features: {
-          autoComplete: config.get("autoComplete") ?? true,
-          maxSuggestions: config.get("maxSuggestions") || 5,
-          enableLogging: config.get("enableLogging") || false,
-          enableCodeAnalysis: config.get("enableCodeAnalysis") ?? true,
-        },
-        meta: {
-          isAuthenticated: userResult.success,
-          authError: userResult.error,
-          dbSynced: settingsResult.success,
-          hasJWTToken: !!this.getJWTToken(),
-        },
-      };
-
-      console.log("📋 최종 로드된 설정:", {
-        email: currentSettings.userProfile.email,
-        isAuthenticated: currentSettings.meta.isAuthenticated,
-        dbSynced: currentSettings.meta.dbSynced,
-        hasApiKey: !!currentSettings.api.apiKey,
-      });
-
-      if (this._view) {
-        console.log("📤 웹뷰로 설정 전송 중...");
-        this._view.webview.postMessage({
-          command: "settingsLoaded",
-          settings: currentSettings,
-        });
-        console.log("✅ 설정 전송 완료");
-      } else {
-        console.error("❌ 웹뷰 인스턴스가 없음");
-      }
-    } catch (error) {
-      console.error("❌ 설정 로드 실패:", error);
-
-      // 오류 발생 시 최소한의 기본 설정으로 응답 (하드코딩 제거)
-      if (this._view) {
-        this._view.webview.postMessage({
-          command: "settingsLoaded",
-          settings: {
-            userProfile: {
-              email: "",
-              username: "",
-              pythonSkillLevel: "intermediate",
-              codeOutputStructure: "standard",
-              explanationStyle: "standard",
-              projectContext: "general_purpose",
-              errorHandlingPreference: "basic",
-              preferredLanguageFeatures: ["type_hints"],
-            },
-            api: {
-              apiBaseURL: "http://3.13.240.111:8000/api/v1",
-              apiKey: "",
-              apiTimeout: 30000,
-            },
-            commentTrigger: {
-              resultDisplayMode: "sidebar",
-              autoInsertDelay: 0,
-              showNotification: true,
-            },
-            features: {
-              autoComplete: true,
-              maxSuggestions: 5,
-              enableLogging: false,
-              enableCodeAnalysis: true,
-            },
-            meta: {
-              isAuthenticated: false,
-              authError: (error as Error).message,
-              dbSynced: false,
-              hasJWTToken: false,
-            },
-          },
-          error: (error as Error).message,
-        });
-      }
+    /**
+     * 프론트엔드 설정을 DB option_ids로 변환
+     */
+    convertFrontendSettingsToDBIds(userProfile) {
+        const optionIds = [];
+        try {
+            // python_skill_level 매핑
+            if (userProfile.pythonSkillLevel) {
+                switch (userProfile.pythonSkillLevel) {
+                    case "beginner":
+                        optionIds.push(1);
+                        break;
+                    case "intermediate":
+                        optionIds.push(2);
+                        break;
+                }
+            }
+            // code_output_structure 매핑
+            if (userProfile.codeOutputStructure) {
+                switch (userProfile.codeOutputStructure) {
+                    case "minimal":
+                        optionIds.push(3);
+                        break;
+                    case "standard":
+                        optionIds.push(4);
+                        break;
+                    case "detailed":
+                        optionIds.push(5);
+                        break;
+                }
+            }
+            // explanation_style 매핑
+            if (userProfile.explanationStyle) {
+                switch (userProfile.explanationStyle) {
+                    case "brief":
+                        optionIds.push(6);
+                        break;
+                    case "standard":
+                        optionIds.push(7);
+                        break;
+                    case "detailed":
+                        optionIds.push(8);
+                        break;
+                    case "educational":
+                        optionIds.push(9);
+                        break;
+                }
+            }
+            console.log("🔄 설정 변환 완료:", {
+                frontend: userProfile,
+                dbIds: optionIds,
+            });
+            return optionIds;
+        }
+        catch (error) {
+            console.error("❌ 설정 변환 실패:", error);
+            return [];
+        }
     }
-  }
-
-  /**
-   * VSCode 설정 페이지 열기
-   */
-  private openVSCodeSettings() {
-    vscode.commands.executeCommand("workbench.action.openSettings", "hapa");
-  }
-
-  /**
-   * 설정 HTML 생성 (JavaScript 템플릿 분리)
-   */
-  private generateSettingsHtml(): string {
-    const scriptContent = `
+    /**
+     * 설정에서 이메일을 위한 API 키 발급
+     */
+    async generateAPIKeyForEmail(email, username) {
+        try {
+            console.log("🔑 API 키 생성 시작:", { email, username });
+            const config = vscode.workspace.getConfiguration("hapa");
+            const apiBaseURL = config.get("apiBaseURL") || "http://3.13.240.111:8000/api/v1";
+            console.log("🌐 API 엔드포인트:", apiBaseURL);
+            const response = await fetch(`${apiBaseURL}/users/generate-api-key`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    email: email,
+                    username: username || email.split("@")[0],
+                }),
+            });
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error("❌ API 키 생성 실패:", response.status, errorText);
+                // 웹뷰에 오류 메시지 전송
+                if (this._view) {
+                    this._view.webview.postMessage({
+                        command: "apiKeyGenerated",
+                        success: false,
+                        error: `HTTP ${response.status}: ${errorText}`,
+                    });
+                }
+                return {
+                    success: false,
+                    error: `HTTP ${response.status}: ${errorText}`,
+                };
+            }
+            const result = await response.json();
+            console.log("✅ API 키 생성 성공:", result);
+            // 생성된 API 키를 VSCode 설정에 저장
+            if (result.api_key) {
+                await config.update("apiKey", result.api_key, vscode.ConfigurationTarget.Global);
+                console.log("💾 API 키 저장 완료");
+            }
+            // 웹뷰에 성공 메시지 전송
+            if (this._view) {
+                this._view.webview.postMessage({
+                    command: "apiKeyGenerated",
+                    success: true,
+                    apiKey: result.api_key,
+                });
+            }
+            return {
+                success: true,
+                apiKey: result.api_key,
+            };
+        }
+        catch (error) {
+            console.error("❌ API 키 생성 오류:", error);
+            // 웹뷰에 오류 메시지 전송
+            if (this._view) {
+                this._view.webview.postMessage({
+                    command: "apiKeyGenerated",
+                    success: false,
+                    error: error.message,
+                });
+            }
+            return {
+                success: false,
+                error: error.message,
+            };
+        }
+    }
+    /**
+     * 설정 초기화
+     */
+    async resetSettings() {
+        const result = await vscode.window.showWarningMessage("모든 설정을 기본값으로 초기화하시겠습니까?", "초기화", "취소");
+        if (result === "초기화") {
+            try {
+                const config = vscode.workspace.getConfiguration("hapa");
+                // 사용자 프로필 기본값으로 초기화
+                await config.update("userProfile.pythonSkillLevel", "intermediate", vscode.ConfigurationTarget.Global);
+                await config.update("userProfile.codeOutputStructure", "standard", vscode.ConfigurationTarget.Global);
+                await config.update("userProfile.explanationStyle", "standard", vscode.ConfigurationTarget.Global);
+                await config.update("userProfile.projectContext", "general_purpose", vscode.ConfigurationTarget.Global);
+                await config.update("userProfile.errorHandlingPreference", "basic", vscode.ConfigurationTarget.Global);
+                await config.update("userProfile.preferredLanguageFeatures", ["type_hints", "f_strings"], vscode.ConfigurationTarget.Global);
+                // 기능 설정 기본값으로 초기화
+                await config.update("autoComplete", true, vscode.ConfigurationTarget.Global);
+                await config.update("maxSuggestions", 5, vscode.ConfigurationTarget.Global);
+                await config.update("enableLogging", false, vscode.ConfigurationTarget.Global);
+                await config.update("apiTimeout", 30000, vscode.ConfigurationTarget.Global);
+                // 주석 트리거 설정 기본값으로 초기화
+                await config.update("commentTrigger.resultDisplayMode", "sidebar", vscode.ConfigurationTarget.Global);
+                await config.update("commentTrigger.autoInsertDelay", 0, vscode.ConfigurationTarget.Global);
+                await config.update("commentTrigger.showNotification", true, vscode.ConfigurationTarget.Global);
+                vscode.window.showInformationMessage("🔄 설정이 기본값으로 초기화되었습니다.");
+                // 웹뷰 새로고침
+                this.loadAndSendSettings();
+            }
+            catch (error) {
+                vscode.window.showErrorMessage(`설정 초기화 중 오류가 발생했습니다: ${error.message}`);
+            }
+        }
+    }
+    /**
+     * 개선된 현재 설정 로드 및 웹뷰로 전송 (하드코딩 제거, DB 연동)
+     */
+    async loadAndSendSettings() {
+        try {
+            console.log("⚙️ 개선된 설정 로드 시작 - JWT 토큰 기반 실제 사용자 정보 조회");
+            const config = vscode.workspace.getConfiguration("hapa");
+            // 1단계: 실제 사용자 정보 조회
+            const userResult = await this.fetchRealUserInfo();
+            // 2단계: DB에서 사용자 설정 조회
+            const settingsResult = await this.fetchUserSettingsFromDB();
+            // 3단계: 설정 구성
+            let userProfile;
+            if (userResult.success && userResult.userInfo) {
+                // 실제 사용자 정보 + DB 설정 사용
+                const dbSettings = settingsResult.success ? settingsResult.settings : [];
+                const convertedSettings = this.convertDBSettingsToFrontend(dbSettings || []);
+                userProfile = {
+                    email: userResult.userInfo.email,
+                    username: userResult.userInfo.username,
+                    ...convertedSettings,
+                };
+                console.log("✅ 실제 사용자 정보 + DB 설정 로드 완료:", {
+                    email: userProfile.email,
+                    username: userProfile.username,
+                    dbSettingsCount: dbSettings?.length || 0,
+                });
+            }
+            else {
+                // JWT 토큰이 없거나 사용자 정보 조회 실패 시 로컬 설정 사용
+                console.log("⚠️ JWT 토큰 없음 - 로컬 설정 사용:", userResult.error);
+                userProfile = {
+                    email: config.get("userProfile.email") || "",
+                    username: config.get("userProfile.username") || "",
+                    pythonSkillLevel: config.get("userProfile.pythonSkillLevel") || "intermediate",
+                    codeOutputStructure: config.get("userProfile.codeOutputStructure") || "standard",
+                    explanationStyle: config.get("userProfile.explanationStyle") || "standard",
+                    projectContext: config.get("userProfile.projectContext") || "general_purpose",
+                    errorHandlingPreference: config.get("userProfile.errorHandlingPreference") || "basic",
+                    preferredLanguageFeatures: config.get("userProfile.preferredLanguageFeatures") || [
+                        "type_hints",
+                    ],
+                };
+            }
+            const currentSettings = {
+                userProfile,
+                api: {
+                    apiBaseURL: config.get("apiBaseURL") || "http://3.13.240.111:8000/api/v1",
+                    apiKey: config.get("apiKey") || "",
+                    apiTimeout: config.get("apiTimeout") || 30000,
+                },
+                commentTrigger: {
+                    resultDisplayMode: config.get("commentTrigger.resultDisplayMode") || "sidebar",
+                    autoInsertDelay: config.get("commentTrigger.autoInsertDelay") || 0,
+                    showNotification: config.get("commentTrigger.showNotification") ?? true,
+                },
+                features: {
+                    autoComplete: config.get("autoComplete") ?? true,
+                    maxSuggestions: config.get("maxSuggestions") || 5,
+                    enableLogging: config.get("enableLogging") || false,
+                    enableCodeAnalysis: config.get("enableCodeAnalysis") ?? true,
+                },
+                meta: {
+                    isAuthenticated: userResult.success,
+                    authError: userResult.error,
+                    dbSynced: settingsResult.success,
+                    hasJWTToken: !!this.getJWTToken(),
+                },
+            };
+            console.log("📋 최종 로드된 설정:", {
+                email: currentSettings.userProfile.email,
+                isAuthenticated: currentSettings.meta.isAuthenticated,
+                dbSynced: currentSettings.meta.dbSynced,
+                hasApiKey: !!currentSettings.api.apiKey,
+            });
+            if (this._view) {
+                console.log("📤 웹뷰로 설정 전송 중...");
+                this._view.webview.postMessage({
+                    command: "settingsLoaded",
+                    settings: currentSettings,
+                });
+                console.log("✅ 설정 전송 완료");
+            }
+            else {
+                console.error("❌ 웹뷰 인스턴스가 없음");
+            }
+        }
+        catch (error) {
+            console.error("❌ 설정 로드 실패:", error);
+            // 오류 발생 시 최소한의 기본 설정으로 응답 (하드코딩 제거)
+            if (this._view) {
+                this._view.webview.postMessage({
+                    command: "settingsLoaded",
+                    settings: {
+                        userProfile: {
+                            email: "",
+                            username: "",
+                            pythonSkillLevel: "intermediate",
+                            codeOutputStructure: "standard",
+                            explanationStyle: "standard",
+                            projectContext: "general_purpose",
+                            errorHandlingPreference: "basic",
+                            preferredLanguageFeatures: ["type_hints"],
+                        },
+                        api: {
+                            apiBaseURL: "http://3.13.240.111:8000/api/v1",
+                            apiKey: "",
+                            apiTimeout: 30000,
+                        },
+                        commentTrigger: {
+                            resultDisplayMode: "sidebar",
+                            autoInsertDelay: 0,
+                            showNotification: true,
+                        },
+                        features: {
+                            autoComplete: true,
+                            maxSuggestions: 5,
+                            enableLogging: false,
+                            enableCodeAnalysis: true,
+                        },
+                        meta: {
+                            isAuthenticated: false,
+                            authError: error.message,
+                            dbSynced: false,
+                            hasJWTToken: false,
+                        },
+                    },
+                    error: error.message,
+                });
+            }
+        }
+    }
+    /**
+     * VSCode 설정 페이지 열기
+     */
+    openVSCodeSettings() {
+        vscode.commands.executeCommand("workbench.action.openSettings", "hapa");
+    }
+    /**
+     * 설정 HTML 생성 (JavaScript 템플릿 분리)
+     */
+    generateSettingsHtml() {
+        const scriptContent = `
     (function() {
       'use strict';
       
@@ -1605,8 +1455,7 @@ export class SettingsProvider extends BaseWebviewProvider {
 
     
     `;
-
-    return `<!DOCTYPE html>
+        return `<!DOCTYPE html>
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
@@ -2435,5 +2284,7 @@ export class SettingsProvider extends BaseWebviewProvider {
   </script>
 </body>
 </html>`;
-  }
+    }
 }
+exports.SettingsProvider = SettingsProvider;
+//# sourceMappingURL=SettingsProvider.js.map

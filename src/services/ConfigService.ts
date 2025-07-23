@@ -119,6 +119,37 @@ export class ConfigService {
   }
 
   /**
+   * JWT 토큰 관리 메서드들
+   */
+  public getJWTToken(): string | undefined {
+    const config = vscode.workspace.getConfiguration("hapa");
+    return config.get<string>("auth.accessToken");
+  }
+
+  public async setJWTToken(token: string): Promise<void> {
+    const config = vscode.workspace.getConfiguration("hapa");
+    await config.update("auth.accessToken", token, vscode.ConfigurationTarget.Global);
+    console.log("🔑 JWT 토큰 저장 완료");
+  }
+
+  public async clearJWTToken(): Promise<void> {
+    const config = vscode.workspace.getConfiguration("hapa");
+    await config.update("auth.accessToken", undefined, vscode.ConfigurationTarget.Global);
+    console.log("🔑 JWT 토큰 제거 완료");
+  }
+
+  public isJWTTokenExpired(token: string): boolean {
+    try {
+      const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
+      const now = Math.floor(Date.now() / 1000);
+      return payload.exp < now;
+    } catch (error) {
+      console.warn("JWT 토큰 만료 확인 실패:", error);
+      return true;
+    }
+  }
+
+  /**
    * 사용자 프로필 가져오기
    */
   public getUserProfile(): UserProfile {

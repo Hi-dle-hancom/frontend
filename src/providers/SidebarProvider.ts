@@ -74,19 +74,19 @@ export class SidebarProvider extends BaseWebviewProvider {
       if (dbHistory.success && dbHistory.history && dbHistory.history.length > 0) {
         this.questionHistory = dbHistory.history;
         console.log("✅ DB에서 히스토리 로드 성공:", dbHistory.history.length, "개 항목");
-        
+
         // DB 히스토리를 로컬에도 동기화 (캐시 목적)
         this.syncDBToLocalHistory(dbHistory.history);
         return;
       }
-      
+
       // 2단계: DB 로드 실패 시 로컬 저장소에서 로드
       console.log("⚠️ DB 히스토리 로드 실패, 로컬 저장소 사용");
       const context = this.getContext();
       const savedHistory =
-        context?.globalState.get<
-          Array<{ question: string; response: string; timestamp: string }>
-        >("hapaHistory");
+        context?.globalState.get<Array<{ question: string; response: string; timestamp: string }>>(
+          "hapaHistory"
+        );
       if (savedHistory) {
         this.questionHistory = savedHistory;
         console.log("✅ 로컬 저장소에서 히스토리 로드:", savedHistory.length, "개 항목");
@@ -96,9 +96,9 @@ export class SidebarProvider extends BaseWebviewProvider {
       // 에러 시 로컬 저장소 fallback
       const context = this.getContext();
       const savedHistory =
-        context?.globalState.get<
-          Array<{ question: string; response: string; timestamp: string }>
-        >("hapaHistory");
+        context?.globalState.get<Array<{ question: string; response: string; timestamp: string }>>(
+          "hapaHistory"
+        );
       if (savedHistory) {
         this.questionHistory = savedHistory;
       }
@@ -125,11 +125,11 @@ export class SidebarProvider extends BaseWebviewProvider {
       console.log("📚 히스토리 업데이트 브로드캐스트 시작:", {
         historyCount: this.questionHistory.length,
         historyPreview: this.questionHistory.slice(0, 2).map(h => ({
-          question: h.question.substring(0, 30) + '...',
-          timestamp: h.timestamp
-        }))
+          question: h.question.substring(0, 30) + "...",
+          timestamp: h.timestamp,
+        })),
       });
-      
+
       const historyData = JSON.stringify(this.questionHistory);
       const messageId = Date.now().toString();
       console.log("📚 히스토리 데이터 JSON 길이:", historyData.length);
@@ -141,11 +141,8 @@ export class SidebarProvider extends BaseWebviewProvider {
             command: "syncHistory",
             history: historyData,
           })
-          .then(undefined, (error) => {
-            console.error(
-              "❌ 사이드바 히스토리 동기화 메시지 전송 실패:",
-              error
-            );
+          .then(undefined, error => {
+            console.error("❌ 사이드바 히스토리 동기화 메시지 전송 실패:", error);
           });
       }
 
@@ -157,11 +154,8 @@ export class SidebarProvider extends BaseWebviewProvider {
               command: "syncHistory",
               history: historyData,
             })
-            .then(undefined, (error) => {
-              console.error(
-                `❌ 확장 패널 ${index} 히스토리 동기화 메시지 전송 실패:`,
-                error
-              );
+            .then(undefined, error => {
+              console.error(`❌ 확장 패널 ${index} 히스토리 동기화 메시지 전송 실패:`, error);
             });
         }
       });
@@ -183,10 +177,7 @@ export class SidebarProvider extends BaseWebviewProvider {
     // 중복 질문 제한 (연속 3회까지)
     const recentSameQuestions = this.questionHistory
       .slice(0, 3)
-      .filter(
-        (item) =>
-          item.question.trim().toLowerCase() === question.trim().toLowerCase()
-      );
+      .filter(item => item.question.trim().toLowerCase() === question.trim().toLowerCase());
 
     if (recentSameQuestions.length < 3) {
       // 1단계: 로컬 히스토리 저장 (기존 방식)
@@ -198,10 +189,7 @@ export class SidebarProvider extends BaseWebviewProvider {
 
       // 최대 50개까지만 저장
       if (this.questionHistory.length > this.maxHistorySize) {
-        this.questionHistory = this.questionHistory.slice(
-          0,
-          this.maxHistorySize
-        );
+        this.questionHistory = this.questionHistory.slice(0, this.maxHistorySize);
       }
 
       // 로컬 저장 및 동기화
@@ -213,7 +201,7 @@ export class SidebarProvider extends BaseWebviewProvider {
       });
 
       // 2단계: 백엔드 DB 저장 (비동기)
-      this.saveHistoryToDB(question, response).catch((error) => {
+      this.saveHistoryToDB(question, response).catch(error => {
         console.error("❌ DB 히스토리 저장 실패:", error);
         // DB 저장 실패해도 로컬 저장은 유지됨
       });
@@ -231,10 +219,7 @@ export class SidebarProvider extends BaseWebviewProvider {
   /**
    * 백엔드 DB에 히스토리 저장
    */
-  private async saveHistoryToDB(
-    question: string,
-    response: string
-  ): Promise<void> {
+  private async saveHistoryToDB(question: string, response: string): Promise<void> {
     try {
       // JWT 토큰 확인
       const accessToken = this.getJWTToken();
@@ -376,27 +361,31 @@ export class SidebarProvider extends BaseWebviewProvider {
         }
 
         // 모든 세션의 엔트리들을 가져와서 질문-답변 쌍으로 구성
-        const allHistoryItems: Array<{ question: string; response: string; timestamp: string }> = [];
+        const allHistoryItems: Array<{ question: string; response: string; timestamp: string }> =
+          [];
 
         // 동시 요청 제한을 위한 배치 처리
         const batchSize = 5;
         for (let i = 0; i < sessions.length; i += batchSize) {
           const batch = sessions.slice(i, i + batchSize);
-          
+
           const batchPromises = batch.map(async (session: any) => {
             try {
               const entryController = new AbortController();
               const entryTimeoutId = setTimeout(() => entryController.abort(), 8000);
 
               // DB-Module API 엔드포인트 사용: /history/sessions/{session_id}
-              const entriesResponse = await fetch(`${apiBaseURL}/sessions/${session.session_id}?limit=50`, {
-                method: "GET",
-                headers: {
-                  Authorization: `Bearer ${accessToken}`,
-                  "Content-Type": "application/json",
-                },
-                signal: entryController.signal,
-              });
+              const entriesResponse = await fetch(
+                `${apiBaseURL}/sessions/${session.session_id}?limit=50`,
+                {
+                  method: "GET",
+                  headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                    "Content-Type": "application/json",
+                  },
+                  signal: entryController.signal,
+                }
+              );
 
               clearTimeout(entryTimeoutId);
 
@@ -406,7 +395,9 @@ export class SidebarProvider extends BaseWebviewProvider {
                 const historyPairs = this.parseHistoryEntries(entries, session.created_at);
                 return historyPairs;
               } else {
-                console.warn(`⚠️ 세션 ${session.session_id} 엔트리 조회 실패: ${entriesResponse.status}`);
+                console.warn(
+                  `⚠️ 세션 ${session.session_id} 엔트리 조회 실패: ${entriesResponse.status}`
+                );
                 return [];
               }
             } catch (error) {
@@ -422,23 +413,25 @@ export class SidebarProvider extends BaseWebviewProvider {
         }
 
         // 타임스탬프 기준으로 정렬 (최신 순)
-        allHistoryItems.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        allHistoryItems.sort(
+          (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        );
 
         // 최대 히스토리 개수 제한
         const limitedHistory = allHistoryItems.slice(0, this.maxHistorySize);
 
-        console.log(`✅ DB 히스토리 로드 완료: ${limitedHistory.length}개 항목 (전체 ${allHistoryItems.length}개 중)`);
+        console.log(
+          `✅ DB 히스토리 로드 완료: ${limitedHistory.length}개 항목 (전체 ${allHistoryItems.length}개 중)`
+        );
         return { success: true, history: limitedHistory };
-
       } catch (error) {
         clearTimeout(timeoutId);
-        if (error instanceof Error && error.name === 'AbortError') {
+        if (error instanceof Error && error.name === "AbortError") {
           console.error("❌ DB 히스토리 로드 타임아웃");
           return { success: false, error: "요청 타임아웃" };
         }
         throw error;
       }
-
     } catch (error) {
       console.error("❌ DB 히스토리 로드 실패:", error);
       return { success: false, error: error instanceof Error ? error.message : "알 수 없는 오류" };
@@ -448,9 +441,12 @@ export class SidebarProvider extends BaseWebviewProvider {
   /**
    * DB 엔트리들을 질문-답변 쌍으로 파싱
    */
-  private parseHistoryEntries(entries: any[], sessionCreatedAt: string): Array<{ question: string; response: string; timestamp: string }> {
+  private parseHistoryEntries(
+    entries: any[],
+    sessionCreatedAt: string
+  ): Array<{ question: string; response: string; timestamp: string }> {
     const historyPairs: Array<{ question: string; response: string; timestamp: string }> = [];
-    
+
     // 엔트리들을 시간순으로 정렬
     entries.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
@@ -478,7 +474,9 @@ export class SidebarProvider extends BaseWebviewProvider {
   /**
    * DB 히스토리를 로컬에 동기화
    */
-  private syncDBToLocalHistory(dbHistory: Array<{ question: string; response: string; timestamp: string }>) {
+  private syncDBToLocalHistory(
+    dbHistory: Array<{ question: string; response: string; timestamp: string }>
+  ) {
     try {
       const context = this.getContext();
       if (context) {
@@ -496,24 +494,32 @@ export class SidebarProvider extends BaseWebviewProvider {
    * - 최신 순으로 정렬
    * - 로컬에만 있는 새로운 항목 보존
    */
-  private mergeDBHistoryWithLocal(dbHistory: Array<{ question: string; response: string; timestamp: string }>): Array<{ question: string; response: string; timestamp: string }> {
+  private mergeDBHistoryWithLocal(
+    dbHistory: Array<{ question: string; response: string; timestamp: string }>
+  ): Array<{ question: string; response: string; timestamp: string }> {
     try {
       // 로컬 히스토리 가져오기
       const context = this.getContext();
-      const localHistory = context?.globalState.get<Array<{ question: string; response: string; timestamp: string }>>("hapaHistory") || [];
-      
+      const localHistory =
+        context?.globalState.get<Array<{ question: string; response: string; timestamp: string }>>(
+          "hapaHistory"
+        ) || [];
+
       console.log(`🔄 히스토리 병합 시작: DB ${dbHistory.length}개, 로컬 ${localHistory.length}개`);
-      
+
       // 병합을 위한 Map 사용 (타임스탬프를 키로 사용)
-      const mergedMap = new Map<string, { question: string; response: string; timestamp: string }>();
-      
+      const mergedMap = new Map<
+        string,
+        { question: string; response: string; timestamp: string }
+      >();
+
       // 1. DB 히스토리 추가 (우선순위 높음)
       dbHistory.forEach(item => {
         if (item.timestamp && item.question && item.response) {
           mergedMap.set(item.timestamp, item);
         }
       });
-      
+
       // 2. 로컬 히스토리 추가 (DB에 없는 항목만)
       localHistory.forEach(item => {
         if (item.timestamp && item.question && item.response) {
@@ -523,25 +529,26 @@ export class SidebarProvider extends BaseWebviewProvider {
           }
         }
       });
-      
+
       // 3. 타임스탬프 기준 최신 순 정렬
       const mergedHistory = Array.from(mergedMap.values()).sort((a, b) => {
         const timestampA = new Date(a.timestamp).getTime();
         const timestampB = new Date(b.timestamp).getTime();
         return timestampB - timestampA; // 최신 순 (내림차순)
       });
-      
+
       console.log(`✅ 히스토리 병합 완료: 총 ${mergedHistory.length}개 항목`);
-      console.log(`📊 병합 결과: 기존 ${dbHistory.length + localHistory.length}개 → 중복 제거 후 ${mergedHistory.length}개`);
-      
+      console.log(
+        `📊 병합 결과: 기존 ${dbHistory.length + localHistory.length}개 → 중복 제거 후 ${mergedHistory.length}개`
+      );
+
       // 4. 병합된 히스토리를 로컬에 저장
       if (context) {
         context.globalState.update("hapaHistory", mergedHistory);
         console.log("💾 병합된 히스토리 로컬 저장 완료");
       }
-      
+
       return mergedHistory;
-      
     } catch (error) {
       console.error("❌ 히스토리 병합 실패:", error);
       // 에러 시 DB 히스토리 우선 반환
@@ -589,9 +596,12 @@ export class SidebarProvider extends BaseWebviewProvider {
 
       // 세션 ID 캐시 (5분간 유지)
       (this as any).currentSessionId = sessionId;
-      setTimeout(() => {
-        (this as any).currentSessionId = null;
-      }, 5 * 60 * 1000);
+      setTimeout(
+        () => {
+          (this as any).currentSessionId = null;
+        },
+        5 * 60 * 1000
+      );
 
       console.log("✅ 새 세션 생성:", sessionId);
       return sessionId;
@@ -700,20 +710,20 @@ export class SidebarProvider extends BaseWebviewProvider {
             command: "updateCodeContext",
             context: contextInfo,
           })
-          .then(undefined, (error) => {
+          .then(undefined, error => {
             console.error("❌ 사이드바 코드 맥락 메시지 전송 실패:", error);
           });
       }
 
       // 모든 expand 패널에 코드 맥락 정보 전송
-      this.expandedPanels.forEach((panel) => {
+      this.expandedPanels.forEach(panel => {
         if (panel.webview) {
           panel.webview
             .postMessage({
               command: "updateCodeContext",
               context: contextInfo,
             })
-            .then(undefined, (error) => {
+            .then(undefined, error => {
               console.error("❌ 확장 패널 코드 맥락 메시지 전송 실패:", error);
             });
         }
@@ -811,49 +821,51 @@ export class SidebarProvider extends BaseWebviewProvider {
       hasView: !!this._view,
       hasPanel: !!this._panel,
       viewWebview: !!this._view?.webview,
-      panelWebview: !!this._panel?.webview
+      panelWebview: !!this._panel?.webview,
     });
 
     // 1. MongoDB에서 히스토리 로드 후 동기화
-    this.loadHistoryFromDB().then((dbResult) => {
-      if (dbResult.success && dbResult.history && dbResult.history.length > 0) {
-        console.log("🔄 MongoDB 히스토리 로드 성공, 로컬 히스토리와 병합");
-        this.questionHistory = dbResult.history;
-        
-        // DB 히스토리를 로컬 저장소에도 캐시 저장
-        this.syncDBToLocalHistory(dbResult.history);
-      } else {
-        console.log("⚠️ MongoDB 히스토리 로드 실패 또는 빈 데이터, 로컬 히스토리 사용");
-      }
-      
-      // 2. 히스토리 동기화 (DB 또는 로컬)
-      this.broadcastHistoryUpdate();
-      
-      // 3. 히스토리 로드 완료 후 응답 상태 복원 또는 빈 상태 초기화
-      this.initializeResponseState();
-      
-      // 4. 현재 에디터 컨텍스트 정보 전송
-      this.updateEditorContext();
-      
-    }).catch((error) => {
-      console.error("❌ MongoDB 히스토리 로드 중 오류:", error);
-      // 오류 발생 시 기존 로컬 히스토리로 동기화
-      this.broadcastHistoryUpdate();
-      
-      // 오류 시에도 초기화 진행
-      this.initializeResponseState();
-      this.updateEditorContext();
-    });
+    this.loadHistoryFromDB()
+      .then(dbResult => {
+        if (dbResult.success && dbResult.history && dbResult.history.length > 0) {
+          console.log("🔄 MongoDB 히스토리 로드 성공, 로컬 히스토리와 병합");
+          this.questionHistory = dbResult.history;
+
+          // DB 히스토리를 로컬 저장소에도 캐시 저장
+          this.syncDBToLocalHistory(dbResult.history);
+        } else {
+          console.log("⚠️ MongoDB 히스토리 로드 실패 또는 빈 데이터, 로컬 히스토리 사용");
+        }
+
+        // 2. 히스토리 동기화 (DB 또는 로컬)
+        this.broadcastHistoryUpdate();
+
+        // 3. 히스토리 로드 완료 후 응답 상태 복원 또는 빈 상태 초기화
+        this.initializeResponseState();
+
+        // 4. 현재 에디터 컨텍스트 정보 전송
+        this.updateEditorContext();
+      })
+      .catch(error => {
+        console.error("❌ MongoDB 히스토리 로드 중 오류:", error);
+        // 오류 발생 시 기존 로컬 히스토리로 동기화
+        this.broadcastHistoryUpdate();
+
+        // 오류 시에도 초기화 진행
+        this.initializeResponseState();
+        this.updateEditorContext();
+      });
   }
 
   /**
    * 응답 상태 복원 또는 빈 상태 초기화
    */
   private initializeResponseState(): void {
-    const shouldRestoreResponse = this.currentResponseState.isValid && 
-                                 this.currentResponseState.response &&
-                                 this.currentResponseState.timestamp &&
-                                 (Date.now() - this.currentResponseState.timestamp) < 30 * 60 * 1000; // 30분 내
+    const shouldRestoreResponse =
+      this.currentResponseState.isValid &&
+      this.currentResponseState.response &&
+      this.currentResponseState.timestamp &&
+      Date.now() - this.currentResponseState.timestamp < 30 * 60 * 1000; // 30분 내
 
     if (shouldRestoreResponse) {
       console.log("🔄 마지막 응답 상태 복원 시도");
@@ -933,10 +945,7 @@ export class SidebarProvider extends BaseWebviewProvider {
           // 메시지 정규화 - question 또는 prompt 필드 지원
           const prompt = message.question || message.prompt;
           const modelType =
-            message.modelType ||
-            message.model_type ||
-            this.selectedModel ||
-            "autocomplete";
+            message.modelType || message.model_type || this.selectedModel || "autocomplete";
 
           if (!prompt || prompt.trim().length === 0) {
             console.error("❌ 빈 질문/프롬프트 수신");
@@ -955,10 +964,7 @@ export class SidebarProvider extends BaseWebviewProvider {
 
           if (preferSync) {
             console.log("🔄 동기식 모드로 처리");
-            await this.handleSyncCodeGeneration(
-              prompt,
-              this.mapModelToVLLMType(modelType)
-            );
+            await this.handleSyncCodeGeneration(prompt, this.mapModelToVLLMType(modelType));
           } else {
             console.log("🔄 스트리밍 모드로 처리");
             await this.handleStreamingCodeGeneration(prompt, modelType);
@@ -982,7 +988,7 @@ export class SidebarProvider extends BaseWebviewProvider {
         return;
       case "addToHistory":
         // 히스토리 추가 요청 처리
-        this.addToHistory(message.question, message.response).catch((error) => {
+        this.addToHistory(message.question, message.response).catch(error => {
           console.error("❌ 히스토리 저장 실패:", error);
         });
         return;
@@ -998,12 +1004,14 @@ export class SidebarProvider extends BaseWebviewProvider {
       case "refreshHistory":
         // 히스토리 새로고침 (DB에서 다시 로드)
         console.log("🔄 히스토리 새로고침 요청");
-        this.loadHistory().then(() => {
-          console.log("✅ 히스토리 새로고침 완료");
-          this.broadcastHistoryUpdate();
-        }).catch((error) => {
-          console.error("❌ 히스토리 새로고침 실패:", error);
-        });
+        this.loadHistory()
+          .then(() => {
+            console.log("✅ 히스토리 새로고침 완료");
+            this.broadcastHistoryUpdate();
+          })
+          .catch(error => {
+            console.error("❌ 히스토리 새로고침 실패:", error);
+          });
         return;
       case "deleteHistoryItem":
         // 히스토리 항목 삭제 처리
@@ -1022,6 +1030,10 @@ export class SidebarProvider extends BaseWebviewProvider {
         this.questionHistory = [];
         this.saveHistory();
         this.broadcastHistoryUpdate();
+        return;
+      case "loadHistoryItem":
+        // 특정 히스토리 항목 로드
+        this.loadSpecificHistoryItem(message.index);
         return;
       case "openSettings":
         // 사용자 설정 열기 - HAPA 설정 페이지
@@ -1073,10 +1085,7 @@ export class SidebarProvider extends BaseWebviewProvider {
         return;
       case "continueResponse":
         // 응답 이어가기 처리
-        this.handleContinueResponse(
-          message.previousContent,
-          message.continuePrompt
-        );
+        this.handleContinueResponse(message.previousContent, message.continuePrompt);
         return;
       case "stopStreaming":
         // 스트리밍 중지 처리
@@ -1108,10 +1117,7 @@ export class SidebarProvider extends BaseWebviewProvider {
   /**
    * 응답 이어가기 처리
    */
-  private async handleContinueResponse(
-    previousContent: string,
-    continuePrompt: string
-  ) {
+  private async handleContinueResponse(previousContent: string, continuePrompt: string) {
     if (!this._view?.webview) {
       return;
     }
@@ -1128,11 +1134,7 @@ ${previousContent}
     const activeEditor = vscode.window.activeTextEditor;
     let codeContext: string | undefined = undefined;
 
-    if (
-      activeEditor &&
-      activeEditor.selection &&
-      !activeEditor.selection.isEmpty
-    ) {
+    if (activeEditor && activeEditor.selection && !activeEditor.selection.isEmpty) {
       codeContext = activeEditor.document.getText(activeEditor.selection);
     }
 
@@ -1235,12 +1237,8 @@ ${previousContent}
                 const parsed = JSON.parse(data);
                 if (parsed.text) {
                   // 응답 길이 제한 체크
-                  if (
-                    parsedContent.length + parsed.text.length >
-                    maxContentLength
-                  ) {
-                    parsedContent +=
-                      "\n\n⚠️ **응답이 너무 길어 일부가 생략되었습니다.**";
+                  if (parsedContent.length + parsed.text.length > maxContentLength) {
+                    parsedContent += "\n\n⚠️ **응답이 너무 길어 일부가 생략되었습니다.**";
                     resolve();
                     return;
                   }
@@ -1248,9 +1246,7 @@ ${previousContent}
                   parsedContent += parsed.text;
 
                   // 실시간 정리 및 전송
-                  const cleanedContent = this.cleanStreamingContent(
-                    parsed.text
-                  );
+                  const cleanedContent = this.cleanStreamingContent(parsed.text);
                   if (cleanedContent.trim()) {
                     this._view?.webview.postMessage({
                       type: "streamingResponse",
@@ -1288,11 +1284,9 @@ ${previousContent}
         });
 
         // 히스토리에 추가 (이어가기 요청도 저장)
-        this.addToHistory(continuePrompt, finalCleanedContent).catch(
-          (error) => {
-            console.error("❌ 히스토리 저장 실패:", error);
-          }
-        );
+        this.addToHistory(continuePrompt, finalCleanedContent).catch(error => {
+          console.error("❌ 히스토리 저장 실패:", error);
+        });
 
         resolve();
       } catch (error) {
@@ -1303,14 +1297,11 @@ ${previousContent}
 
         if (error instanceof Error) {
           if (error.message.includes("응답 시간이 초과")) {
-            errorMessage =
-              "⏱️ 응답 시간이 초과되었습니다. 더 간단한 질문으로 다시 시도해주세요.";
+            errorMessage = "⏱️ 응답 시간이 초과되었습니다. 더 간단한 질문으로 다시 시도해주세요.";
           } else if (error.message.includes("HTTP error")) {
-            errorMessage =
-              "🌐 서버 연결 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
+            errorMessage = "🌐 서버 연결 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
           } else if (error.message.includes("응답을 읽을 수 없습니다")) {
-            errorMessage =
-              "📡 응답 데이터를 읽는 중 오류가 발생했습니다. 다시 시도해주세요.";
+            errorMessage = "📡 응답 데이터를 읽는 중 오류가 발생했습니다. 다시 시도해주세요.";
           } else {
             errorMessage = `❌ 오류: ${error.message}`;
           }
@@ -1374,9 +1365,7 @@ ${previousContent}
 
     console.log("🔧 버그 수정 스트리밍 시작:", {
       question:
-        trimmedQuestion.length > 100
-          ? trimmedQuestion.substring(0, 100) + "..."
-          : trimmedQuestion,
+        trimmedQuestion.length > 100 ? trimmedQuestion.substring(0, 100) + "..." : trimmedQuestion,
       questionLength: trimmedQuestion.length,
       modelType,
       webviewReady: !!this._view?.webview,
@@ -1386,11 +1375,7 @@ ${previousContent}
     const activeEditor = vscode.window.activeTextEditor;
     let codeContext: string | undefined = undefined;
 
-    if (
-      activeEditor &&
-      activeEditor.selection &&
-      !activeEditor.selection.isEmpty
-    ) {
+    if (activeEditor && activeEditor.selection && !activeEditor.selection.isEmpty) {
       codeContext = activeEditor.document.getText(activeEditor.selection);
     }
 
@@ -1451,8 +1436,7 @@ ${previousContent}
           // [DONE] 신호 감지 - 스트리밍 종료 처리
           if (
             chunkContent === "[DONE]" ||
-            (typeof chunkContent === "string" &&
-              chunkContent.trim() === "[DONE]") ||
+            (typeof chunkContent === "string" && chunkContent.trim() === "[DONE]") ||
             chunk.type === "done" ||
             chunk.is_complete === true
           ) {
@@ -1500,7 +1484,7 @@ ${previousContent}
         }
 
         // 히스토리에 추가 (질문과 현재까지 누적된 응답)
-        this.addToHistory(question.trim(), "AI 생성 코드").catch((error) => {
+        this.addToHistory(question.trim(), "AI 생성 코드").catch(error => {
           console.error("❌ 히스토리 저장 실패:", error);
         });
       },
@@ -1528,20 +1512,14 @@ ${previousContent}
 
     try {
       // 버그 수정 전용으로 직접 API 호출
-      await apiClient.generateCodeStreaming(
-        bugFixRequest.prompt,
-        bugFixRequest.context || "",
-        {
-          onChunk: callbacks.onChunk || (() => {}),
-          onComplete: callbacks.onComplete,
-          onError: callbacks.onError,
-        }
-      );
+      await apiClient.generateCodeStreaming(bugFixRequest.prompt, bugFixRequest.context || "", {
+        onChunk: callbacks.onChunk || (() => {}),
+        onComplete: callbacks.onComplete,
+        onError: callbacks.onError,
+      });
     } catch (error) {
       console.error("버그 수정 스트리밍 실패:", error);
-      callbacks.onError?.(
-        error instanceof Error ? error : new Error("알 수 없는 오류")
-      );
+      callbacks.onError?.(error instanceof Error ? error : new Error("알 수 없는 오류"));
     }
   }
 
@@ -1588,9 +1566,7 @@ ${previousContent}
 
     console.log("🚀 스트리밍 코드 생성 시작:", {
       question:
-        trimmedQuestion.length > 100
-          ? trimmedQuestion.substring(0, 100) + "..."
-          : trimmedQuestion,
+        trimmedQuestion.length > 100 ? trimmedQuestion.substring(0, 100) + "..." : trimmedQuestion,
       questionLength: trimmedQuestion.length,
       modelType,
       webviewReady: !!this._view?.webview,
@@ -1600,11 +1576,7 @@ ${previousContent}
     const activeEditor = vscode.window.activeTextEditor;
     let codeContext: string | undefined = undefined;
 
-    if (
-      activeEditor &&
-      activeEditor.selection &&
-      !activeEditor.selection.isEmpty
-    ) {
+    if (activeEditor && activeEditor.selection && !activeEditor.selection.isEmpty) {
       codeContext = activeEditor.document.getText(activeEditor.selection);
       console.log("📝 활성 에디터 컨텍스트 추출:", {
         contextLength: codeContext.length,
@@ -1647,8 +1619,7 @@ ${previousContent}
           lastChunkTime = Date.now();
 
           // 현재 청크 내용 추출
-          const currentChunkContent =
-            (chunk as any).text || chunk.content || "";
+          const currentChunkContent = (chunk as any).text || chunk.content || "";
 
           // 🚀 강화된 조기 종료 로직 - 간단한 요청 감지
           if (currentChunkContent) {
@@ -1668,9 +1639,7 @@ ${previousContent}
 
             for (const stopToken of stopTokens) {
               if (currentChunkContent.includes(stopToken)) {
-                console.log(
-                  `🔚 실제 vLLM stop token 감지: ${stopToken} - 스트리밍 종료`
-                );
+                console.log(`🔚 실제 vLLM stop token 감지: ${stopToken} - 스트리밍 종료`);
                 detectedStopToken = stopToken;
                 contentBeforeStop = currentChunkContent.split(stopToken)[0];
                 break;
@@ -1735,13 +1704,12 @@ ${previousContent}
 
             // 🔥 더 적극적인 조기 종료 - 완전한 출력문이 감지되면 즉시 종료
             if (isSimpleRequest && finalStreamingContent.length > 5) {
-              const hasCompleteOutput = printPatterns.some((pattern) =>
+              const hasCompleteOutput = printPatterns.some(pattern =>
                 pattern.test(finalStreamingContent)
               );
 
               // 간단한 변수 할당도 감지
-              const simpleAssignmentPattern =
-                /^\s*\w+\s*=\s*["'][^"']*["']\s*$/;
+              const simpleAssignmentPattern = /^\s*\w+\s*=\s*["'][^"']*["']\s*$/;
               const hasSimpleAssignment = simpleAssignmentPattern.test(
                 finalStreamingContent.trim()
               );
@@ -1779,8 +1747,7 @@ ${previousContent}
                 console.log("⚠️ 간단한 요청에 과도한 응답 감지 - 조기 종료");
 
                 // print 문만 추출
-                const printMatch =
-                  finalStreamingContent.match(/print\s*\([^)]+\)/);
+                const printMatch = finalStreamingContent.match(/print\s*\([^)]+\)/);
                 if (printMatch) {
                   const cleanedContent = printMatch[0];
                   console.log("✂️ print 문만 추출:", cleanedContent);
@@ -1934,10 +1901,7 @@ ${previousContent}
           // JSON 파싱 시도 (백엔드 응답 형식 대응)
           let parsedContent = finalStreamingContent;
           try {
-            if (
-              typeof parsedContent === "string" &&
-              parsedContent.trim().startsWith("{")
-            ) {
+            if (typeof parsedContent === "string" && parsedContent.trim().startsWith("{")) {
               const parsedCode = JSON.parse(parsedContent);
               if (parsedCode.text) {
                 parsedContent = parsedCode.text;
@@ -1954,18 +1918,64 @@ ${previousContent}
           // 최종 응답 정리
           let finalCleanedContent = this.finalizeResponse(parsedContent);
 
+          const isPrintStatement = /print\s*\([^)]*\)/.test(finalCleanedContent);
+          const isSimpleExpression = finalCleanedContent.split("\n").length === 1;
+          const isValidPythonCode =
+            /^(print|def|class|import|from|return|\w+\s*[=+\-*/]|[\w\.]+\([^)]*\))/.test(
+              finalCleanedContent.trim()
+            );
+          const isMathExpression = /^[\d\w\s+\-*/().]+$/.test(finalCleanedContent.trim());
+          const isVariableAssignment = /^\w+\s*=\s*.+/.test(finalCleanedContent.trim());
+          const isFunctionCall = /\w+\([^)]*\)/.test(finalCleanedContent.trim());
+
           // 응답 품질 검증
-          if (finalCleanedContent.length < 10) {
-            console.warn("⚠️ 응답이 너무 짧음:", finalCleanedContent.length);
-            finalCleanedContent +=
-              "\n\n⚠️ **알림**: 응답이 예상보다 짧습니다. 더 구체적인 질문으로 다시 시도해보세요.";
+          const isValidResponse =
+            finalCleanedContent.length >= 1 && // 최소 1글자
+            (isPrintStatement || // print("hello")
+              isValidPythonCode || // def func():
+              isMathExpression || // 2 + 3
+              isVariableAssignment || // x = 5
+              isFunctionCall || // len([1,2,3])
+              finalCleanedContent.length >= 5); // 5글자 이상은 무조건 허용
+
+          if (!isValidResponse || finalCleanedContent.trim() === "") {
+            console.warn("⚠️ 응답이 유효하지 않음:", {
+              length: finalCleanedContent.length,
+              content: finalCleanedContent.substring(0, 50),
+              isPrintStatement,
+              isValidPythonCode,
+              isMathExpression,
+              isVariableAssignment,
+              isFunctionCall,
+            });
+
+            // ❌ 정말로 무효한 응답인 경우에만 경고 메시지 추가
+            if (finalCleanedContent.trim() === "" || finalCleanedContent.length < 1) {
+              finalCleanedContent = "⚠️ **응답이 생성되지 않았습니다.** 다시 시도해주세요.";
+            } else {
+              // 짧지만 유효한 응답은 그대로 표시하고 간단한 안내만 추가
+              finalCleanedContent +=
+                "\n\n💡 **참고**: 간단한 응답입니다. 더 자세한 설명이 필요하면 추가 질문해주세요.";
+            }
+          } else {
+            console.log("✅ 유효한 응답 확인:", {
+              length: finalCleanedContent.length,
+              type: isPrintStatement
+                ? "print문"
+                : isValidPythonCode
+                  ? "Python 코드"
+                  : isMathExpression
+                    ? "수식"
+                    : isVariableAssignment
+                      ? "변수 할당"
+                      : isFunctionCall
+                        ? "함수 호출"
+                        : "일반 응답",
+            });
           }
 
           // 보안 경고 및 사용자 안내 추가 (조건부)
-          if (
-            finalCleanedContent.length > 100 &&
-            finalCleanedContent.includes("def ")
-          ) {
+          if (finalCleanedContent.length > 100 && finalCleanedContent.includes("def ")) {
             const securityWarnings = [
               "\n\n⚠️ **보안 알림**: 위 코드를 실행하기 전에 반드시 검토하세요.",
               "\n📝 **사용법**: 코드를 복사하여 Python 파일로 저장한 후 실행하세요.",
@@ -1989,7 +1999,7 @@ ${previousContent}
           });
 
           // 히스토리에 추가 (정리된 콘텐츠로 저장)
-          this.addToHistory(question, finalCleanedContent).catch((error) => {
+          this.addToHistory(question, finalCleanedContent).catch(error => {
             console.error("❌ 히스토리 저장 실패:", error);
           });
 
@@ -2035,11 +2045,9 @@ ${previousContent}
             } else if (error.code === "REQUEST_ABORTED") {
               userFriendlyMessage = "🛑 요청이 취소되었습니다.";
             } else if (error.message?.includes("401")) {
-              userFriendlyMessage =
-                "🔑 API 인증 오류가 발생했습니다. 설정을 확인해주세요.";
+              userFriendlyMessage = "🔑 API 인증 오류가 발생했습니다. 설정을 확인해주세요.";
             } else if (error.message?.includes("500")) {
-              userFriendlyMessage =
-                "🛠️ 서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
+              userFriendlyMessage = "🛠️ 서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
             }
 
             this._view.webview.postMessage({
@@ -2055,9 +2063,7 @@ ${previousContent}
           }
 
           // VSCode 사용자에게도 알림
-          vscode.window.showErrorMessage(
-            `HAPA 오류: ${error.message || error.toString()}`
-          );
+          vscode.window.showErrorMessage(`HAPA 오류: ${error.message || error.toString()}`);
         } catch (errorHandlingError) {
           console.error("❌ 오류 처리 중 추가 오류:", errorHandlingError);
         }
@@ -2151,26 +2157,19 @@ ${previousContent}
         data: {
           timestamp: new Date().toISOString(),
           modelType: modelType,
-          question:
-            question.substring(0, 100) + (question.length > 100 ? "..." : ""),
+          question: question.substring(0, 100) + (question.length > 100 ? "..." : ""),
         },
       });
 
       // API 클라이언트를 통한 스트리밍 요청
-      await apiClient.generateCodeStreaming(
-        request.prompt,
-        request.context || "",
-        {
-          onChunk: callbacks.onChunk,
-          onComplete: callbacks.onComplete,
-          onError: callbacks.onError,
-        }
-      );
+      await apiClient.generateCodeStreaming(request.prompt, request.context || "", {
+        onChunk: callbacks.onChunk,
+        onComplete: callbacks.onComplete,
+        onError: callbacks.onError,
+      });
     } catch (error) {
       console.error("❌ 스트리밍 코드 생성 실행 실패:", error);
-      callbacks.onError?.(
-        error instanceof Error ? error : new Error("알 수 없는 오류")
-      );
+      callbacks.onError?.(error instanceof Error ? error : new Error("알 수 없는 오류"));
     }
   }
 
@@ -2186,7 +2185,7 @@ ${previousContent}
     }
 
     try {
-      await activeEditor.edit((editBuilder) => {
+      await activeEditor.edit(editBuilder => {
         if (activeEditor.selection && !activeEditor.selection.isEmpty) {
           // 선택된 텍스트가 있으면 교체
           editBuilder.replace(activeEditor.selection, code);
@@ -2199,9 +2198,7 @@ ${previousContent}
       vscode.window.showInformationMessage("코드가 성공적으로 삽입되었습니다.");
     } catch (error) {
       vscode.window.showErrorMessage(
-        `코드 삽입 실패: ${
-          error instanceof Error ? error.message : "알 수 없는 오류"
-        }`
+        `코드 삽입 실패: ${error instanceof Error ? error.message : "알 수 없는 오류"}`
       );
     }
   }
@@ -2249,10 +2246,7 @@ ${previousContent}
       // 에러 처리
       this._view.webview.postMessage({
         command: "streamingError",
-        error:
-          error instanceof Error
-            ? error.message
-            : "알 수 없는 오류가 발생했습니다.",
+        error: error instanceof Error ? error.message : "알 수 없는 오류가 발생했습니다.",
       });
     }
   }
@@ -2315,7 +2309,7 @@ ${previousContent}
 
     // 확장된 뷰의 메시지 처리
     panel.webview.onDidReceiveMessage(
-      (message) => {
+      message => {
         this.handleExpandedViewMessage(message, panel);
       },
       undefined,
@@ -2347,10 +2341,11 @@ ${previousContent}
       });
 
       // 현재 응답 상태 동기화
-      const shouldRestoreResponse = this.currentResponseState.isValid && 
-                                   this.currentResponseState.response &&
-                                   this.currentResponseState.timestamp &&
-                                   (Date.now() - this.currentResponseState.timestamp) < 30 * 60 * 1000; // 30분 내
+      const shouldRestoreResponse =
+        this.currentResponseState.isValid &&
+        this.currentResponseState.response &&
+        this.currentResponseState.timestamp &&
+        Date.now() - this.currentResponseState.timestamp < 30 * 60 * 1000; // 30분 내
 
       if (shouldRestoreResponse) {
         console.log("🔄 확장 뷰에 마지막 응답 상태 동기화");
@@ -2387,7 +2382,7 @@ ${previousContent}
             error: errorMessage,
             timestamp: new Date().toISOString(),
           })
-          .then(undefined, (error) => {
+          .then(undefined, error => {
             console.error("❌ 에러 메시지 전송 실패:", error);
           });
       }
@@ -2401,11 +2396,8 @@ ${previousContent}
               error: errorMessage,
               timestamp: new Date().toISOString(),
             })
-            .then(undefined, (error) => {
-              console.error(
-                `❌ 확장 패널 ${index} 에러 메시지 전송 실패:`,
-                error
-              );
+            .then(undefined, error => {
+              console.error(`❌ 확장 패널 ${index} 에러 메시지 전송 실패:`, error);
             });
         }
       });
@@ -2417,13 +2409,14 @@ ${previousContent}
   /**
    * 확장된 뷰의 메시지 처리 (개선)
    */
-  private async handleExpandedViewMessage(
-    message: any,
-    panel: vscode.WebviewPanel
-  ) {
+  private async handleExpandedViewMessage(message: any, panel: vscode.WebviewPanel) {
     switch (message.command) {
       case "generateCodeStreaming":
-        this.handleExpandedStreamingCodeGeneration(message.question, panel);
+        this.handleExpandedStreamingCodeGeneration(
+          message.question,
+          panel,
+          message.modelType || message.model_type || "code_generation"
+        );
         return;
       case "generateBugFixStreaming":
         this.handleExpandedBugFixStreamingCodeGeneration(
@@ -2453,7 +2446,7 @@ ${previousContent}
         return;
       case "addToHistory":
         // 히스토리 추가 요청 처리
-        this.addToHistory(message.question, message.response).catch((error) => {
+        this.addToHistory(message.question, message.response).catch(error => {
           console.error("❌ 히스토리 저장 실패:", error);
         });
         return;
@@ -2467,12 +2460,14 @@ ${previousContent}
       case "refreshHistory":
         // 히스토리 새로고침 (DB에서 다시 로드)
         console.log("🔄 확장 패널 히스토리 새로고침 요청");
-        this.loadHistory().then(() => {
-          console.log("✅ 확장 패널 히스토리 새로고침 완료");
-          this.broadcastHistoryUpdate();
-        }).catch((error) => {
-          console.error("❌ 확장 패널 히스토리 새로고침 실패:", error);
-        });
+        this.loadHistory()
+          .then(() => {
+            console.log("✅ 확장 패널 히스토리 새로고침 완료");
+            this.broadcastHistoryUpdate();
+          })
+          .catch(error => {
+            console.error("❌ 확장 패널 히스토리 새로고침 실패:", error);
+          });
         return;
       case "deleteHistoryItem":
         // 히스토리 항목 삭제 처리
@@ -2565,11 +2560,7 @@ ${previousContent}
     const activeEditor = vscode.window.activeTextEditor;
     let codeContext: string | undefined = undefined;
 
-    if (
-      activeEditor &&
-      activeEditor.selection &&
-      !activeEditor.selection.isEmpty
-    ) {
+    if (activeEditor && activeEditor.selection && !activeEditor.selection.isEmpty) {
       codeContext = activeEditor.document.getText(activeEditor.selection);
     }
 
@@ -2622,99 +2613,355 @@ ${previousContent}
             error: error.message || error.toString(),
           });
         }
-        vscode.window.showErrorMessage(
-          `버그 수정 오류: ${error.message || error.toString()}`
-        );
+        vscode.window.showErrorMessage(`버그 수정 오류: ${error.message || error.toString()}`);
       },
     };
 
     try {
-      await apiClient.generateCodeStreaming(
-        bugFixRequest.prompt,
-        bugFixRequest.context || "",
-        {
-          onChunk: callbacks.onChunk || (() => {}),
-          onComplete: callbacks.onComplete,
-          onError: callbacks.onError,
-        }
-      );
+      await apiClient.generateCodeStreaming(bugFixRequest.prompt, bugFixRequest.context || "", {
+        onChunk: callbacks.onChunk || (() => {}),
+        onComplete: callbacks.onComplete,
+        onError: callbacks.onError,
+      });
     } catch (error) {
       console.error("확장된 뷰 버그 수정 스트리밍 실패:", error);
-      callbacks.onError?.(
-        error instanceof Error ? error : new Error("알 수 없는 오류")
-      );
+      callbacks.onError?.(error instanceof Error ? error : new Error("알 수 없는 오류"));
     }
   }
 
   /**
-   * 확장된 뷰에서의 스트리밍 코드 생성 처리
+   * 확장된 뷰에서의 스트리밍 코드 생성 처리 (사이드바와 동일한 로직 적용)
    */
   private async handleExpandedStreamingCodeGeneration(
     question: string,
-    panel: vscode.WebviewPanel
+    panel: vscode.WebviewPanel,
+    modelType: string = "code_generation"
   ) {
-    if (!panel.webview) {
+    // 질문 매개변수 안전성 검증
+    if (!question || typeof question !== "string") {
+      console.error("❌ [확장뷰] 질문이 유효하지 않습니다:", question);
+      vscode.window.showErrorMessage("질문을 입력해주세요.");
+
+      if (panel.webview) {
+        panel.webview.postMessage({
+          command: "streamingError",
+          error: "질문이 입력되지 않았습니다. 다시 시도해주세요.",
+        });
+      }
       return;
     }
+
+    // 질문 길이 검증
+    const trimmedQuestion = question.trim();
+    if (trimmedQuestion.length === 0) {
+      console.error("❌ [확장뷰] 빈 질문이 전달됨");
+      vscode.window.showErrorMessage("질문을 입력해주세요.");
+
+      if (panel.webview) {
+        panel.webview.postMessage({
+          command: "streamingError",
+          error: "질문을 입력해주세요.",
+        });
+      }
+      return;
+    }
+
+    if (!panel.webview) {
+      console.error("❌ [확장뷰] 웹뷰가 없어 스트리밍을 시작할 수 없습니다");
+      return;
+    }
+
+    console.log("🚀 [확장뷰] 스트리밍 코드 생성 시작:", {
+      question:
+        trimmedQuestion.length > 100 ? trimmedQuestion.substring(0, 100) + "..." : trimmedQuestion,
+      questionLength: trimmedQuestion.length,
+      modelType,
+      webviewReady: !!panel.webview,
+    });
 
     // 현재 활성 편집기의 컨텍스트 가져오기
     const activeEditor = vscode.window.activeTextEditor;
     let codeContext: string | undefined = undefined;
 
-    if (
-      activeEditor &&
-      activeEditor.selection &&
-      !activeEditor.selection.isEmpty
-    ) {
+    if (activeEditor && activeEditor.selection && !activeEditor.selection.isEmpty) {
       codeContext = activeEditor.document.getText(activeEditor.selection);
+      console.log("📝 [확장뷰] 활성 에디터 컨텍스트 추출:", {
+        contextLength: codeContext.length,
+        selectionRange: `${activeEditor.selection.start.line}-${activeEditor.selection.end.line}`,
+      });
     }
 
-    // 스트리밍 콜백 설정
+    // 스트리밍 완료 후 최종 응답 저장용 변수
+    let finalStreamingContent = "";
+    let streamingStartTime = Date.now();
+    let chunkCount = 0;
+
+    // 스트리밍 콜백 설정 (사이드바와 동일한 로직)
     const callbacks = {
       onStart: () => {
-        // 시작 신호는 UI에서 이미 처리됨
+        console.log("🎬 [확장뷰] 스트리밍 시작 콜백 실행");
+        streamingStartTime = Date.now();
+        chunkCount = 0;
+        finalStreamingContent = "";
+
+        // 웹뷰에 스트리밍 시작 신호 전송
+        if (panel.webview) {
+          panel.webview.postMessage({
+            command: "streamingStarted",
+            timestamp: new Date().toISOString(),
+          });
+        }
       },
 
       onChunk: (chunk: StreamingChunk) => {
-        if (panel.webview) {
-          panel.webview.postMessage({
-            command: "streamingChunk",
-            chunk: chunk,
+        try {
+          chunkCount++;
+          const lastChunkTime = Date.now();
+
+          // 현재 청크 내용 추출
+          const currentChunkContent = (chunk as any).text || chunk.content || "";
+
+          console.log("📦 [확장뷰] 스트리밍 청크 수신:", {
+            type: chunk.type,
+            sequence: chunk.sequence,
+            contentLength: chunk.content?.length || 0,
+            chunkNumber: chunkCount,
+            timeSinceStart: lastChunkTime - streamingStartTime,
           });
+
+          // 웹뷰 상태 확인
+          if (!panel.webview) {
+            console.warn("⚠️ [확장뷰] 웹뷰가 사라짐 - 스트리밍 중단");
+            return;
+          }
+
+          // 청크 타입별 처리
+          if (chunk.type === "start") {
+            // 시작 청크 - UI 초기화
+            panel.webview.postMessage({
+              command: "streamingChunk",
+              chunk: {
+                type: "start",
+                content: "",
+                sequence: chunk.sequence,
+                timestamp: chunk.timestamp,
+              },
+            });
+          } else if (chunk.type === "token" || chunk.type === "code") {
+            // 콘텐츠 청크 - 안전성 검증
+            const chunkText = (chunk as any).text || chunk.content || "";
+            if (chunkText && typeof chunkText === "string") {
+              // 콘텐츠 정리 및 누적
+              const cleanedContent = this.cleanStreamingContent(chunkText);
+              if (cleanedContent.trim()) {
+                finalStreamingContent += cleanedContent;
+
+                // 청크 전송
+                panel.webview.postMessage({
+                  command: "streamingChunk",
+                  chunk: {
+                    type: "token",
+                    content: cleanedContent,
+                    sequence: chunk.sequence,
+                    timestamp: chunk.timestamp,
+                    totalLength: finalStreamingContent.length,
+                  },
+                });
+              }
+            } else {
+              console.warn("⚠️ [확장뷰] 잘못된 청크 콘텐츠:", chunk);
+            }
+          } else if (chunk.type === "done") {
+            console.log("🏁 [확장뷰] 완료 청크 수신");
+          }
+        } catch (error) {
+          console.error("❌ [확장뷰] 청크 처리 오류:", error);
         }
       },
 
       onComplete: () => {
-        if (panel.webview) {
+        try {
+          const totalDuration = Date.now() - streamingStartTime;
+
+          console.log("✅ [확장뷰] 스트리밍 완료:", {
+            totalChunks: chunkCount,
+            duration: totalDuration,
+            contentLength: finalStreamingContent.length,
+          });
+
+          if (!panel.webview) {
+            console.warn("⚠️ [확장뷰] 스트리밍 완료 시 웹뷰 없음");
+            return;
+          }
+
+          // 최종 응답 정리
+          let finalCleanedContent = this.finalizeResponse(finalStreamingContent);
+
+          // 응답 품질 검증
+          const isValidResponse = finalCleanedContent.length >= 1;
+
+          if (!isValidResponse) {
+            console.warn("⚠️ [확장뷰] 응답 품질 문제 감지, 폴백 응답 제공");
+            // 간단한 폴백 응답 제공
+            if (trimmedQuestion.includes("더하") || trimmedQuestion.includes("숫자")) {
+              finalCleanedContent = `def add_numbers(a, b):
+    """두 숫자를 더하는 함수"""
+    return a + b
+
+# 사용 예시
+result = add_numbers(5, 3)
+print(f"결과: {result}")`;
+            } else if (trimmedQuestion.includes("주석") || trimmedQuestion.includes("comment")) {
+              finalCleanedContent = `# 이것은 주석입니다
+# 코드에 설명을 추가할 때 사용합니다
+
+def example_function():
+    """
+    함수에 대한 설명을 여기에 작성합니다.
+    """
+    pass  # 실제 코드를 여기에 작성`;
+            } else {
+              finalCleanedContent = `# AI 응답 생성에 문제가 발생했습니다.
+# 더 구체적인 질문으로 다시 시도해 주세요.
+
+print("안녕하세요! HAPA입니다.")`;
+            }
+          }
+
+          // 스트리밍 완료 메시지 전송
           panel.webview.postMessage({
             command: "streamingComplete",
+            finalContent: finalCleanedContent,
+            metadata: {
+              duration: totalDuration,
+              chunkCount: chunkCount,
+              contentLength: finalCleanedContent.length,
+              modelType: modelType,
+              timestamp: new Date().toISOString(),
+            },
           });
+
+          // 히스토리에 추가 (정리된 콘텐츠로 저장)
+          this.addToHistory(question, finalCleanedContent).catch(error => {
+            console.error("❌ [확장뷰] 히스토리 저장 실패:", error);
+          });
+
+          console.log("✅ [확장뷰] 스트리밍 완료 처리 및 응답 정리 완료");
+        } catch (error) {
+          console.error("❌ [확장뷰] 완료 처리 오류:", error);
         }
-        // 히스토리에 추가 (question은 UI에서 전달받을 예정)
       },
 
       onError: (error: Error) => {
-        if (panel.webview) {
-          panel.webview.postMessage({
-            command: "streamingError",
-            error: error.message,
+        try {
+          const duration = Date.now() - streamingStartTime;
+          console.error("❌ [확장뷰] 스트리밍 오류:", {
+            errorMessage: error.message,
+            errorName: error.name,
+            duration: duration,
+            chunkCount: chunkCount,
           });
+
+          if (panel.webview) {
+            const userFriendlyMessage = error.message.includes("timeout")
+              ? "⏱️ 응답 시간이 초과되었습니다. 더 간단한 질문으로 다시 시도해주세요."
+              : error.message.includes("network")
+                ? "🌐 네트워크 연결에 문제가 있습니다. 잠시 후 다시 시도해주세요."
+                : `❌ 코드 생성 중 오류가 발생했습니다: ${error.message}`;
+
+            panel.webview.postMessage({
+              command: "streamingError",
+              error: userFriendlyMessage,
+              details: {
+                message: error.message,
+                duration: duration,
+                modelType: modelType,
+              },
+            });
+          }
+
+          // VSCode 사용자에게도 알림
+          vscode.window.showErrorMessage(`HAPA 오류: ${error.message || error.toString()}`);
+        } catch (errorHandlingError) {
+          console.error("❌ [확장뷰] 오류 처리 중 추가 오류:", errorHandlingError);
         }
-        vscode.window.showErrorMessage(`코드 생성 오류: ${error.message}`);
       },
     };
 
     try {
-      await apiClient.generateCodeStreaming(
-        question,
-        codeContext || "",
-        callbacks
-      );
+      // modelType을 VLLMModelType으로 안전하게 변환
+      let vllmModelType: VLLMModelType = VLLMModelType.CODE_GENERATION;
+      switch (modelType) {
+        case "code_completion":
+          vllmModelType = VLLMModelType.CODE_COMPLETION;
+          break;
+        case "code_generation":
+          vllmModelType = VLLMModelType.CODE_GENERATION;
+          break;
+        case "code_explanation":
+          vllmModelType = VLLMModelType.CODE_EXPLANATION;
+          break;
+        case "bug_fix":
+          vllmModelType = VLLMModelType.BUG_FIX;
+          break;
+        default:
+          console.warn("⚠️ [확장뷰] 알 수 없는 모델 타입, 기본값 사용:", modelType);
+          vllmModelType = VLLMModelType.CODE_GENERATION;
+      }
+
+      // 모델별 특화된 설정 가져오기
+      const modelConfig = this.getModelConfiguration(modelType);
+
+      // 프롬프트 최적화 및 전처리
+      const optimizedPrompt = this.optimizePrompt(question.trim(), modelType);
+
+      // 백엔드 API 스키마에 맞춘 요청 구성
+      const request = {
+        prompt: optimizedPrompt,
+        model_type: vllmModelType,
+        context: codeContext || "",
+        temperature: modelConfig.temperature || 0.3,
+        top_p: modelConfig.top_p || 0.95,
+        max_tokens: modelConfig.max_tokens || 1024,
+        programming_level: await this.getUserProgrammingLevel(),
+        explanation_detail: await this.getUserExplanationDetail(),
+        code_style: "pythonic" as const,
+        include_comments: modelConfig.include_comments !== false,
+        include_docstring: modelConfig.include_docstring !== false,
+        include_type_hints: modelConfig.include_type_hints !== false,
+        language: "python",
+        project_context: await this.getUserProjectContext(),
+      };
+
+      console.log("🚀 [확장뷰] 최종 스트리밍 요청 데이터:", {
+        original_model_type: modelType,
+        mapped_vllm_model_type: vllmModelType,
+        prompt_length: request.prompt.length,
+        has_context: !!request.context,
+        context_length: request.context?.length || 0,
+        temperature: request.temperature,
+        max_tokens: request.max_tokens,
+      });
+
+      // 스트리밍 시작 알림
+      panel.webview.postMessage({
+        command: "streamingStarted",
+        data: {
+          timestamp: new Date().toISOString(),
+          modelType: modelType,
+          question: question.substring(0, 100) + (question.length > 100 ? "..." : ""),
+        },
+      });
+
+      // API 클라이언트를 통한 스트리밍 요청
+      await apiClient.generateCodeStreaming(request.prompt, request.context || "", {
+        onChunk: callbacks.onChunk,
+        onComplete: callbacks.onComplete,
+        onError: callbacks.onError,
+      });
     } catch (error) {
-      console.error("스트리밍 코드 생성 실패:", error);
-      callbacks.onError?.(
-        error instanceof Error ? error : new Error("알 수 없는 오류")
-      );
+      console.error("❌ [확장뷰] 스트리밍 코드 생성 실행 실패:", error);
+      callbacks.onError?.(error instanceof Error ? error : new Error("알 수 없는 오류"));
     }
   }
 
@@ -2828,7 +3075,7 @@ ${previousContent}
       /^\s*#\s*write[:\s]/i, // 영어: write
     ];
 
-    return commentPatterns.some((pattern) => pattern.test(text));
+    return commentPatterns.some(pattern => pattern.test(text));
   }
 
   /**
@@ -2860,11 +3107,7 @@ ${previousContent}
       const contextCode = document.getText(contextRange);
 
       // AI가 이해할 수 있는 프롬프트 구성
-      const aiPrompt = this.constructAIPrompt(
-        cleanComment,
-        intent,
-        contextCode
-      );
+      const aiPrompt = this.constructAIPrompt(cleanComment, intent, contextCode);
 
       return {
         prompt: aiPrompt,
@@ -2913,11 +3156,7 @@ ${previousContent}
   /**
    * AI를 위한 프롬프트 구성
    */
-  private constructAIPrompt(
-    comment: string,
-    intent: string,
-    context: string
-  ): string {
+  private constructAIPrompt(comment: string, intent: string, context: string): string {
     // 기본 프롬프트 템플릿
     let prompt = `다음 요청사항에 따라 Python 코드를 생성해주세요:\n\n`;
 
@@ -3025,7 +3264,7 @@ ${previousContent}
       /\{\"content\"/g,
     ];
 
-    tokenPatterns.forEach((pattern) => {
+    tokenPatterns.forEach(pattern => {
       cleaned = cleaned.replace(pattern, "");
     });
 
@@ -3037,10 +3276,7 @@ ${previousContent}
       [/if __name_ _== "_ ___":/g, 'if __name__ == "__main__":'],
       [/\{"text"rint/g, "print"],
       [/print\(f"\{__file_\{"/g, 'print(f"{__file__}\\n{'],
-      [
-        /print\("Exception occurred repr\(e\)\)/g,
-        'print(f"Exception occurred: {repr(e)}")',
-      ],
+      [/print\("Exception occurred repr\(e\)\)/g, 'print(f"Exception occurred: {repr(e)}")'],
       [/raise\|im_end\|/g, "raise"],
       [/__all__ = \[calculate"\]/g, '__all__ = ["calculate"]'],
       [/"([^"]*)" "([^"]*)"/g, '"$1", "$2"'],
@@ -3074,10 +3310,7 @@ ${previousContent}
       const line = lines[i].trim();
 
       // 중복된 main 블록 스킵
-      if (
-        line.includes('if __name__ == "__main__"') &&
-        seenFunctions.has("main_block")
-      ) {
+      if (line.includes('if __name__ == "__main__"') && seenFunctions.has("main_block")) {
         skipUntilEnd = true;
         continue;
       }
@@ -3088,10 +3321,7 @@ ${previousContent}
       }
 
       // timer 관련 중복 제거
-      if (
-        line.includes("from timeit import default_timer") &&
-        seenFunctions.has("timer")
-      ) {
+      if (line.includes("from timeit import default_timer") && seenFunctions.has("timer")) {
         skipUntilEnd = true;
         continue;
       }
@@ -3173,15 +3403,9 @@ ${previousContent}
     cleaned = cleaned.replace(/\{\"content\"/g, "");
 
     // 2. 깨진 문법 패턴 수정
-    cleaned = cleaned.replace(
-      /if __name_ _== "_ ___":/g,
-      'if __name__ == "__main__":'
-    );
+    cleaned = cleaned.replace(/if __name_ _== "_ ___":/g, 'if __name__ == "__main__":');
     cleaned = cleaned.replace(/\{"text"rint/g, "print");
-    cleaned = cleaned.replace(
-      /print\(f"\{__file_\{"/g,
-      'print(f"{__file__}\\n{'
-    );
+    cleaned = cleaned.replace(/print\(f"\{__file_\{"/g, 'print(f"{__file__}\\n{');
 
     // 추가 문법 오류 수정
     cleaned = cleaned.replace(
@@ -3189,10 +3413,7 @@ ${previousContent}
       'print(f"Exception occurred: {repr(e)}")'
     );
     cleaned = cleaned.replace(/raise\|im_end\|/g, "raise");
-    cleaned = cleaned.replace(
-      /__all__ = \[calculate"\]/g,
-      '__all__ = ["calculate"]'
-    );
+    cleaned = cleaned.replace(/__all__ = \[calculate"\]/g, '__all__ = ["calculate"]');
     cleaned = cleaned.replace(/"([^"]*)" "([^"]*)"/g, '"$1", "$2"'); // 쉼표 누락 수정
     cleaned = cleaned.replace(
       /\[([^,\]]*)"([^,\]]*)" ([^,\]]*)"([^,\]]*)"([^,\]]*)"\]/g,
@@ -3200,17 +3421,12 @@ ${previousContent}
     ); // 복잡한 배열 수정
 
     // 3. 불완전한 함수 종료 정리
-    cleaned = cleaned.replace(
-      /return eval\(output\)<\|im_end\|>/g,
-      "return eval(output)"
-    );
+    cleaned = cleaned.replace(/return eval\(output\)<\|im_end\|>/g, "return eval(output)");
     cleaned = cleaned.replace(/print\(eval\(output\)\)<\|im_end\|>/g, "");
     cleaned = cleaned.replace(/quit\(\)<\|im_end\|>/g, "");
 
     // 4. 중복된 main 블록 정리
-    const mainBlocks = cleaned.match(
-      /if __name__ == "__main__":[\s\S]*?(?=\n\w|\n$|$)/g
-    );
+    const mainBlocks = cleaned.match(/if __name__ == "__main__":[\s\S]*?(?=\n\w|\n$|$)/g);
     if (mainBlocks && mainBlocks.length > 1) {
       // 첫 번째 main 블록만 유지
       const firstMainBlock = mainBlocks[0];
@@ -3240,7 +3456,7 @@ ${previousContent}
     cleaned = cleanedLines.join("\n");
 
     // 6. 불완전한 docstring 정리
-    cleaned = cleaned.replace(/"""[\s\S]*?(?=[^"])/g, (match) => {
+    cleaned = cleaned.replace(/"""[\s\S]*?(?=[^"])/g, match => {
       if (!match.endsWith('"""')) {
         return match + '"""';
       }
@@ -3250,8 +3466,7 @@ ${previousContent}
     // 7. eval() 사용 시 경고 주석 추가 (보안 고려사항)
     if (cleaned.includes("eval(") && !cleaned.includes("# 주의: eval()")) {
       cleaned =
-        "# 주의: 이 코드는 eval()을 사용합니다. 실제 사용 시 보안을 고려하세요.\n" +
-        cleaned;
+        "# 주의: 이 코드는 eval()을 사용합니다. 실제 사용 시 보안을 고려하세요.\n" + cleaned;
     }
 
     // 8. 과도한 공백 정리
@@ -3279,9 +3494,7 @@ ${previousContent}
       }
 
       // 다른 출력 요청들
-      const outputMatch = prompt.match(
-        /['"]([^'"]+)['"].*출력|출력.*['"]([^'"]+)['"]/
-      );
+      const outputMatch = prompt.match(/['"]([^'"]+)['"].*출력|출력.*['"]([^'"]+)['"]/);
       if (outputMatch) {
         const text = outputMatch[1] || outputMatch[2];
         return `Python에서 "${text}"를 출력하는 간단한 코드 한 줄만 작성해주세요. print() 함수를 사용하세요.`;
@@ -3377,10 +3590,7 @@ ${previousContent}
   /**
    * 동기식 코드 생성 처리 (새로운 메서드)
    */
-  private async handleSyncCodeGeneration(
-    question: string,
-    modelType: string = "code_generation"
-  ) {
+  private async handleSyncCodeGeneration(question: string, modelType: string = "code_generation") {
     if (!this._view?.webview) {
       return;
     }
@@ -3401,11 +3611,7 @@ ${previousContent}
       const activeEditor = vscode.window.activeTextEditor;
       let codeContext: string | undefined = undefined;
 
-      if (
-        activeEditor &&
-        activeEditor.selection &&
-        !activeEditor.selection.isEmpty
-      ) {
+      if (activeEditor && activeEditor.selection && !activeEditor.selection.isEmpty) {
         codeContext = activeEditor.document.getText(activeEditor.selection);
       }
 
@@ -3474,7 +3680,7 @@ ${previousContent}
         }, 100);
 
         // 히스토리에 추가
-        this.addToHistory(question.trim(), cleanedCode).catch((error) => {
+        this.addToHistory(question.trim(), cleanedCode).catch(error => {
           console.error("❌ 히스토리 저장 실패:", error);
         });
 
@@ -3494,10 +3700,7 @@ ${previousContent}
       if (this._view?.webview) {
         this._view.webview.postMessage({
           command: "showError",
-          error:
-            error instanceof Error
-              ? error.message
-              : "알 수 없는 오류가 발생했습니다.",
+          error: error instanceof Error ? error.message : "알 수 없는 오류가 발생했습니다.",
         });
       }
     }
@@ -3530,10 +3733,7 @@ ${previousContent}
     try {
       // 캐시된 설정이 유효한지 확인
       const now = Date.now();
-      if (
-        this.cachedUserSettings &&
-        now - this.settingsLastFetch < this.SETTINGS_CACHE_TTL
-      ) {
+      if (this.cachedUserSettings && now - this.settingsLastFetch < this.SETTINGS_CACHE_TTL) {
         console.log("📋 SidebarProvider: 캐시된 사용자 설정 사용");
         return { success: true, settings: this.cachedUserSettings };
       }
@@ -3562,10 +3762,7 @@ ${previousContent}
       } as any);
 
       if (!response.ok) {
-        console.error(
-          "❌ SidebarProvider 사용자 설정 조회 실패:",
-          response.status
-        );
+        console.error("❌ SidebarProvider 사용자 설정 조회 실패:", response.status);
         return {
           success: false,
           error: `설정 조회 실패: ${response.status}`,
@@ -3604,7 +3801,7 @@ ${previousContent}
       };
 
       // DB 설정을 사용자 프로필로 매핑
-      dbSettings.forEach((setting) => {
+      dbSettings.forEach(setting => {
         switch (setting.setting_type) {
           case "python_skill_level":
             userProfile.pythonSkillLevel = setting.option_value;
@@ -3639,18 +3836,11 @@ ${previousContent}
       const dbResult = await this.fetchUserSettingsFromDB();
 
       if (dbResult.success && dbResult.settings) {
-        const userProfile = this.convertDBSettingsToUserProfile(
-          dbResult.settings
-        );
+        const userProfile = this.convertDBSettingsToUserProfile(dbResult.settings);
         const dbLevel = userProfile.pythonSkillLevel;
 
-        if (
-          ["beginner", "intermediate", "advanced", "expert"].includes(dbLevel)
-        ) {
-          console.log(
-            "✅ SidebarProvider: DB에서 Python 스킬 레벨 사용:",
-            dbLevel
-          );
+        if (["beginner", "intermediate", "advanced", "expert"].includes(dbLevel)) {
+          console.log("✅ SidebarProvider: DB에서 Python 스킬 레벨 사용:", dbLevel);
           return dbLevel as any;
         }
       }
@@ -3676,43 +3866,30 @@ ${previousContent}
       const dbResult = await this.fetchUserSettingsFromDB();
 
       if (dbResult.success && dbResult.settings) {
-        const userProfile = this.convertDBSettingsToUserProfile(
-          dbResult.settings
-        );
+        const userProfile = this.convertDBSettingsToUserProfile(dbResult.settings);
         const dbStyle = userProfile.explanationStyle;
 
         // DB 값을 API 형식으로 매핑
-        const styleMapping: Record<
-          string,
-          "minimal" | "standard" | "detailed" | "comprehensive"
-        > = {
-          brief: "minimal",
-          standard: "standard",
-          detailed: "detailed",
-          educational: "comprehensive",
-        };
+        const styleMapping: Record<string, "minimal" | "standard" | "detailed" | "comprehensive"> =
+          {
+            brief: "minimal",
+            standard: "standard",
+            detailed: "detailed",
+            educational: "comprehensive",
+          };
 
         const mappedStyle = styleMapping[dbStyle] || "standard";
-        console.log(
-          "✅ SidebarProvider: DB에서 설명 스타일 사용:",
-          `${dbStyle} → ${mappedStyle}`
-        );
+        console.log("✅ SidebarProvider: DB에서 설명 스타일 사용:", `${dbStyle} → ${mappedStyle}`);
         return mappedStyle;
       }
 
       // 2단계: DB 조회 실패 시 로컬 VSCode 설정 사용 (fallback)
       console.log("⚠️ SidebarProvider: DB 조회 실패, 로컬 설정 사용");
       const config = vscode.workspace.getConfiguration("hapa");
-      const localStyle = config.get(
-        "userProfile.explanationStyle",
-        "standard"
-      ) as string;
+      const localStyle = config.get("userProfile.explanationStyle", "standard") as string;
 
       // 로컬 설정도 매핑
-      const styleMapping: Record<
-        string,
-        "minimal" | "standard" | "detailed" | "comprehensive"
-      > = {
+      const styleMapping: Record<string, "minimal" | "standard" | "detailed" | "comprehensive"> = {
         brief: "minimal",
         minimal: "minimal",
         standard: "standard",
@@ -3737,9 +3914,7 @@ ${previousContent}
       const dbResult = await this.fetchUserSettingsFromDB();
 
       if (dbResult.success && dbResult.settings) {
-        const userProfile = this.convertDBSettingsToUserProfile(
-          dbResult.settings
-        );
+        const userProfile = this.convertDBSettingsToUserProfile(dbResult.settings);
         const dbContext = userProfile.projectContext;
 
         // 프로젝트 컨텍스트를 문자열로 변환
@@ -3763,10 +3938,7 @@ ${previousContent}
       // 2단계: DB 조회 실패 시 로컬 VSCode 설정 사용 (fallback)
       console.log("⚠️ SidebarProvider: DB 조회 실패, 로컬 설정 사용");
       const config = vscode.workspace.getConfiguration("hapa");
-      const projectContext = config.get(
-        "userProfile.projectContext",
-        "general_purpose"
-      );
+      const projectContext = config.get("userProfile.projectContext", "general_purpose");
 
       const contextMap: Record<string, string> = {
         web_development: "웹 개발",
@@ -3789,41 +3961,40 @@ ${previousContent}
    */
   private async initializeExpandedView(panel: vscode.WebviewPanel) {
     console.log("🔄 확장 뷰 초기화 시작");
-    
+
     // 확장 뷰 플래그 전송
     await panel.webview.postMessage({
       command: "setExpandedViewFlag",
-      isExpandedView: true
+      isExpandedView: true,
     });
-    
+
     // DOM 준비 대기
     let retryCount = 0;
     const maxRetries = 15; // 재시도 횟수 증가
     const retryInterval = 200; // 간격 단축
 
     const waitForExpandedViewReady = async (): Promise<boolean> => {
-      return new Promise((resolve) => {
+      return new Promise(resolve => {
         const checkReady = async () => {
           retryCount++;
           console.log(`🔍 확장 뷰 DOM 준비 확인 (${retryCount}/${maxRetries})`);
-          
+
           try {
             // 확장 뷰 준비 상태 확인
             await panel.webview.postMessage({
               command: "checkExpandedViewReady",
               retryCount: retryCount,
-              maxRetries: maxRetries
+              maxRetries: maxRetries,
             });
-            
+
             // 잠시 대기 후 동기화 시도
             setTimeout(() => {
               this.syncExpandedViewState(panel);
               resolve(true);
             }, 100);
-            
           } catch (error) {
             console.warn(`⚠️ 확장 뷰 준비 확인 실패 (${retryCount}/${maxRetries}):`, error);
-            
+
             if (retryCount < maxRetries) {
               setTimeout(checkReady, retryInterval);
             } else {
@@ -3836,7 +4007,7 @@ ${previousContent}
             }
           }
         };
-        
+
         // 초기 지연 후 시작
         setTimeout(checkReady, 300);
       });
@@ -3851,28 +4022,28 @@ ${previousContent}
    */
   private async syncExpandedViewState(panel: vscode.WebviewPanel) {
     console.log("🔄 확장 뷰 상태 동기화 시작");
-    
+
     try {
       // 현재 히스토리 데이터 준비
       const syncData = {
         history: JSON.stringify(this.questionHistory),
         historyCount: this.questionHistory.length,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       };
 
       console.log("📚 확장 뷰 히스토리 동기화:", {
         count: syncData.historyCount,
         dataSize: syncData.history.length,
         sampleData: this.questionHistory.slice(0, 2).map(h => ({
-          question: h.question.substring(0, 30) + '...',
-          timestamp: h.timestamp
-        }))
+          question: h.question.substring(0, 30) + "...",
+          timestamp: h.timestamp,
+        })),
       });
 
       // 1. 확장 뷰 식별자 설정
       await panel.webview.postMessage({
         command: "setExpandedViewMode",
-        isExpanded: true
+        isExpanded: true,
       });
 
       // 2. 히스토리 동기화 (재시도 메커니즘 포함)
@@ -3886,8 +4057,9 @@ ${previousContent}
               count: syncData.historyCount,
               timestamp: syncData.timestamp,
               source: "expandedViewInit",
-              attempt: i + 1
-            }
+              attempt: i + 1,
+              isExpandedView: true,
+            },
           });
           historySync = true;
           console.log(`✅ 확장 뷰 히스토리 동기화 성공 (${i + 1}번째 시도)`);
@@ -3902,6 +4074,25 @@ ${previousContent}
 
       if (!historySync) {
         console.error("❌ 확장 뷰 히스토리 동기화 최종 실패");
+        // 히스토리 동기화 실패 시 강제로 DB에서 다시 로드 시도
+        console.log("🔄 DB에서 강제 히스토리 재로드 시도");
+        setTimeout(async () => {
+          const freshHistory = await this.loadHistoryFromDB();
+          if (freshHistory.success && freshHistory.history) {
+            this.questionHistory = freshHistory.history;
+            await panel.webview.postMessage({
+              command: "syncHistory",
+              history: JSON.stringify(freshHistory.history),
+              metadata: {
+                count: freshHistory.history.length,
+                timestamp: Date.now(),
+                source: "fallbackReload",
+                isExpandedView: true,
+              },
+            });
+            console.log("✅ 강제 히스토리 재로드 완료");
+          }
+        }, 1000);
       }
 
       // 3. 코드 맥락 정보 동기화
@@ -3912,10 +4103,11 @@ ${previousContent}
       });
 
       // 4. 현재 응답 상태 동기화
-      const shouldRestoreResponse = this.currentResponseState.isValid && 
-                                   this.currentResponseState.response &&
-                                   this.currentResponseState.timestamp &&
-                                   (Date.now() - this.currentResponseState.timestamp) < 30 * 60 * 1000;
+      const shouldRestoreResponse =
+        this.currentResponseState.isValid &&
+        this.currentResponseState.response &&
+        this.currentResponseState.timestamp &&
+        Date.now() - this.currentResponseState.timestamp < 30 * 60 * 1000;
 
       if (shouldRestoreResponse) {
         console.log("🔄 확장 뷰에 마지막 응답 상태 동기화");
@@ -3937,8 +4129,8 @@ ${previousContent}
           activeTab: "response",
           selectedModel: this.selectedModel || "autocomplete",
           timestamp: Date.now(),
-          isExpandedView: true
-        }
+          isExpandedView: true,
+        },
       });
 
       // 6. 동기화 완료 확인
@@ -3947,23 +4139,120 @@ ${previousContent}
         summary: {
           historyItems: syncData.historyCount,
           hasResponse: shouldRestoreResponse,
-          timestamp: Date.now()
-        }
+          timestamp: Date.now(),
+        },
       });
 
       console.log("✅ 확장 뷰 상태 동기화 완료");
-      
     } catch (error) {
       console.error("❌ 확장 뷰 상태 동기화 실패:", error);
-      
+
       // 실패 시 기본 상태로 초기화 시도
       setTimeout(() => {
         console.log("🔄 확장 뷰 기본 상태 초기화 시도");
         panel.webview.postMessage({
           command: "initializeEmptyStates",
-          fallback: true
+          fallback: true,
         });
       }, 1000);
     }
+  }
+
+  /**
+   * 특정 히스토리 항목 로드
+   */
+  private loadSpecificHistoryItem(index: number) {
+    try {
+      console.log(`📖 히스토리 항목 로드 요청: ${index}`);
+
+      if (!this.questionHistory || this.questionHistory.length === 0) {
+        console.warn("⚠️ 로드할 히스토리가 없음");
+        this.sendHistoryLoadError("히스토리가 비어있습니다");
+        return;
+      }
+
+      if (index < 0 || index >= this.questionHistory.length) {
+        console.warn(`⚠️ 잘못된 히스토리 인덱스: ${index} (총 ${this.questionHistory.length}개)`);
+        this.sendHistoryLoadError("유효하지 않은 히스토리 항목입니다");
+        return;
+      }
+
+      const historyItem = this.questionHistory[index];
+
+      // 히스토리 항목 검증
+      if (!historyItem || !historyItem.question || !historyItem.response) {
+        console.warn("⚠️ 히스토리 항목이 불완전함:", historyItem);
+        this.sendHistoryLoadError("히스토리 항목이 손상되었습니다");
+        return;
+      }
+
+      // 응답 데이터 구성
+      const responseData = {
+        generated_code: historyItem.response,
+        explanation: `📖 히스토리에서 로드된 응답\n\n**원본 질문:** ${historyItem.question}\n**생성 시간:** ${historyItem.timestamp}`,
+        originalQuestion: historyItem.question,
+        success: true,
+        processingTime: 0,
+        isHistoryItem: true,
+        historyIndex: index,
+        timestamp: historyItem.timestamp,
+      };
+
+      console.log("📤 히스토리 항목 전송:", {
+        index,
+        question: historyItem.question.substring(0, 50) + "...",
+        responseLength: historyItem.response.length,
+        timestamp: historyItem.timestamp,
+      });
+
+      // 웹뷰에 히스토리 항목 전송
+      if (this._view?.webview) {
+        this._view.webview.postMessage({
+          command: "addAIResponse",
+          response: responseData,
+        });
+      }
+
+      // 확장된 패널들에도 전송
+      this.expandedPanels.forEach((panel, panelIndex) => {
+        if (panel.webview) {
+          panel.webview.postMessage({
+            command: "addAIResponse",
+            response: responseData,
+          });
+          console.log(`📤 확장 패널 ${panelIndex}에 히스토리 항목 전송`);
+        }
+      });
+
+      console.log("✅ 히스토리 항목 로드 완료");
+    } catch (error) {
+      console.error("❌ 히스토리 항목 로드 실패:", error);
+      this.sendHistoryLoadError("히스토리 로드 중 오류가 발생했습니다");
+    }
+  }
+
+  /**
+   * 히스토리 로드 오류 전송
+   */
+  private sendHistoryLoadError(errorMessage: string) {
+    console.warn("⚠️ 히스토리 로드 오류:", errorMessage);
+
+    // 웹뷰에 오류 전송
+    if (this._view?.webview) {
+      this._view.webview.postMessage({
+        command: "showError",
+        error: errorMessage,
+      });
+    }
+
+    // 확장된 패널들에도 전송
+    this.expandedPanels.forEach(panel => {
+      if (panel.webview) {
+        panel.webview.postMessage({
+          command: "showError",
+          error: errorMessage,
+        });
+      }
+    });
   }
 }

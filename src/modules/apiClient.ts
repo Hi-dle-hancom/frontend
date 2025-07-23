@@ -139,13 +139,20 @@ export class HAPAAPIClient {
       this.baseURL
     );
 
-    // Axios 기본 설정 (Authorization 헤더 제거, X-API-Key만 사용)
+    // Axios 기본 설정 (JWT와 API Key 모두 지원)
     axios.defaults.timeout = apiConfig.timeout;
     axios.defaults.headers.common["Content-Type"] = "application/json";
 
-    // X-API-Key 헤더만 설정 (Authorization Bearer 제거)
-    if (this.apiKey) {
+    // JWT 토큰 우선, 없으면 API Key 사용
+    const config = vscode.workspace.getConfiguration("hapa");
+    const jwtToken: string | undefined = config.get<string>("auth.accessToken");
+    
+    if (jwtToken) {
+      axios.defaults.headers.common["Authorization"] = `Bearer ${jwtToken}`;
+      console.log("🔑 API Client: JWT 토큰 인증 사용");
+    } else if (this.apiKey) {
       axios.defaults.headers.common["X-API-Key"] = this.apiKey;
+      console.log("🔑 API Client: API Key 인증 사용");
     }
   }
 
@@ -579,8 +586,13 @@ export class HAPAAPIClient {
         "Content-Type": "application/json",
       };
 
-      // X-API-Key 헤더만 추가
-      if (this.apiKey) {
+      // JWT 토큰 우선, 없으면 API Key 사용
+      const config = vscode.workspace.getConfiguration("hapa");
+      const jwtToken: string | undefined = config.get<string>("auth.accessToken");
+      
+      if (jwtToken) {
+        headers["Authorization"] = `Bearer ${jwtToken}`;
+      } else if (this.apiKey) {
         headers["X-API-Key"] = this.apiKey;
       }
 

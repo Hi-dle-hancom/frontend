@@ -1,9 +1,12 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.SidebarStyles = void 0;
 /**
  * 사이드바 CSS 스타일 생성 클래스
  */
-export class SidebarStyles {
-  static generateCSS(): string {
-    return `
+class SidebarStyles {
+    static generateCSS() {
+        return `
 /* HAPA Extension - VS Code 테마 색상 시스템 (인라인) */
 :root {
   /* VS Code 기본 색상 */
@@ -1985,13 +1988,12 @@ button:focus-visible {
   letter-spacing: 0.5px;
 }
     `;
-  }
-
-  /**
-   * 확장 뷰용 추가 CSS 스타일
-   */
-  static generateExpandedViewCSS(): string {
-    return `
+    }
+    /**
+     * 확장 뷰용 추가 CSS 스타일
+     */
+    static generateExpandedViewCSS() {
+        return `
 /* 확장 뷰 컨테이너 */
 .expanded-container {
   display: flex;
@@ -2529,5 +2531,7 @@ button:focus-visible {
   background: var(--hapa-description-foreground);
 }
     `;
-  }
+    }
 }
+exports.SidebarStyles = SidebarStyles;
+//# sourceMappingURL=SidebarStyles.js.map

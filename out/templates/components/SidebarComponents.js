@@ -1,12 +1,15 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.SidebarComponents = void 0;
 /**
  * 사이드바 HTML 컴포넌트 생성 클래스
  */
-export class SidebarComponents {
-  /**
-   * 사이드바 헤더 컴포넌트
-   */
-  static generateHeader(): string {
-    return `
+class SidebarComponents {
+    /**
+     * 사이드바 헤더 컴포넌트
+     */
+    static generateHeader() {
+        return `
     <div class="sidebar-header hapa-animate-fade-in-down">
       <div class="sidebar-title">
         HAPA
@@ -28,13 +31,12 @@ export class SidebarComponents {
       </div>
     </div>
     `;
-  }
-
-  /**
-   * 확장 뷰용 헤더 컴포넌트 (확장 버튼 제거)
-   */
-  static generateExpandedHeader(): string {
-    return `
+    }
+    /**
+     * 확장 뷰용 헤더 컴포넌트 (확장 버튼 제거)
+     */
+    static generateExpandedHeader() {
+        return `
     <div class="sidebar-header hapa-animate-fade-in-down">
       <div class="sidebar-title">
         HAPA
@@ -53,13 +55,12 @@ export class SidebarComponents {
       </div>
     </div>
     `;
-  }
-
-  /**
-   * 질문 입력 섹션
-   */
-  static generateQuestionSection(): string {
-    return `
+    }
+    /**
+     * 질문 입력 섹션
+     */
+    static generateQuestionSection() {
+        return `
     <div class="request-section hapa-animate-fade-in-up hapa-animate-delay-200">
       <div class="model-tabs-section">
         <div class="model-tabs">
@@ -112,13 +113,12 @@ export class SidebarComponents {
       </div>
     </div>
     `;
-  }
-
-  /**
-   * 응답 표시 섹션 (클로드 스타일)
-   */
-  static generateResponseSection(): string {
-    return `
+    }
+    /**
+     * 응답 표시 섹션 (클로드 스타일)
+     */
+    static generateResponseSection() {
+        return `
     <div class="response-section hapa-animate-fade-in-up hapa-animate-delay-400">
       <div class="response-tabs">
         <button class="tab-btn active" onclick="switchTab('response')" data-tab="response">응답</button>
@@ -205,13 +205,12 @@ export class SidebarComponents {
       </div>
     </div>
     `;
-  }
-
-  /**
-   * 상태 표시 컴포넌트들
-   */
-  static generateStatusComponents(): string {
-    return `
+    }
+    /**
+     * 상태 표시 컴포넌트들
+     */
+    static generateStatusComponents() {
+        return `
     <div id="codeContextIndicator" class="code-context-indicator">
       <div class="context-icon">📝</div>
       <div class="context-content">
@@ -227,13 +226,12 @@ export class SidebarComponents {
       </div>
     </div>
     `;
-  }
-
-  /**
-   * 메인 컨테이너 구조
-   */
-  static generateMainContainer(): string {
-    return `
+    }
+    /**
+     * 메인 컨테이너 구조
+     */
+    static generateMainContainer() {
+        return `
     <div class="sidebar-container hapa-animate-fade-in" id="sidebarContainer">
       ${this.generateHeader()}
       ${this.generateQuestionSection()}
@@ -241,13 +239,12 @@ export class SidebarComponents {
       ${this.generateStatusComponents()}
     </div>
     `;
-  }
-
-  /**
-   * 확장 뷰용 메인 컨테이너 구조 (좌우 레이아웃)
-   */
-  static generateExpandedMainContainer(): string {
-    return `
+    }
+    /**
+     * 확장 뷰용 메인 컨테이너 구조 (좌우 레이아웃)
+     */
+    static generateExpandedMainContainer() {
+        return `
     <div class="expanded-container hapa-animate-fade-in" id="expandedContainer">
       ${this.generateExpandedHeader()}
       <div class="expanded-content">
@@ -261,5 +258,7 @@ export class SidebarComponents {
       ${this.generateStatusComponents()}
     </div>
     `;
-  }
+    }
 }
+exports.SidebarComponents = SidebarComponents;
+//# sourceMappingURL=SidebarComponents.js.map
